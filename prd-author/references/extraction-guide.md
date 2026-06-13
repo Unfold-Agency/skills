@@ -1,6 +1,6 @@
 # Extraction Guide (Generate Mode)
 
-How to turn a messy discovery corpus into a sourced, validated PRD draft. Read this after inventorying the corpus, before extracting anything.
+How to turn a messy discovery corpus into a sourced, validated PRD draft. Read this after the corpus is assembled and the Source Index confirmed (see `corpus-intake.md`), before extracting anything.
 
 ## 1. Corpus intake
 

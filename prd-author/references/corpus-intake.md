@@ -24,8 +24,8 @@ Pull only what the scope names. Map each source type to where it lives:
 
 | Source type | Where to look | Handle | Locator to capture |
 |---|---|---|---|
-| Workshop / meeting transcript | Calendar event for the meeting usually links the Gemini Meet transcript; also Drive | `WS-n` | timestamps if present; the Calendar/Drive link → `uri` |
-| Meeting notes | Drive, or supplied by the user | `MTG-n` | bullet/heading, or date + topic |
+| Workshop | Calendar event links the Gemini Meet transcript; often paired with FigJam boards (captured as `FJ-n`) | `WS-n` | timestamps if present; the Calendar/Drive link → `uri` |
+| Meeting (transcript or notes) | Calendar event usually links the Gemini Meet transcript; notes in Drive | `MTG-n` | timestamps if a transcript; bullet/heading or date + topic for notes |
 | RFP / Brief | Drive folder named in scope | `RFP`, `BRIEF` | section or page |
 | FigJam / board export | Drive folder | `FJ-n` | frame or sticky text |
 | Stakeholder interview | Drive (notes/recording) or Calendar | `INT-name` | speaker + topic |

@@ -1,0 +1,329 @@
+# ═══════════════════════════════════════════════════════════════════
+# prd-data.yaml — SCHEMA v1.0
+# Derived machine companion to the PRD Markdown (template v1.1)
+#
+# GENERATED FILE. The Skill compiles this from the PRD markdown
+# (master + shards) on every version bump. Never hand-edit. If this
+# file and the markdown disagree, the markdown wins and this file is
+# regenerated. The validator enforces the rules listed at the bottom
+# (V-001 .. V-016) and fails the build on any violation.
+#
+# Consumers:
+#   - Lane 3 (solution modeling): objectives, requirements, constraints
+#   - Lane 4 (ticket generation): requirements + acceptance_criteria
+#   - Lane 6 (AI execution): requirement lookups by ID, escalations
+#   - Lane 7 (UAT): objectives.success_criteria → UAT scripts
+#   - Validator: everything
+#
+# Conventions:
+#   - All IDs are strings, globally unique, never reused or renumbered
+#   - Every ID'd item has `status`: active | superseded | deferred
+#   - Every ID'd item has `sources`: list of {handle, locator}
+#     where handle references source_index and locator is a timestamp,
+#     section, page, or board-node reference
+#   - Empty lists are present, not omitted (consumers shouldn't
+#     null-check shape)
+# ═══════════════════════════════════════════════════════════════════
+
+meta:
+  doc_type: prd-data
+  schema_version: "1.0"          # version of THIS schema
+  project_id: ""
+  project_name: ""
+  client: ""
+  phase: ""                      # mirrors markdown frontmatter
+  prd_version: ""                # MUST exactly match markdown `version`
+  prd_status: draft              # draft | in-review | approved | superseded
+  generated_from:                # markdown master + shards compiled
+    master: "PRD-[project].md"
+    shards: []
+  generated_at: ""               # ISO 8601 timestamp
+  template_version: "1.1"        # PRD markdown template version used
+  related_docs:
+    brief: ""
+    tdd: ""
+    rfp: ""
+  approvals: []                  # [{name, role, date}]
+
+# ── Appendix A ───────────────────────────────────────────────────────
+source_index:
+  - handle: "WS-1"
+    document: "workshop-transcript-2026-05-02.txt"
+    type: transcript             # transcript | board | rfp | brief |
+                                 # notes | interview | email | analytics
+    date: "2026-05-02"
+    uri: ""                      # Drive/Calendar link when available
+
+# ── Section 4 ────────────────────────────────────────────────────────
+objectives:
+  business:
+    - id: "BO-001"
+      description: ""
+      priority: must             # must | should | could | wont
+      success_criteria:
+        - criterion: ""
+          measurement_method: ""
+          baseline: ""           # "" + a KU reference if unknown
+          baseline_ku: ""        # e.g. "KU-001" when baseline missing
+      sources: [{handle: "", locator: ""}]
+      status: active
+  user:
+    - id: "UO-001"
+      description: ""
+      priority: must
+      success_criteria:
+        - criterion: ""
+          measurement_method: ""
+      sources: []
+      status: active
+
+non_goals: []                    # list of strings (Section 4.3)
+
+# ── Section 5 ────────────────────────────────────────────────────────
+audiences:
+  - name: ""
+    description: ""
+    primary_needs: []
+    sources: []
+
+journeys:
+  - name: ""
+    trigger: ""
+    steps: []
+    outcome: ""
+    sources: []
+
+experience_principles:
+  - principle: ""
+    test: ""                     # the tie-breaker question
+
+# ── Section 6 ────────────────────────────────────────────────────────
+scope:
+  in_scope:
+    - feature_area: ""           # becomes Epic candidate in Lane 4
+      includes: ""
+      supports: []               # objective IDs
+  out_of_scope:
+    - item: ""
+      reason: ""
+      disposition: future-phase  # future-phase | declined | needs-pricing
+      sources: []
+  phasing: []                    # [{phase, features, boundary_criteria}]
+
+# ── Section 7 ────────────────────────────────────────────────────────
+requirements:
+  functional:
+    - id: "FR-001"
+      name: ""
+      feature_area: ""           # must match a scope.in_scope entry
+      priority: must
+      description: ""
+      acceptance_criteria:
+        - given: ""
+          when: ""
+          then: ""
+          path: happy            # happy | failure | edge
+      supports: []               # UO-/BO- IDs
+      depends_on: []             # FR-/IR-/DEP- IDs
+      sources: []
+      open_items: []             # KU- IDs
+      status: active
+  content:
+    - id: "CR-001"
+      requirement: ""
+      owner: client              # client | agency | shared
+      volume_format: ""
+      priority: must
+      sources: []
+      status: active
+  integration:
+    - id: "IR-001"
+      system: ""
+      behavior: ""               # WHAT must happen, never how
+      data: ""
+      sla: ""
+      priority: must
+      sources: []
+      status: active
+  nonfunctional:
+    - id: "NFR-001"
+      category: accessibility    # accessibility | performance |
+                                 # security-privacy | analytics |
+                                 # compatibility | seo | localization |
+                                 # other
+      requirement: ""
+      verification_method: ""
+      derived_from: []           # objective/constraint IDs or "default"
+      priority: must
+      status: active
+  environmental:                 # optional module (Section 7.5)
+    - id: "ER-001"
+      requirement: ""
+      type: venue                # venue | fabrication | print |
+                                 # staffing-as-experience | logistics
+      verification_method: ""    # inspection | proof-approval |
+                                 # walkthrough | dry-run
+      supports: []
+      priority: must
+      sources: []
+      status: active
+
+# ── Sections 8–11 ────────────────────────────────────────────────────
+constraints:
+  - id: "CON-001"
+    type: technical              # technical | budget | timeline |
+                                 # brand | legal | organizational
+    constraint: ""
+    negotiable: false
+    implications: ""
+    sources: []
+    status: active
+
+dependencies:
+  - id: "DEP-001"
+    dependency: ""
+    owner: ""
+    needed_by: ""                # YYYY-MM-DD
+    blocks: []                   # requirement IDs
+    status: pending              # pending | received | late | waived
+
+assumptions:
+  - id: "AS-001"
+    assumption: ""
+    risk_if_wrong: medium        # low | medium | high
+    validation_method: ""
+    owner: ""
+    sources: []
+    status: active
+
+risks:
+  - id: "RSK-001"
+    risk: ""
+    likelihood: medium
+    impact: medium
+    mitigation: ""
+    owner: ""
+    status: active
+
+known_unknowns:
+  - id: "KU-001"
+    question: ""
+    blocks: []                   # IDs this blocks or shapes
+    assigned_to: ""
+    due: ""
+    status: open                 # open | answered | overtaken
+    answer: ""                   # filled on resolution, with source
+    answer_sources: []
+
+# ── Sections 12–14 ───────────────────────────────────────────────────
+stakeholders:
+  - name: ""
+    role: ""
+    authority: ""                # approve | consult | inform
+    sign_off_required: false
+escalation_path: ""              # named human for scope disputes
+
+conflicts:
+  - number: 1
+    conflict: ""
+    sources_in_tension: []
+    resolution: ""
+    decided_by: ""
+    date: ""
+    status: open                 # open | resolved — open blocks approval
+
+glossary:
+  - term: ""
+    definition: ""
+
+# ── Section 1.1 ──────────────────────────────────────────────────────
+change_log:
+  - version: "0.1"
+    date: ""
+    author: ""
+    change_class: initial        # initial | minor | major
+    changed_ids: []
+    summary: ""
+    triggered_by:
+      type: discovery            # discovery | escalation | uat-issue |
+                                 # client-request | ticket
+      ref: ""                    # ESC-/BUG-/CR-/ticket ID
+    approvals: []                # required when change_class: major
+
+# ═══════════════════════════════════════════════════════════════════
+# ESCALATIONS — the formal path from Lane 6 back to the PRD.
+#
+# THE RULE (every AI agent and engineer operates under this):
+# If you cannot satisfy an acceptance criterion AS WRITTEN — or you
+# discover a missing requirement, an ambiguity, or a constraint
+# conflict — you do NOT patch around it, reinterpret it, or silently
+# narrow it. You raise an escalation record and pause that ticket.
+# A named human validates every escalation. AI agents may RAISE and
+# PROPOSE; only humans DECIDE.
+#
+# Lifecycle:
+#   raised (agent or human, ticket pauses)
+#     → validated (human confirms it's real, classifies it)
+#       → decided: one of
+#           refine-ticket    (ticket-level fix, PRD untouched)
+#           minor-amendment  (PRD x.Y bump, Section 1.2)
+#           major-amendment  (PRD X.0 bump → full 1.3 propagation)
+#           rejected         (criterion stands as written; ticket
+#                             resumes with guidance)
+#     → closed (decision executed; if amendment, change_log entry
+#               references this ESC id)
+# ═══════════════════════════════════════════════════════════════════
+escalations:
+  - id: "ESC-001"
+    raised_by: ""                # agent id or person
+    raised_by_type: ai-agent     # ai-agent | engineer | designer | qa | pm
+    ticket: ""                   # paused ticket ID
+    date_raised: ""
+    type: cannot-satisfy-ac      # cannot-satisfy-ac | ambiguity |
+                                 # missing-requirement |
+                                 # constraint-conflict | scope-gap
+    affected_ids: []             # PRD IDs in question (required)
+    description: ""              # what was attempted / what's unclear
+    proposed_resolution: ""      # raiser's suggestion (non-binding)
+    proposed_change_class: refine-ticket
+    validator: ""                # named human (required before decision)
+    decision: ""                 # refine-ticket | minor-amendment |
+                                 # major-amendment | rejected
+    decision_rationale: ""
+    date_decided: ""
+    resulting_prd_version: ""    # filled when decision is an amendment
+    status: raised               # raised | validated | decided | closed
+
+# ═══════════════════════════════════════════════════════════════════
+# VALIDATOR RULES — build fails on any violation
+#
+# Integrity
+#   V-001  meta.prd_version equals the markdown frontmatter version
+#   V-002  Every ID matches ^(BO|UO|FR|CR|IR|NFR|CON|AS|KU|DEP|RSK|ER|ESC)-\d{3,}$
+#   V-003  No duplicate IDs anywhere in the document
+#   V-004  Every ID referenced (supports, depends_on, blocks, affected_ids,
+#          changed_ids, open_items, derived_from) exists in the document
+#   V-005  No ID present in a prior version is missing now — items are
+#          superseded or deferred, never deleted
+#
+# Completeness
+#   V-006  Every active FR has ≥1 acceptance criterion, and ≥1 with
+#          path: failure or edge
+#   V-007  Every active objective has ≥1 success criterion with a
+#          measurement_method
+#   V-008  Every active ID'd item has ≥1 source, OR is referenced by an
+#          open KU- item
+#   V-009  Every source handle resolves to a source_index entry
+#   V-010  Every FR feature_area matches a scope.in_scope entry
+#
+# Status gates
+#   V-011  prd_status: approved requires zero conflicts with status: open
+#   V-012  prd_status: approved requires zero escalations in raised or
+#          validated state
+#   V-013  Every change_log entry with change_class: major has ≥1 approval
+#   V-014  Every escalation with a decision has a named validator
+#   V-015  Every change_log entry triggered_by.type: escalation references
+#          an ESC- id with status: closed or decided
+#   V-016  Baseline "" in a success criterion requires baseline_ku to
+#          reference an open or answered KU- item
+# ═══════════════════════════════════════════════════════════════════

@@ -1,12 +1,12 @@
 # Extraction Guide (Generate Mode)
 
-How to turn a messy discovery corpus into a sourced, validated PRD draft. Read this after inventorying the corpus, before extracting anything.
+How to turn a messy discovery corpus into a sourced, validated PRD draft. Read this after the corpus is assembled and the Source Index confirmed (see `corpus-intake.md`), before extracting anything.
 
 ## 1. Corpus intake
 
 Build Appendix A (Source Index) first. One row per input document with:
 
-- **Handle**: short, stable, citation-friendly. Conventions: `RFP`, `BRIEF`, `WS-n` (workshop transcripts, numbered by date), `INT-name` (interviews), `MTG-n` (meeting notes), `FJ-n` (FigJam exports), `AN-n` (analytics).
+- **Handle**: short, stable, citation-friendly. Conventions: `RFP`, `BRIEF`, `WS-n` (workshop transcripts, numbered by date), `INT-name` (interviews), `MTG-n` (meeting transcripts or notes), `FJ-n` (FigJam exports), `AN-n` (analytics).
 - **Type, date, URI**: Gemini Meet transcripts are usually linked from the Calendar event -- capture that link when available.
 
 Assess each source's citation strength and work with what it has:

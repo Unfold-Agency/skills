@@ -39,18 +39,21 @@ Clone this repo, then **copy** or **symlink** the skill folders you want into yo
 git clone git@github.com:Unfold-Agency/skills.git
 cd skills
 
-# Personal, available everywhere -- copy:
-cp -R prd-author ~/.claude/skills/prd-author
+# Ensure the personal skills directory exists:
+mkdir -p ~/.claude/skills
+
+# Personal, available everywhere -- copy into the skills directory:
+cp -R prd-author ~/.claude/skills/
 
 # ...or symlink, so repo edits are picked up live (use an absolute path):
-ln -s "$(pwd)/prd-author" ~/.claude/skills/prd-author
+ln -s "$(pwd)/prd-author" ~/.claude/skills/
 ```
 
 To make a skill available only inside a specific project, copy it into that project's `.claude/skills/` instead:
 
 ```bash
 mkdir -p /path/to/your-project/.claude/skills
-cp -R prd-author /path/to/your-project/.claude/skills/prd-author
+cp -R prd-author /path/to/your-project/.claude/skills/
 ```
 
 ### Invoke
@@ -66,7 +69,7 @@ git pull
 ```
 
 - **Symlinked** skills are updated by the `git pull` alone.
-- **Copied** skills need to be re-copied after pulling: `cp -R prd-author ~/.claude/skills/prd-author`.
+- **Copied** skills need to be re-copied after pulling: `cp -R prd-author ~/.claude/skills/`.
 
 For sharing across a team or distributing many skills at once, skills can also be packaged and installed as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) instead of copied by hand.
 

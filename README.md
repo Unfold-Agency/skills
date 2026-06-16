@@ -34,6 +34,31 @@ If you know the deliverable, you know the command.
 
 Skills load progressively: only the frontmatter `description` sits in context at all times; the `SKILL.md` body loads when the skill is triggered, and supporting files load only when referenced. Keep that in mind when adding to a skill -- bundled reference files are effectively free until used.
 
+### How these skills chain
+
+The three `make-` skills form a pipeline: each consumes the artifact upstream and produces what the next one consumes. A **version lock** at every hop keeps them honest.
+
+```
+discovery ──/make-prd──▶  PRD  ──/make-tdd──▶  TDD  ──/make-issues──▶  GitHub Issues
+            (WHAT / WHY)         (HOW)                (work items)
+```
+
+- **`/make-prd`** turns discovery material into a PRD and stamps `prd-data.meta.prd_version`.
+- **`/make-tdd`** derives the TDD and **locks** it to the PRD version it was built from (`tdd-data.meta.prd_version`). Its validator refuses a TDD whose lock lags the live PRD (rule V-017).
+- **`/make-issues`** refuses to run unless `prd-data.meta.prd_version == tdd-data.meta.prd_version`, then projects the TDD's capabilities into issues stamped with both versions and a per-capability fingerprint.
+
+**Loop-back.** Change flows forward only. Amend the PRD → re-run `/make-tdd` to re-derive and re-lock → re-run `/make-issues` to reconcile. You never edit scope inside an issue or skip a lane: each skill diffs rather than rewrites, preserves IDs, and reports what downstream work the change owes.
+
+**One thread, end to end:**
+
+| Lane | Artifact | IDs |
+|---|---|---|
+| PRD | "Customers can check out" -- a user objective and the functional requirement under it | `UO-001`, `FR-002` |
+| TDD | A Shopify checkout integration whose `satisfies: [FR-002]` | `INTG-001` |
+| Issues | "Build the Shopify order-create call (per `INTG-001`)" -- stamped `trace_tdd: [INTG-001]`, `trace_prd: [FR-002]`, labels `src:prd-1.0` / `src:tdd-0.1` | issue #N |
+
+Change `INTG-001`'s contract in the TDD and re-run `/make-issues`: the per-capability fingerprint changes, so issue #N is updated (if unstarted) or flagged (if in flight) -- and the engineer's notes in the issue's human region are never touched.
+
 ## Use these skills in Claude Code
 
 Claude Code discovers skills from the filesystem -- no upload step. Skills live in one of two places:

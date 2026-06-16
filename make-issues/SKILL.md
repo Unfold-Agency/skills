@@ -5,7 +5,7 @@ description: Turn an approved, version-locked PRD and TDD into traceable GitHub 
 
 # Make issues
 
-Turn an approved, version-locked PRD and TDD into GitHub Issues that humans and coding agents can act on, then keep those issues honest as the TDD changes. The job is **traceability and stale-resistance**, not just decomposition.
+Turn an approved, version-locked PRD and TDD into GitHub Issues that humans and coding agents can act on, then keep those issues honest as the TDD changes. The job is **traceability and stale-resistance**, not just decomposition. This is the last lane in the chain -- `/make-prd` (the WHAT/WHY) and `/make-tdd` (the HOW) come first; when the TDD later changes, you return here to sync.
 
 Unlike `make-prd` and `make-tdd`, this skill has **no local data file and no validator**. The output is GitHub state: the issues, their trace labels, and a machine-readable meta block embedded in each issue body ARE the index. You query them live with `gh ... --json`. The check that stands in for a validator is a coverage/reconciliation **report**, printed every run.
 

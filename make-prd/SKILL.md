@@ -32,7 +32,7 @@ The doctrine that governs everything: the PRD states **WHAT and WHY, never HOW**
 3. **Question pass.** Before writing the final draft, surface what's missing: objectives without measurable criteria, FRs without failure paths, baselines nobody stated, decision authority nobody named. Ask the user the highest-value questions (cap around 7); everything else becomes a KU- entry with an owner of "TBD". A long Section 11 in v0.1 is healthy — silence about gaps is not.
 4. **Write the Markdown.** Fill the template. Write the Summary (Section 2) last. Apply Given/When/Then to every FR including at least one failure or edge path. Strip all HTML guidance comments. Default NFRs (accessibility, analytics) stay in unless the user explicitly waives them — record any waiver in Section 13.
 5. **Derive and validate.** Generate `prd-data.yaml` per the schema, run the validator, fix failures, and report: item counts per section, open KU count, open conflict count, and anything you routed away from where the user might expect it.
-Version starts at 0.1, status `draft`. Only a human moves it to `approved`.
+Version starts at 0.1, status `draft`. Only a human moves it to `approved`. Once it is approved, the next lane is the design: `/make-tdd` derives the TDD and locks to this PRD version.
  
 ## Amend mode workflow
  

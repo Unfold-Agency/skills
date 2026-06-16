@@ -116,7 +116,7 @@ name: make-prd
 description: Generate and amend PRDs from discovery material. Use when the user wants to create a requirements document, formalize requirements, or amend an existing PRD.
 ---
 
-# PRD Author
+# Make a PRD
 
 Instructions for Claude go here...
 ```

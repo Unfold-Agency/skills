@@ -41,16 +41,16 @@ Fill the template (`assets/issue-body-template.md`) from the two sources:
 | Acceptance criteria | checkable items; last box is always the build gate |
 | Test plan | the TDD (unit / integration / e2e / a11y / perf as applicable) |
 | `trace_tdd` | the capability ID(s) this item satisfies |
-| `trace_prd` | the PRD requirement IDs those transitively trace to (via `traceability`) |
+| `trace_prd` | the PRD IDs the capability links to directly -- its `satisfies` (ENT/WF/STM/INTG) or PRD-side `derived_from` (TNF/ADR), the same fields the fingerprint covers. Use these, not `traceability.mapped` -- that ledger drives the coverage check below, so per-item trace and the drift hash never read different sources |
 | `source_versions` | the locked PRD + TDD versions from the two `meta` blocks |
 | `fingerprint` | `scripts/item_fingerprint.py <tdd-data.yaml> --id <CAP>` |
 | `autonomy` | AFK or HITL, from step 3 |
 
-**No item without a trace.** Every issue stamps at least one `trace_tdd` capability and the PRD IDs it serves. An item you cannot trace to the TDD is an item the TDD does not justify -- cut it or fix the TDD.
+**No item without a trace.** Every issue stamps at least one `trace_tdd` capability -- that is the required trace. `trace_prd` lists the PRD IDs that capability serves; it is usually non-empty, but a pure-infrastructure capability that serves no single requirement directly may leave it empty. An empty `trace_prd` is allowed; an empty `trace_tdd` is not. An item you cannot trace to the TDD is an item the TDD does not justify -- cut it or fix the TDD.
 
 ## 5. Order the dependencies as a DAG
 
-Express what-blocks-what as native GitHub dependencies (`--blocked-by`), not a parent/child tree. Derive the edges from the TDD: a workflow that reads an entity is blocked by the entity's item; an integration the workflow calls blocks the workflow. Before presenting, **check the graph is acyclic** -- a cycle means two items each wait on the other and neither can start. Report any cycle as a path (`A -> B -> A`) and break it (usually by merging or re-slicing) rather than shipping contradictory links.
+Express what-blocks-what as native GitHub dependencies (`--blocked-by`), not a parent/child tree. Derive the edges from the TDD's own structure: a workflow that reads an entity is blocked by the entity's item; an integration the workflow calls blocks the workflow. The PRD's `depends_on` is not a source here -- PRD-level dependencies are informational and reach the issue graph only insofar as the TDD reflects them. Before presenting, **check the graph is acyclic** -- a cycle means two items each wait on the other and neither can start. Report any cycle as a path (`A -> B -> A`) and break it (usually by merging or re-slicing) rather than shipping contradictory links.
 
 ## 6. The review pass -- the human gate
 

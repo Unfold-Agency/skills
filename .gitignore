@@ -1,3 +1,6 @@
 # Python cache artifacts (e.g. from running skill validators / test harnesses)
 __pycache__/
 *.py[cod]
+
+# Packaged skill archives (built on demand for claude.ai upload; see README)
+*.zip

@@ -50,8 +50,9 @@ def _run(cmd, timeout=30):
         return 127, "", f"{cmd[0]} not found"
 
 
-def _meta_version(path):
-    """Read meta.prd_version from a data file. Returns ('', err) on trouble."""
+def _load_meta(path):
+    """Load a data file's `meta` mapping. Returns (meta_dict, None) on success
+    (an empty dict if the file has no `meta`), or (None, err) if it can't be read."""
     try:
         with open(path, encoding="utf-8") as f:
             doc = yaml.safe_load(f)
@@ -59,7 +60,17 @@ def _meta_version(path):
         return None, f"cannot read {path}: {e}"
     if not isinstance(doc, dict):
         return None, f"{path} is not a YAML mapping"
-    return str((doc.get("meta") or {}).get("prd_version") or ""), None
+    meta = doc.get("meta")
+    return (meta if isinstance(meta, dict) else {}), None
+
+
+def _meta_version(path):
+    """Read meta.prd_version from a data file. Returns ('', None) when the key is
+    absent, (None, err) when the file itself can't be read."""
+    meta, err = _load_meta(path)
+    if err:
+        return None, err
+    return str(meta.get("prd_version") or ""), None
 
 
 def check_auth():
@@ -90,7 +101,8 @@ def check_version_lock(prd_path, tdd_path):
     locked, err2 = _meta_version(tdd_path)
     if err1 or err2:
         return {"name": "version_lock", "ok": False, "fatal": True,
-                "detail": err1 or err2}
+                "detail": f"{err1 or err2} -- both prd-data.yaml and tdd-data.yaml "
+                          "must be in the working tree to verify the lock"}
     ok = bool(live) and bool(locked) and live == locked
     if ok:
         detail = f"PRD v{live} == TDD lock v{locked}"
@@ -101,6 +113,28 @@ def check_version_lock(prd_path, tdd_path):
                   "the PRD moved on -- re-run /make-tdd to re-derive and re-lock")
     return {"name": "version_lock", "ok": ok, "live_prd": live,
             "locked_prd": locked, "detail": detail}
+
+
+def check_approval(prd_path, tdd_path):
+    """Advisory (non-gating): warn when the PRD or TDD is not yet `approved`.
+    The version lock can pass while both docs are still drafts; issues built on a
+    draft churn when it lands. This mirrors make-tdd's warn-don't-block posture --
+    it never fails the gate; the skill surfaces it and asks the user to confirm."""
+    # _load_meta returns None on a read error, and this advisory deliberately
+    # discards that error, so prd_meta/tdd_meta may be None -- keep the `or {}`.
+    prd_meta, _ = _load_meta(prd_path)
+    tdd_meta, _ = _load_meta(tdd_path)
+    prd_status = str((prd_meta or {}).get("prd_status") or "unknown")
+    tdd_status = str((tdd_meta or {}).get("tdd_status") or "unknown")
+    approved = prd_status == "approved" and tdd_status == "approved"
+    if approved:
+        detail = "PRD and TDD are both approved"
+    else:
+        detail = (f"PRD '{prd_status}', TDD '{tdd_status}' -- not both approved; "
+                  "issues created now will churn when the docs are. Confirm with "
+                  "the user before creating.")
+    return {"prd_status": prd_status, "tdd_status": tdd_status,
+            "approved": approved, "detail": detail}
 
 
 def check_repo(repo_override):
@@ -164,9 +198,10 @@ def main():
     lock = check_version_lock(args.prd, args.tdd)
     checks.append(lock)
     if lock.get("fatal"):                 # the data files themselves are unreadable
-        _report(checks, None, [], args.json)
+        _report(checks, None, [], None, args.json)
         sys.exit(2)
 
+    approval = check_approval(args.prd, args.tdd)   # advisory; never gates
     repo, missing = None, []
     if auth["ok"]:                        # avoid hanging gh calls when unauthenticated
         repo_chk = check_repo(args.repo)
@@ -177,14 +212,15 @@ def main():
             checks.append(mode_chk)
 
     ok = all(c["ok"] for c in checks)
-    _report(checks, repo, missing, args.json)
+    _report(checks, repo, missing, approval, args.json)
     sys.exit(0 if ok else 1)
 
 
-def _report(checks, repo, missing, as_json):
+def _report(checks, repo, missing, approval, as_json):
     if as_json:
         verdict = {"ok": all(c["ok"] for c in checks), "repo": repo,
-                   "missing_labels": missing, "checks": checks}
+                   "missing_labels": missing, "approval": approval,
+                   "checks": checks}
         print(json.dumps(verdict, indent=2))
         return
     for c in checks:
@@ -192,6 +228,10 @@ def _report(checks, repo, missing, as_json):
         print(f"  [{mark}] {c['name']}: {c['detail']}")
     if missing:
         print(f"  note   missing static labels (skill must create): {', '.join(missing)}")
+    if approval and not approval["approved"]:
+        print(f"  warn   approval: {approval['detail']}")
+    elif approval:
+        print(f"  ok     approval: {approval['detail']}")
     print()
     print("PASS -- preflight gate clear" if all(c["ok"] for c in checks)
           else "FAIL -- do not proceed; resolve the failed check(s) above")

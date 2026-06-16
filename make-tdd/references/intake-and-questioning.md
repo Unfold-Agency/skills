@@ -6,7 +6,7 @@ How to turn an approved PRD plus system context into a sourced, traceable TDD dr
 
 Read the PRD first -- both files: `PRD.md` (the prose people signed) and `prd-data.yaml` (the IDs you will trace to). The PRD is the source of truth for WHAT; this document only decides HOW.
 
-- **Confirm the PRD is `approved`.** If its status is still `draft` or `in-review`, say so and warn: designing against an unapproved PRD risks rework when the WHAT moves under you. Proceed only if the user accepts that risk, and note it as a risk (`RISK-`).
+- **Confirm the PRD is `approved`.** If its status is still `draft` or `review`, say so and warn: designing against an unapproved PRD risks rework when the WHAT moves under you. Proceed only if the user accepts that risk, and note it as a risk (`RISK-`).
 - **Lock to the PRD version.** Record the PRD's version in `meta.prd_version`. The PRD may have jumped several versions before the TDD existed -- lock to whatever the latest is. This lock is what lets the downstream `make-issues` trust the TDD: it refuses to run when the TDD's `prd_version` no longer matches the live PRD. If you re-open this TDD later and the PRD has moved on, the TDD is stale (V-017) and must be amended and re-locked.
 - **Resolve every item the PRD flagged "for the TDD."** Those are the open HOW questions this document exists to answer. Pull them from the PRD's conflicts/decisions log and constraints.
 - **Inventory the system context** into Appendix A (Source Index) with stable handles -- the existing architecture you must fit into, not the discovery corpus.

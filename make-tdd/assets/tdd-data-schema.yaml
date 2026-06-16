@@ -9,7 +9,7 @@
 # any violation.
 #
 # Consumers:
-#   - Lane 4 (ticket generation): capabilities + traceability + contracts
+#   - Lane 4 (issue generation): capabilities + traceability + contracts
 #   - Lane 6 (AI execution): decision/constraint lookups by ID
 #   - A future shared store: this schema is the contract it would expose
 #   - Validator: everything

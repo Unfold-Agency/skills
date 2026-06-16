@@ -50,7 +50,7 @@
 <!-- make-issues:meta -->
 ```yaml
 trace_tdd: [CAP-000]               # TDD capability IDs this issue satisfies (ENT/WF/STM/INTG/TNF/ADR)
-trace_prd: [UO-000]                # PRD requirement IDs those transitively trace to
+trace_prd: [UO-000]                # PRD IDs the capability links to (its satisfies / PRD-side derived_from); may be empty
 source_versions: { prd: "0.0", tdd: "0.0" }   # the locked PRD + TDD versions this was born from
 autonomy: afk                      # afk | hitl  -- can the overnight loop own this unattended?
 fingerprint: "<item-hash>"         # per-capability hash from scripts/item_fingerprint.py

@@ -77,7 +77,7 @@ phase: ""                 # set only if the Brief splits the engagement
                           # single PRD for the engagement.
 version: "0.1"            # major.minor — see Change Management (1.2)
 supersedes: ""            # previous version, e.g. "1.3"
-status: draft             # draft | in-review | approved | superseded
+status: draft             # draft | review | approved | superseded
 last_updated: ""          # YYYY-MM-DD
 authors: []
 data_file: ""             # path to derived prd-data.yaml (generated,

@@ -32,7 +32,7 @@ The doctrine that governs everything: the PRD states **WHAT and WHY, never HOW**
 3. **Question pass.** Before writing the final draft, surface what's missing: objectives without measurable criteria, FRs without failure paths, baselines nobody stated, decision authority nobody named. Ask the user the highest-value questions (cap around 7); everything else becomes a KU- entry with an owner of "TBD". A long Section 11 in v0.1 is healthy — silence about gaps is not.
 4. **Write the Markdown.** Fill the template. Write the Summary (Section 2) last. Apply Given/When/Then to every FR including at least one failure or edge path. Strip all HTML guidance comments. Default NFRs (accessibility, analytics) stay in unless the user explicitly waives them — record any waiver in Section 13.
 5. **Derive and validate.** Generate `prd-data.yaml` per the schema, run the validator, fix failures, and report: item counts per section, open KU count, open conflict count, and anything you routed away from where the user might expect it.
-Version starts at 0.1, status `draft`. Only a human moves it to `approved`.
+Version starts at 0.1, status `draft`. Only a human moves it to `approved`. Once it is approved, the next lane is the design: `/make-tdd` derives the TDD and locks to this PRD version.
  
 ## Amend mode workflow
  
@@ -40,7 +40,7 @@ Version starts at 0.1, status `draft`. Only a human moves it to `approved`.
 2. **Classify the change** (this is the heart of amend mode): ticket refinement (alters no ID'd item — tell the user it doesn't touch the PRD and stop), minor (additive/clarifying, x.Y bump), or major (changes meaning of an existing item, X.0 bump, approval required).
 3. **Apply the diff.** Never renumber or delete IDs — supersede or defer them. Record the change in Section 1.1 with class, changed IDs, and trigger reference. Log the decision in Section 13 if a judgment call was made.
 4. **Re-derive the YAML, run the validator with `--prev`** pointed at the prior version's data file (this enforces the no-vanishing-IDs rule, V-005).
-5. **Report propagation.** For major amendments, output the impact list: changed IDs, which downstream artifacts reference them (TDD sections, tickets pinned to the prior PRD version), and the Section 1.3 steps still owed. The skill prepares the propagation; humans execute the approvals.
+5. **Report propagation.** For major amendments, output the impact list: changed IDs, which downstream artifacts reference them, and the Section 1.3 steps still owed. A PRD change reaches GitHub issues only through the TDD: re-run `/make-tdd` to re-derive and re-lock to this PRD version, then `/make-issues` to sync -- issues are pinned to a TDD version and never reconciled against the PRD directly. The skill prepares the propagation; humans execute the approvals.
 ## Escalations
  
 When the input is an escalation (an agent or person who can't satisfy an acceptance criterion as written), create or ingest an ESC- record per the schema, then run Amend mode steps 2–5 once a human validator has decided. If validating the escalation needs material you don't have (the failing ticket's context, the relevant transcript), gather it within scope first per `references/corpus-intake.md`. The skill may propose a change class; it must never decide one. Open escalations and open conflicts both block `approved` status — the validator enforces this.
@@ -51,5 +51,5 @@ When the corpus is too big to hold in one context, or to run the mechanical YAML
 
 ## Tone and writing rules for PRD prose
  
-Plain words, short sentences, no marketing language. Requirements use "must" statements one behavior at a time. Never use an em dash in output; use a spaced double hyphen ` -- ` for asides. Write so a reader outside the project (or an AI ticket generator) can act on each item without asking what it means.
+Plain words, short sentences, no marketing language. Requirements use "must" statements one behavior at a time. Never use an em dash in output; use a spaced double hyphen ` -- ` for asides. Write so a reader outside the project (or an AI issue generator) can act on each item without asking what it means.
  

@@ -1,0 +1,242 @@
+# ═══════════════════════════════════════════════════════════════════
+# tdd-data.yaml — SCHEMA v1.0
+# Derived machine companion to the TDD Markdown (template v1.0)
+#
+# GENERATED FILE. The Skill compiles this from the TDD markdown on every
+# version bump. Never hand-edit. If this file and the markdown disagree,
+# the markdown wins and this file is regenerated. The validator enforces
+# the rules listed at the bottom (V-001 .. V-016) and fails the build on
+# any violation.
+#
+# Consumers:
+#   - Lane 4 (ticket generation): capabilities + traceability + contracts
+#   - Lane 6 (AI execution): decision/constraint lookups by ID
+#   - A future shared store: this schema is the contract it would expose
+#   - Validator: everything
+#
+# Conventions:
+#   - All TDD IDs are strings, globally unique, never reused or renumbered,
+#     and match ^(ENT|WF|STM|INTG|ADR|BC|TNF|ASM|RISK|OQ)-\d{3,}$
+#   - PRD IDs (FR-, NFR-, CON-, ...) are REFERENCED, never minted here
+#   - Every ID'd item has `status`: active | superseded | deferred
+#   - `satisfies` / `requirement_id` point at PRD IDs; `derived_from` may
+#     point at a PRD ID or an ASM- id; `bounded_by` points at a BC- id
+#   - Empty lists are present, not omitted (consumers shouldn't null-check)
+# ═══════════════════════════════════════════════════════════════════
+
+meta:
+  doc_type: tdd-data
+  schema_version: "1.0"          # version of THIS schema
+  project_id: ""
+  project_name: ""
+  client: ""
+  prd_version: ""                # LOCK: the PRD version this TDD was derived
+                                 # from and is locked to. If the live PRD is a
+                                 # newer version, the TDD is stale (V-017) and
+                                 # make-tdd must be re-run.
+  tdd_version: ""                # MUST exactly match markdown `version`
+  tdd_status: draft              # draft | review | approved | superseded
+  generated_from:
+    master: "TDD-[project].md"
+  generated_at: ""               # ISO 8601 timestamp
+  template_version: "1.0"        # TDD markdown template version used
+  # ── System of record & location (mirrors markdown frontmatter) ──
+  system_of_record: claude-project   # claude-project | git
+  repo:
+    url: ""                      # blank until the promotion event
+    path: ""                     # path to TDD.md within the repo
+  promoted_at: ""                # YYYY-MM-DD; blank until promotion
+  fingerprint: ""                # sha256 over this file with meta.fingerprint
+                                 # removed, safe_dump(sort_keys=True); set on save
+  related_docs:
+    prd: ""                      # path/link to the PRD (its source of truth)
+    brief: ""
+  approvals: []                  # [{name, role, date}]
+
+# ── Appendix A ───────────────────────────────────────────────────────
+source_index:
+  - handle: "DOC-1"
+    document: "shopify-admin-api-2026-02.md"
+    type: api-doc                # api-doc | erd | adr | standard |
+                                 # notes | other
+    date: "2026-02-01"
+    uri: ""                      # Drive link when available
+
+# ── Section 4: Data models ───────────────────────────────────────────
+entities:
+  - id: "ENT-001"
+    name: ""
+    purpose: ""
+    attributes:                  # [{name, type, required, identifier, note}]
+      - name: ""
+        type: ""
+        required: true
+        identifier: false
+        note: ""
+    relationships: []            # [{to: "ENT-002", cardinality: "1:N", note}]
+    satisfies: []                # PRD requirement IDs (FR-/IR-/NFR-...)
+    needs_diagram: true          # if true, an ERD ```mermaid block must exist
+    open_items: []               # OQ- IDs
+    status: active               # active | superseded | deferred
+
+# ── Section 5: Behavioral models ─────────────────────────────────────
+state_machines:
+  - id: "STM-001"
+    name: ""
+    entity: ""                   # ENT- id this governs
+    states: []                   # list of state names
+    transitions: []              # [{from, to, event}]  (avoid 'on' — YAML
+                                 # parses it as the boolean true)
+    satisfies: []                # PRD requirement IDs
+    needs_diagram: true          # stateDiagram ```mermaid block must exist
+    status: active
+
+# ── Section 6: Process flows ─────────────────────────────────────────
+workflows:
+  - id: "WF-001"
+    name: ""
+    trigger: ""
+    steps: []                    # ordered participant interactions
+    satisfies: []                # PRD requirement IDs
+    needs_diagram: true          # sequenceDiagram ```mermaid block must exist
+    status: active
+
+# ── Section 7: Integrations & API contracts ──────────────────────────
+integrations:
+  - id: "INTG-001"
+    system: ""
+    direction: outbound          # inbound | outbound | bidirectional
+    auth_model: ""
+    endpoints: []                # the specific calls/events used
+    data_exchanged: ""
+    limits: ""                   # rate limits, quotas, SLAs
+    error_behavior: ""           # timeouts, idempotency, retry/backoff
+    satisfies: []                # IR-/FR- IDs
+    bounded_by: []               # BC- IDs
+    status: active
+
+# ── Section 8: Binding constraints ───────────────────────────────────
+binding_constraints:
+  - id: "BC-001"
+    constraint: ""
+    source:                      # REQUIRED — a constraint with no source
+                                 # is a preference; promote or cut it
+      type: platform             # prd-constraint | license | vendor |
+                                 # platform | compliance
+      ref: ""                    # license/vendor/platform/regime name
+      prd_constraint_id: ""      # CON- id when type is prd-constraint, else ""
+    implication: ""
+    status: active
+
+# ── Section 9: Non-functional requirements ───────────────────────────
+nfrs:
+  - id: "TNF-001"
+    category: accessibility      # accessibility | performance | security |
+                                 # scalability | observability | other
+    requirement: ""
+    derived_from: []             # ≥1 PRD requirement ID or ASM- id
+    testing_method: ""
+    status: active
+
+# ── Section 10: Technology & vendor decisions ────────────────────────
+decisions:
+  - id: "ADR-001"
+    title: ""
+    decision_status: accepted    # proposed | accepted | superseded
+    backing: known               # known | assumption
+    decision: ""
+    rationale: ""
+    alternatives: []             # [{option, rejected_because}]
+    derived_from: []             # ≥1 PRD requirement ID or ASM- id
+    bounded_by: []               # BC- IDs, or empty
+    status: active
+
+# ── Section 11: Assumptions & risks ──────────────────────────────────
+assumptions:
+  - id: "ASM-001"
+    assumption: ""
+    impact_if_wrong: ""
+    owner: ""                    # REQUIRED
+    blocking: false              # if true and status: open, blocks approved
+    status: open                 # open | confirmed | refuted
+
+risks:
+  - id: "RISK-001"
+    risk: ""
+    severity: medium             # low | medium | high
+    mitigation: ""
+    owner: ""                    # REQUIRED
+    status: open                 # open | mitigated | accepted
+
+# ── Section 13: Open questions ───────────────────────────────────────
+open_questions:
+  - id: "OQ-001"
+    question: ""
+    blocks: []                   # design-element IDs it blocks
+    owner: ""
+    status: open                 # open | answered
+
+# ── Section 12: Traceability & gap analysis ──────────────────────────
+traceability:
+  mapped:
+    - requirement_id: "FR-001"   # a PRD must/should requirement
+      satisfied_by: []           # capability IDs (ENT/WF/STM/INTG/TNF/ADR)
+  unmapped: []                   # PRD must/should IDs with no satisfier yet
+
+# ── Section 1.1 ──────────────────────────────────────────────────────
+change_log:
+  - version: "0.1"
+    date: ""
+    author: ""
+    change_class: initial        # initial | minor | major
+    changed_ids: []
+    summary: ""
+    triggered_by:
+      type: prd-baseline         # prd-baseline | prd-amendment |
+                                 # build-blocker | vendor-change | discovery
+      ref: ""                    # PRD version / ticket / etc.
+    approvals: []                # required when change_class: major
+
+# ═══════════════════════════════════════════════════════════════════
+# VALIDATOR RULES — build fails on any violation
+# Run: python scripts/validate_tdd.py tdd-data.yaml \
+#        [--prd prd-data.yaml] [--tdd-md TDD.md] [--prev prior-tdd-data.yaml]
+#
+# Integrity
+#   V-001  Schema well-formed: required top-level keys and meta fields present
+#   V-002  Every TDD ID matches the TDD regex AND is unique across the document
+#   V-007  Referential integrity (needs --prd): every PRD ID referenced
+#          (satisfies, requirement_id, unmapped, PRD-side derived_from,
+#          source.prd_constraint_id) exists in the supplied prd-data.yaml
+#   V-009  No ID present in a prior version is missing now (needs --prev) —
+#          items are superseded or deferred, never deleted
+#   V-013  TDD-internal integrity: every TDD-prefixed reference resolves to a
+#          real TDD ID; every bounded_by resolves to a BC- id; every
+#          state_machine.entity resolves to an ENT- id
+#   V-017  PRD version lock (needs --prd): meta.prd_version equals the supplied
+#          prd-data.yaml's meta.prd_version. If they differ the PRD has moved on
+#          and the TDD is stale -- re-run make-tdd to re-derive and re-lock.
+#
+# Completeness
+#   V-003  Coverage (needs --prd): every PRD must/should requirement is mapped
+#          in traceability with ≥1 satisfied_by, OR listed in unmapped — never
+#          silently dropped
+#   V-004  No orphan decisions: every ADR- has ≥1 derived_from (PRD req or ASM-)
+#   V-005  Every TNF- has ≥1 derived_from (PRD req or ASM-)
+#   V-006  Every assumption and risk has an owner and a status
+#   V-008  Diagrams present (needs --tdd-md): every active entity/state_machine/
+#          workflow with needs_diagram: true has a ```mermaid block in TDD.md
+#   V-012  Every binding constraint has a source (type + a ref or prd_constraint_id)
+#
+# Status gates
+#   V-010  tdd_status: approved requires zero open high-severity risks and zero
+#          open blocking assumptions
+#   V-011  tdd_status is one of draft | review | approved | superseded
+#          (the Skill never WRITES approved — that is the human review gate)
+#   V-014  system_of_record is claude-project | git; if git, repo.path and
+#          promoted_at are present
+#   V-015  fingerprint is present and equals a recompute over the normalized
+#          data file (detects hand-edits and drift)
+#   V-016  Version sync (needs --tdd-md): markdown frontmatter version equals
+#          meta.tdd_version
+# ═══════════════════════════════════════════════════════════════════

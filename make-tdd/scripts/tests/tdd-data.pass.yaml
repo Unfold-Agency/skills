@@ -1,0 +1,165 @@
+meta:
+  doc_type: tdd-data
+  schema_version: '1.0'
+  project_id: proj-test
+  project_name: Test Project
+  client: Acme
+  prd_version: '1.0'
+  tdd_version: '0.1'
+  tdd_status: draft
+  generated_from:
+    master: TDD.fixture.md
+  generated_at: '2026-06-15T00:00:00Z'
+  template_version: '1.0'
+  system_of_record: claude-project
+  repo:
+    url: ''
+    path: ''
+  promoted_at: ''
+  fingerprint: cbcfc5deee9a10f0639f0f3d4008f4981dc7c99e9e013188b1aa70c60adee195
+  related_docs:
+    prd: prd-data.fixture.yaml
+    brief: ''
+  approvals: []
+source_index:
+- handle: DOC-1
+  document: shopify-admin-api.md
+  type: api-doc
+  date: '2026-02-01'
+  uri: ''
+entities:
+- id: ENT-001
+  name: Order
+  purpose: A customer order
+  attributes:
+  - name: id
+    type: uuid
+    required: true
+    identifier: true
+    note: ''
+  relationships: []
+  satisfies:
+  - FR-001
+  needs_diagram: true
+  open_items: []
+  status: active
+state_machines:
+- id: STM-001
+  name: Order lifecycle
+  entity: ENT-001
+  states:
+  - draft
+  - submitted
+  transitions:
+  - from: draft
+    to: submitted
+    event: submit
+  satisfies:
+  - FR-001
+  needs_diagram: true
+  status: active
+workflows:
+- id: WF-001
+  name: Checkout
+  trigger: User checks out
+  steps:
+  - validate cart
+  - create order
+  satisfies:
+  - FR-001
+  needs_diagram: true
+  status: active
+integrations:
+- id: INTG-001
+  system: Shopify
+  direction: outbound
+  auth_model: OAuth2 client-credentials
+  endpoints:
+  - POST /orders
+  data_exchanged: orders
+  limits: 2 req/sec
+  error_behavior: idempotent retry with backoff
+  satisfies:
+  - FR-002
+  bounded_by:
+  - BC-001
+  status: active
+binding_constraints:
+- id: BC-001
+  constraint: Must run on the client's Shopify Plus tenant
+  source:
+    type: platform
+    ref: Shopify Plus
+    prd_constraint_id: CON-001
+  implication: Use Shopify-native checkout extensibility
+  status: active
+nfrs:
+- id: TNF-001
+  category: performance
+  requirement: p75 order-create latency < 300ms
+  derived_from:
+  - NFR-001
+  testing_method: load test in staging
+  status: active
+decisions:
+- id: ADR-001
+  title: Use Remix for the storefront
+  decision_status: accepted
+  backing: known
+  decision: Build the storefront in Remix
+  rationale: SSR fits the SEO requirement and the team knows it
+  alternatives:
+  - option: Next.js
+    rejected_because: team unfamiliar
+  derived_from:
+  - FR-001
+  bounded_by:
+  - BC-001
+  status: active
+assumptions:
+- id: ASM-001
+  assumption: Peak traffic stays under 1k rps
+  impact_if_wrong: horizontal scaling rework
+  owner: Tim
+  blocking: false
+  status: open
+risks:
+- id: RISK-001
+  risk: Shopify rate limit throttles bulk syncs
+  severity: medium
+  mitigation: queue + backoff
+  owner: Tim
+  status: open
+open_questions:
+- id: OQ-001
+  question: Which deployment region?
+  blocks:
+  - INTG-001
+  owner: Tim
+  status: open
+traceability:
+  mapped:
+  - requirement_id: FR-001
+    satisfied_by:
+    - ENT-001
+    - STM-001
+    - WF-001
+    - ADR-001
+  - requirement_id: FR-002
+    satisfied_by:
+    - INTG-001
+  - requirement_id: NFR-001
+    satisfied_by:
+    - TNF-001
+  unmapped: []
+change_log:
+- version: '0.1'
+  date: '2026-06-15'
+  author: Tim
+  change_class: initial
+  changed_ids: []
+  summary: Initial draft
+  triggered_by:
+    type: prd-baseline
+    ref: PRD v1.0
+  approvals: []

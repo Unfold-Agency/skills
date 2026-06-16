@@ -13,6 +13,9 @@ from validate_tdd import compute_fingerprint  # noqa: E402
 
 
 def main():
+    if len(sys.argv) < 2:
+        print(f"Usage: {sys.argv[0]} <path_to_tdd-data.yaml>", file=sys.stderr)
+        sys.exit(1)
     path = sys.argv[1]
     with open(path) as f:
         doc = yaml.safe_load(f)

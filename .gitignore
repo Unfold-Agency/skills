@@ -1,0 +1,3 @@
+# Python cache artifacts (e.g. from running skill validators / test harnesses)
+__pycache__/
+*.py[cod]

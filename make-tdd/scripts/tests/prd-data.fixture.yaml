@@ -1,0 +1,24 @@
+# Minimal PRD data fixture — supplies IDs for the TDD validator's
+# --prd cross-checks (V-003 coverage, V-007 references). Not a complete
+# prd-data.yaml; just enough structure for collect_prd_ids / required.
+meta:
+  doc_type: prd-data
+  prd_version: "1.0"
+  prd_status: approved
+
+requirements:
+  functional:
+    - id: "FR-001"
+      priority: must
+      status: active
+    - id: "FR-002"
+      priority: should
+      status: active
+  nonfunctional:
+    - id: "NFR-001"
+      priority: must
+      status: active
+
+constraints:
+  - id: "CON-001"
+    status: active

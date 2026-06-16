@@ -1,9 +1,9 @@
 ---
-name: prd-author
+name: make-prd
 description: Generate and amend Product Requirements Documents (PRDs) for agency projects using Mondo Robot's master PRD template and the RFEF Lane 2 process. Use this skill whenever the user wants to create a PRD, formalize requirements, turn discovery materials (RFPs, briefs, meeting notes, workshop transcripts, FigJam exports, stakeholder interviews) into a requirements document, update or amend an existing PRD, process an escalation or change request against a PRD, or validate a PRD's data file. Trigger it even if the user says "requirements doc," "FRD," "spec out the project," or "what are we building" — if the deliverable is a requirements document or a change to one, this skill applies. Do NOT use for the Brief (upstream) or the TDD (downstream).
 ---
  
-# PRD Author
+# Make a PRD
  
 Build and maintain PRDs as the single source of truth for what an agency project delivers. A PRD here is two files with one meaning: a human-authored Markdown document (the thing people read, redline, and sign) and a derived `prd-data.yaml` (the thing downstream tools consume). The Markdown wins every disagreement; the YAML is regenerated, never hand-edited.
  

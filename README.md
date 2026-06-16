@@ -16,9 +16,19 @@ Each top-level directory is one skill. A skill is a folder with a `SKILL.md` at 
 └── scripts/          # optional: helper scripts Claude runs via bash
 ```
 
+### Naming convention
+
+Name a skill after the thing it produces, using the form **`make-<thing>`** -- the imperative verb `make` plus the deliverable. The folder name, the `name` field in `SKILL.md`, and the slash command all share this name, so the skill that writes a PRD lives in `make-prd/` and is invoked as `/make-prd`.
+
+- Lowercase letters, numbers, and hyphens only (the same characters the `name` field allows).
+- Keep `<thing>` a short, concrete noun for the artifact -- `make-prd`, `make-brief`, `make-tdd` -- not the activity (`prd-author`) or a bare verb (`generate`).
+- The `# Heading` inside a `SKILL.md` is a readable, natural-language form of the same imperative -- `# Make a PRD` for `make-prd`. Only the machine `name`/folder must match `make-<thing>` exactly.
+
+If you know the deliverable, you know the command.
+
 | Skill | What it does |
 |---|---|
-| [`prd-author`](./prd-author) | Generates and amends Product Requirements Documents from discovery material, with citation discipline, a derived machine-readable data file, and a validator. |
+| [`make-prd`](./make-prd) | Generates and amends Product Requirements Documents from discovery material, with citation discipline, a derived machine-readable data file, and a validator. |
 
 Skills load progressively: only the frontmatter `description` sits in context at all times; the `SKILL.md` body loads when the skill is triggered, and supporting files load only when referenced. Keep that in mind when adding to a skill -- bundled reference files are effectively free until used.
 
@@ -43,22 +53,22 @@ cd skills
 mkdir -p ~/.claude/skills
 
 # Personal, available everywhere -- copy into the skills directory:
-cp -R prd-author ~/.claude/skills/
+cp -R make-prd ~/.claude/skills/
 
 # ...or symlink, so repo edits are picked up live (use an absolute path):
-ln -s "$(pwd)/prd-author" ~/.claude/skills/
+ln -s "$(pwd)/make-prd" ~/.claude/skills/
 ```
 
 To make a skill available only inside a specific project, copy it into that project's `.claude/skills/` instead:
 
 ```bash
 mkdir -p /path/to/your-project/.claude/skills
-cp -R prd-author /path/to/your-project/.claude/skills/
+cp -R make-prd /path/to/your-project/.claude/skills/
 ```
 
 ### Invoke
 
-- **Directly:** type `/<skill-name>` (for example `/prd-author`).
+- **Directly:** type `/<skill-name>` (for example `/make-prd`).
 - **Automatically:** Claude triggers a skill on its own when your request matches the skill's `description`.
 
 ### Update
@@ -69,7 +79,7 @@ git pull
 ```
 
 - **Symlinked** skills are updated by the `git pull` alone.
-- **Copied** skills need to be re-copied after pulling: `cp -R prd-author ~/.claude/skills/`.
+- **Copied** skills need to be re-copied after pulling: `cp -R make-prd ~/.claude/skills/`.
 
 For sharing across a team or distributing many skills at once, skills can also be packaged and installed as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) instead of copied by hand.
 
@@ -83,10 +93,10 @@ The Claude desktop app and claude.ai use the same custom-skill feature. Skills a
 
 1. From this repo's root, zip the skill's folder (the zip must contain the folder with its `SKILL.md`):
    ```bash
-   zip -r prd-author.zip prd-author
+   zip -r make-prd.zip make-prd
    ```
 2. In the Claude app, open **Settings → Features**.
-3. Under **Skills**, upload `prd-author.zip`.
+3. Under **Skills**, upload `make-prd.zip`.
 
 Claude uses the skill automatically when a request matches its description. The upload takes effect in new conversations.
 
@@ -102,7 +112,7 @@ Every skill needs a `SKILL.md` whose YAML frontmatter declares, at minimum, `nam
 
 ```yaml
 ---
-name: prd-author
+name: make-prd
 description: Generate and amend PRDs from discovery material. Use when the user wants to create a requirements document, formalize requirements, or amend an existing PRD.
 ---
 

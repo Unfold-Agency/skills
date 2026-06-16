@@ -1,0 +1,82 @@
+# ═══════════════════════════════════════════════════════════════════
+# labels.yaml — the make-issues label scheme + meta-block contract
+#
+# The label scheme is the FAST FILTER over skill-managed issues; the
+# meta block embedded in each issue body (see issue-body-template.md) is
+# the AUTHORITATIVE machine record. Labels and the meta block must agree;
+# the meta block wins if they ever disagree.
+#
+# scripts/gh_preflight.py ensures these labels exist on every run
+# (create-if-missing, idempotent, `gh label create --force`). Static
+# labels are listed below; dynamic `trace:` and `src:` labels are
+# computed per run from the IDs/versions that will actually appear.
+#
+# GitHub label names may contain `:` and `.`, so the prefixed forms below
+# are valid label names as written.
+# ═══════════════════════════════════════════════════════════════════
+
+# ── Static labels (always ensured) ──────────────────────────────────
+static:
+  # Provenance — the discriminator for "is this a make-issues issue?".
+  # Mode selection and every reconciliation query filters on this.
+  - name: make-issues
+    color: "ededed"              # grey
+    description: "Managed by the make-issues skill. Do not hand-edit managed regions."
+
+  # Autonomy — the signal the overnight loop reads to decide what it can
+  # do unattended. Exactly one per issue.
+  - name: afk
+    color: "0e8a16"              # green
+    description: "Away-from-keyboard: an agent may complete this unattended."
+  - name: hitl
+    color: "fbca04"              # amber
+    description: "Human-in-the-loop: needs a human decision or review."
+
+  # Reconciliation flags — applied by Sync, cleared by humans.
+  - name: needs-rebase
+    color: "d93f0b"              # red-orange
+    description: "The TDD changed while this issue was being worked. Re-check the spec."
+  - name: spec-drift
+    color: "d93f0b"
+    description: "The TDD changed and a human must reconcile this in-flight/HITL item."
+  - name: orphaned
+    color: "5319e7"              # deep purple
+    description: "The TDD capability behind this issue was removed or superseded."
+
+# ── Dynamic label families (computed per run, ensured on demand) ─────
+# These are documented patterns, not a fixed list. gh_preflight.py mints
+# the specific names needed for the issues this run will touch.
+dynamic:
+  # One per PRD requirement ID and per TDD capability ID an issue traces
+  # to. The trace index: `gh issue list --label trace:CAP-003`.
+  trace:
+    pattern: "trace:<ID>"        # e.g. trace:UO-001, trace:WF-003
+    color: "c2e0c6"              # light purple-green
+    description: "Traceability link to a PRD requirement or TDD capability ID."
+
+  # Version stamps for quick filtering. The authoritative copy lives in
+  # the issue meta block's source_versions; these mirror it.
+  src:
+    pattern: "src:prd-<v> / src:tdd-<v>"   # e.g. src:prd-2.1, src:tdd-1.0
+    color: "1d76db"              # blue
+    description: "The PRD/TDD version this issue was generated against."
+
+# ═══════════════════════════════════════════════════════════════════
+# META-BLOCK CONTRACT
+# The YAML between <!-- make-issues:meta --> and <!-- /make-issues:meta -->
+# in every managed issue body. This is what an automation or the overnight
+# loop parses; the reconciler reads `fingerprint` and `trace_tdd` from it.
+#
+#   trace_tdd:        [<capability IDs>]   # ENT/WF/STM/INTG/TNF/ADR; >=1, required
+#   trace_prd:        [<PRD requirement IDs>]   # what trace_tdd transitively serves
+#   source_versions:  { prd: "<v>", tdd: "<v>" }   # the locked versions at birth
+#   autonomy:         afk | hitl
+#   fingerprint:      "<sha256>"           # from scripts/item_fingerprint.py
+#
+# Rules:
+#   - Every managed issue has a meta block with all five keys.
+#   - trace_tdd is the primary match key (issue <-> TDD capability);
+#     a trace:<CAP> label is the recovery key if the block is malformed.
+#   - fingerprint is compared against the live per-capability hash to
+#     detect drift; on change, reconciliation acts by issue state.
+# ═══════════════════════════════════════════════════════════════════

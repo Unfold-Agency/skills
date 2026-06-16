@@ -5,7 +5,7 @@ description: Generate and amend Technical Design Documents (TDDs) for agency pro
 
 # Make a TDD
 
-Build and maintain TDDs as the single source of truth for HOW an agency project is built. A TDD here is two files with one meaning: a human-authored Markdown document (the thing people read, review, and sign) and a derived `tdd-data.yaml` (the thing the ticket generator consumes). The Markdown wins every disagreement; the YAML is regenerated, never hand-edited.
+Build and maintain TDDs as the single source of truth for HOW an agency project is built. A TDD here is two files with one meaning: a human-authored Markdown document (the thing people read, review, and sign) and a derived `tdd-data.yaml` (the thing the issue generator, `make-issues`, consumes). The Markdown wins every disagreement; the YAML is regenerated, never hand-edited.
 
 This skill has two modes. Decide which one applies before doing anything else:
 
@@ -42,7 +42,7 @@ Look for an existing TDD (both files) and a change trigger. A change trigger plu
 2. **Classify the change:** refinement (alters no ID'd item -- tell the user and stop), minor (additive/clarifying, x.Y bump), or major (changes the meaning of an existing decision, contract, model, or binding constraint -- X.0 bump, approval required).
 3. **Apply the diff.** Never renumber or delete IDs -- supersede or defer them. Record the change in the changelog with class, changed IDs, and trigger reference.
 4. **Re-derive (in chunks) and validate.** Re-derive `tdd-data.yaml` the same chunked way (meta, then one collection at a time), re-lock `meta.prd_version` to the PRD version this amendment satisfies, and regenerate the fingerprint. Validate with `--prev` pointed at the prior data file (enforces the no-vanishing-IDs rule, V-009), `--prd` (enforces coverage and the version lock, V-017), and `--tdd-md`.
-5. **Report propagation.** For major amendments, output the impact list: changed IDs, any newly unmapped requirements, which downstream tickets reference them (tickets are pinned to the prior TDD version), and the steps still owed. The skill prepares propagation; humans execute the approvals.
+5. **Report propagation.** For major amendments, output the impact list: changed IDs, any newly unmapped requirements, which downstream issues reference them (issues are pinned to the prior TDD version), and the steps still owed. The skill prepares propagation; humans execute the approvals.
 
 ## Location & system of record
 
@@ -76,4 +76,4 @@ When the system context is too big to hold in one context, or to run the mechani
 
 ## Tone and writing rules for TDD prose
 
-Plain words, short sentences, no marketing language. Decisions stated one at a time, each with its rationale. Never use an em dash in output; use a spaced double hyphen ` -- ` for asides. Write so the ticket generator (or an engineer outside the project) can act on each item without asking what it means.
+Plain words, short sentences, no marketing language. Decisions stated one at a time, each with its rationale. Never use an em dash in output; use a spaced double hyphen ` -- ` for asides. Write so the issue generator (or an engineer outside the project) can act on each item without asking what it means.

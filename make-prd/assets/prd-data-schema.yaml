@@ -10,7 +10,7 @@
 #
 # Consumers:
 #   - Lane 3 (solution modeling): objectives, requirements, constraints
-#   - Lane 4 (ticket generation): requirements + acceptance_criteria
+#   - Lane 4 (issue generation): requirements + acceptance_criteria
 #   - Lane 6 (AI execution): requirement lookups by ID, escalations
 #   - Lane 7 (UAT): objectives.success_criteria → UAT scripts
 #   - Validator: everything
@@ -33,7 +33,7 @@ meta:
   client: ""
   phase: ""                      # mirrors markdown frontmatter
   prd_version: ""                # MUST exactly match markdown `version`
-  prd_status: draft              # draft | in-review | approved | superseded
+  prd_status: draft              # draft | review | approved | superseded
   generated_from:                # markdown master + shards compiled
     master: "PRD-[project].md"
     shards: []

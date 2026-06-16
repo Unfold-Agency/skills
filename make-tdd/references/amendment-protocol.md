@@ -1,6 +1,6 @@
 # Amendment Protocol (Amend Mode)
 
-How to change a TDD that already exists. The prime directive: **diff, don't rewrite**. Regenerating a TDD from scratch destroys the version history, the ID stability, and every downstream ticket pinned to a TDD version. Amend mode touches only what the change touches.
+How to change a TDD that already exists. The prime directive: **diff, don't rewrite**. Regenerating a TDD from scratch destroys the version history, the ID stability, and every downstream issue pinned to a TDD version. Amend mode touches only what the change touches.
 
 ## 1. Run the location guard first
 
@@ -66,4 +66,4 @@ The skill prepares propagation; humans execute it. For **major** amendments, out
 - **Issue impact**: issues (Lane 4 / `make-issues`) are pinned to the TDD version they were generated against, so the affected set = issues referencing any changed ID. State the query, list known affected issues if issue data is available, and the disposition options (update / supersede / replace / new).
 - **Remaining steps** from Section 1.3 not yet executed, as a checklist.
 
-For **minor** amendments the report is lighter: changed/added IDs, whether new tickets are warranted, and confirmation that existing tickets are untouched.
+For **minor** amendments the report is lighter: changed/added IDs, whether new issues are warranted, and confirmation that existing issues are untouched.

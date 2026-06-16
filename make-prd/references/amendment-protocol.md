@@ -45,7 +45,7 @@ When the trigger is an escalation:
 - Edit only the affected sections of the Markdown.
 - **Never delete or renumber an ID.** Items leave service via `status: superseded` (replaced or cut) or `status: deferred` (pushed to a later phase). A superseded FR's replacement gets a NEW id with a note pointing back.
 - Add a Version History row (Section 1.1): version, class, changed IDs, summary, trigger reference.
-- Update frontmatter: `version`, `supersedes`, `last_updated`. Major amendments set `status: in-review` until approvals land.
+- Update frontmatter: `version`, `supersedes`, `last_updated`. Major amendments set `status: review` until approvals land.
 - Log judgment calls in Section 13.
 
 ## 5. Re-derive and validate
@@ -63,9 +63,9 @@ python scripts/validate_prd.py prd-data.yaml --prd-md PRD.md --prev <prior prd-d
 The skill prepares propagation; humans execute it. Output a report containing:
 
 - **Changed IDs** and old → new meaning, one line each
-- **Approval owed**: who must sign per Section 12, and that status is `in-review` until they do
-- **TDD review**: which changed IDs plausibly touch the TDD (integrations, constraints, NFRs almost always do; copy-level FR tweaks may not)
-- **Ticket impact**: tickets are pinned to the PRD version they were generated against, so the affected set = tickets referencing any changed ID. State the query, list known affected tickets if ticket data is available, and the disposition options (update / supersede / replace / new).
+- **Approval owed**: who must sign per Section 12, and that status is `review` until they do
+- **TDD review**: which changed IDs plausibly touch the TDD (integrations, constraints, NFRs almost always do; copy-level FR tweaks may not). The TDD is the only path to the issues -- a PRD change reaches GitHub issues only after `/make-tdd` re-derives and re-locks to this PRD version. Flag that a TDD re-lock is owed.
+- **Issue impact (via the TDD)**: issues are pinned to the TDD version they were generated against, not the PRD, and are never reconciled against the PRD directly. Once the TDD re-locks, `/make-issues` reconciles the affected issues (those tracing a changed TDD capability). This report only needs to surface that the re-lock is the next step.
 - **Remaining 1.3 steps** not yet executed, as a checklist the user can run down.
 
-For minor amendments the report is lighter: changed/added IDs, whether new tickets are warranted, confirmation that existing tickets are untouched.
+For minor amendments the report is lighter: changed/added IDs, whether new issues are warranted (via a TDD re-lock), confirmation that existing issues are untouched.

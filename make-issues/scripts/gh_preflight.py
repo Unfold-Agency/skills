@@ -41,7 +41,8 @@ def _run(cmd, timeout=30):
     """Run a command, returning (returncode, stdout, stderr). Never raises on a
     nonzero exit; returns (124, '', 'timeout') if it hangs."""
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(cmd, capture_output=True, text=True,
+                            encoding="utf-8", timeout=timeout)
         return p.returncode, p.stdout, p.stderr
     except subprocess.TimeoutExpired:
         return 124, "", "timeout"
@@ -52,7 +53,7 @@ def _run(cmd, timeout=30):
 def _meta_version(path):
     """Read meta.prd_version from a data file. Returns ('', err) on trouble."""
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             doc = yaml.safe_load(f)
     except (OSError, yaml.YAMLError) as e:
         return None, f"cannot read {path}: {e}"

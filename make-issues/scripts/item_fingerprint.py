@@ -101,10 +101,10 @@ def _project(record, spec):
             out[f] = _norm_text(record[f])
     for f in spec.get("sets", []):
         if record.get(f):
-            out[f] = sorted(_norm_text(x) for x in record[f])
+            out[f] = sorted(_norm_text(x) for x in record[f] if x is not None)
     for f in spec.get("seqs", []):
         if record.get(f):
-            out[f] = [_norm_text(x) for x in record[f]]
+            out[f] = [_norm_text(x) for x in record[f] if x is not None]
     for f, rspec in spec.get("records", {}).items():
         if not record.get(f):
             continue
@@ -149,7 +149,7 @@ def main():
     args = ap.parse_args()
 
     try:
-        with open(args.data_file) as f:
+        with open(args.data_file, encoding="utf-8") as f:
             doc = yaml.safe_load(f)
     except (OSError, yaml.YAMLError) as e:
         print(f"ERROR: cannot read {args.data_file}: {e}", file=sys.stderr)

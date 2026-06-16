@@ -33,7 +33,11 @@ Run the gate and stop on any failure before touching GitHub:
 python scripts/gh_preflight.py --prd prd-data.yaml --tdd tdd-data.yaml
 ```
 
+**Both data files must be in the working tree.** The TDD is often promoted into the repo while the PRD still lives in a Claude Project (see make-tdd, *Location & system of record*). If only `tdd-data.yaml` is here, the lock cannot be verified -- you can read the TDD's locked version but not whether the live PRD has moved past it. Bring a current `prd-data.yaml` (the version the TDD is locked to) into the tree first; preflight fails fatally and says so if either file is missing.
+
 It checks, in order: `gh auth status`; **gh >= 2.94.0** (native dependency/type flags -- below that, stop and tell the user to `brew upgrade gh`); a git work tree with a resolvable `owner/name` (confirm the target before any write); the **version-lock gate** (`prd-data.meta.prd_version` must equal `tdd-data.meta.prd_version` -- if not, the TDD is stale; stop and send the user to `/make-tdd` to re-lock); and the existing managed issues, which pick the mode. It reports any missing static labels; create them with `gh label create <name> --color <hex> --description "..." --force` from `assets/labels.yaml`, plus the per-run `trace:<ID>` and `src:<doc>-<v>` labels the issues will use.
+
+It also prints an **approval advisory** (non-gating): the lock can pass while both docs are still `draft`. If preflight warns that the PRD or TDD is not `approved`, surface that and get explicit confirmation before creating anything -- issues built on a draft will churn when it lands. This mirrors make-tdd's warn-don't-block posture; only a human approves a doc.
 
 The version lock is what lets this skill reason about a single drift axis. Because the TDD already matches the PRD, you only ever reconcile TDD capability vs. issue -- never PRD vs. issue.
 

@@ -202,6 +202,10 @@ def main():
         print(f"ERROR: cannot parse {args.data_file}: {e}", file=sys.stderr)
         sys.exit(2)
 
+    if not isinstance(doc, dict):
+        print(f"ERROR: {args.data_file} is not a YAML mapping", file=sys.stderr)
+        sys.exit(2)
+
     errors = []
 
     def fail(rule, msg):
@@ -224,6 +228,10 @@ def main():
 
     # ---- V-002: ID format and uniqueness -------------------------------
     ids, dupes = collect_ids(doc)
+    for path, field in ID_COLLECTIONS:
+        for item in get_path(doc, path):
+            if isinstance(item, dict) and not item.get(field):
+                fail("V-002", f"item in {path} is missing required '{field}'")
     for iid in ids:
         if not TDD_ID_RE.match(str(iid)):
             fail("V-002", f"malformed ID '{iid}'")
@@ -303,7 +311,9 @@ def main():
             check_ref("traceability", "requirement_id", rid)
         for cap in row.get("satisfied_by") or []:
             check_ref(f"traceability[{rid}]", "satisfied_by", cap)
-            if TDD_ID_RE.match(str(cap)) and not str(cap).split("-")[0] in CAPABILITY_PREFIXES:
+            cap_str = str(cap)
+            prefix = cap_str.split("-")[0] if "-" in cap_str else ""
+            if prefix not in CAPABILITY_PREFIXES or not TDD_ID_RE.match(cap_str):
                 fail("V-013", f"traceability[{rid}].satisfied_by '{cap}' is not a capability")
     unmapped = doc.get("traceability", {}).get("unmapped") or [] if isinstance(doc.get("traceability"), dict) else []
     for rid in unmapped:

@@ -54,6 +54,9 @@ def m_v002(d):
     d["open_questions"].append({"id": "OQ-1", "question": "bad id", "blocks": [],
                                 "owner": "x", "status": "open"})
 
+def m_v002_missing_id(d):
+    d["entities"].append({"name": "Unidentified", "status": "active"})  # no id field
+
 def m_v003(d):
     d["traceability"]["mapped"] = [r for r in d["traceability"]["mapped"]
                                    if r["requirement_id"] != "FR-002"]
@@ -89,6 +92,9 @@ def m_v012(d):
 def m_v013(d):
     d["integrations"][0]["bounded_by"] = ["ADR-001"]  # exists, but not a BC-
 
+def m_v013_satisfied_by(d):
+    d["traceability"]["mapped"][0]["satisfied_by"] = ["FR-001"]  # PRD id, not a capability
+
 def m_v014(d):
     d["meta"]["system_of_record"] = "bogus"
 
@@ -100,9 +106,10 @@ def m_v017(d):
 
 
 MUTATION_CASES = [
-    ("V-001", m_v001), ("V-002", m_v002), ("V-003", m_v003), ("V-004", m_v004),
-    ("V-005", m_v005), ("V-006", m_v006), ("V-007", m_v007), ("V-008", m_v008),
-    ("V-010", m_v010), ("V-011", m_v011), ("V-012", m_v012), ("V-013", m_v013),
+    ("V-001", m_v001), ("V-002", m_v002), ("V-002", m_v002_missing_id),
+    ("V-003", m_v003), ("V-004", m_v004), ("V-005", m_v005), ("V-006", m_v006),
+    ("V-007", m_v007), ("V-008", m_v008), ("V-010", m_v010), ("V-011", m_v011),
+    ("V-012", m_v012), ("V-013", m_v013), ("V-013", m_v013_satisfied_by),
     ("V-014", m_v014), ("V-016", m_v016), ("V-017", m_v017),
 ]
 

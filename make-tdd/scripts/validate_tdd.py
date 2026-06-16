@@ -11,7 +11,8 @@ Exit codes: 0 = pass, 1 = violations found, 2 = file/parse error.
 Rules (see assets/tdd-data-schema.yaml for prose):
   Integrity:    V-001 schema well-formed, V-002 ID format + uniqueness,
                 V-007 PRD references resolve (--prd), V-009 no vanished IDs
-                (--prev), V-013 TDD-internal references resolve
+                (--prev), V-013 TDD-internal references resolve,
+                V-017 PRD version lock (--prd)
   Completeness: V-003 PRD coverage (--prd), V-004 no orphan decisions,
                 V-005 NFRs derive from a req/assumption, V-006 assumption/risk
                 owner+status, V-008 diagrams present (--tdd-md),
@@ -230,16 +231,26 @@ def main():
         fail("V-002", f"duplicate ID '{iid}' in {first} and {second}")
     known = set(ids)
 
-    # ---- load --prd once for V-003 / V-007 -----------------------------
-    prd_ids, prd_required = set(), set()
+    # ---- load --prd once for V-003 / V-007 / V-017 ---------------------
+    prd_ids, prd_required, prd_lock_version = set(), set(), ""
     if args.prd:
         try:
             with open(args.prd) as f:
                 prd = yaml.safe_load(f) or {}
             prd_ids = collect_prd_ids(prd)
             prd_required = collect_prd_required(prd)
+            prd_lock_version = str((prd.get("meta") or {}).get("prd_version") or "")
         except Exception as e:
             fail("V-007", f"could not read --prd data file: {e}")
+
+    # ---- V-017: PRD version lock ---------------------------------------
+    # The TDD is locked to the PRD version it was derived from. If the live
+    # PRD (--prd) is a different version, the TDD is stale -- re-run make-tdd.
+    if args.prd and prd_lock_version:
+        tdd_prd_version = str(meta.get("prd_version") or "")
+        if tdd_prd_version != prd_lock_version:
+            fail("V-017", f"TDD is locked to PRD v{tdd_prd_version or '?'} but --prd "
+                          f"is v{prd_lock_version}; the PRD has moved on -- re-run make-tdd")
 
     # ---- V-013 / V-007: reference resolution ---------------------------
     # TDD-prefixed refs must exist in this doc; PRD-prefixed refs must exist

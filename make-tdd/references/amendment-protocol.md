@@ -24,6 +24,8 @@ Read, in order:
 
 If the trigger doesn't name affected IDs, find them before classifying. A change you can't pin to IDs isn't understood well enough to classify yet. When the trigger is a PRD amendment, start from its changed PRD IDs and trace forward: which capabilities, decisions, and contracts `satisfy` or `derive_from` them.
 
+**The version lock is itself a trigger.** If the live PRD version is newer than the TDD's locked `prd_version`, the TDD is stale by definition -- that gap is an amend trigger. Re-derive against the new PRD and re-lock `meta.prd_version` to it. This lock is what lets the downstream `make-issues` reason about a single drift axis (TDD item vs. issue) and never PRD vs. issue: it refuses to run while the TDD's `prd_version` lags the live PRD.
+
 ## 3. Classification
 
 Apply the test from Section 1.2 of the template, in order:
@@ -61,7 +63,7 @@ The skill prepares propagation; humans execute it. For **major** amendments, out
 - **Changed IDs** and old → new meaning, one line each.
 - **Approval owed**: who must sign the architecture review, and that status is `review` until they do.
 - **Coverage delta**: any PRD `must`/`should` requirement that is now unmapped because a capability was superseded -- the new gaps.
-- **Ticket impact**: tickets (Lane 4 / `make-plan`) are pinned to the TDD version they were generated against, so the affected set = tickets referencing any changed ID. State the query, list known affected tickets if ticket data is available, and the disposition options (update / supersede / replace / new).
+- **Issue impact**: issues (Lane 4 / `make-issues`) are pinned to the TDD version they were generated against, so the affected set = issues referencing any changed ID. State the query, list known affected issues if issue data is available, and the disposition options (update / supersede / replace / new).
 - **Remaining steps** from Section 1.3 not yet executed, as a checklist.
 
 For **minor** amendments the report is lighter: changed/added IDs, whether new tickets are warranted, and confirmation that existing tickets are untouched.

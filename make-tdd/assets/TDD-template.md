@@ -85,7 +85,11 @@ supersedes: ""            # previous version, e.g. "1.3"
 status: draft             # draft | review | approved | superseded
 last_updated: ""          # YYYY-MM-DD
 authors: []
-prd_version: ""           # the PRD version this TDD satisfies, e.g. "2.0"
+prd_version: ""           # LOCK: the latest PRD version this TDD was derived
+                          # from, e.g. "2.0". The PRD may have jumped several
+                          # versions before the TDD existed -- lock to whatever
+                          # the latest is. If the PRD later bumps past this, the
+                          # TDD is out of date and /make-tdd must be re-run.
 data_file: ""             # path to derived tdd-data.yaml (generated,
                           # never hand-edited; version must match)
 # --- System of record & location (see Section 1.4) ---
@@ -121,7 +125,7 @@ approval should trace to something concrete. -->
 
 **Approval required from:** <!-- Names + roles. The architecture-review gate. -->
 
-**Satisfies PRD version:** <!-- The exact PRD version this TDD designs against. If the PRD is still draft, say so and flag the rework risk. -->
+**Locked to PRD version:** <!-- The exact PRD version this TDD is derived from and locked to (matches frontmatter prd_version). If the PRD is still draft, say so and flag the rework risk. If the live PRD is newer than this, the TDD is out of date -- re-run /make-tdd. -->
 
 ### 1.2 Change Classes
 

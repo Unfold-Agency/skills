@@ -95,12 +95,15 @@ def m_v014(d):
 def m_v016(d):
     d["meta"]["tdd_version"] = "0.2"  # md frontmatter still says 0.1
 
+def m_v017(d):
+    d["meta"]["prd_version"] = "0.9"  # prd fixture is locked at 1.0
+
 
 MUTATION_CASES = [
     ("V-001", m_v001), ("V-002", m_v002), ("V-003", m_v003), ("V-004", m_v004),
     ("V-005", m_v005), ("V-006", m_v006), ("V-007", m_v007), ("V-008", m_v008),
     ("V-010", m_v010), ("V-011", m_v011), ("V-012", m_v012), ("V-013", m_v013),
-    ("V-014", m_v014), ("V-016", m_v016),
+    ("V-014", m_v014), ("V-016", m_v016), ("V-017", m_v017),
 ]
 
 

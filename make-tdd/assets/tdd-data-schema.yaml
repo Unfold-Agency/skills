@@ -30,7 +30,10 @@ meta:
   project_id: ""
   project_name: ""
   client: ""
-  prd_version: ""                # the PRD version this TDD satisfies
+  prd_version: ""                # LOCK: the PRD version this TDD was derived
+                                 # from and is locked to. If the live PRD is a
+                                 # newer version, the TDD is stale (V-017) and
+                                 # make-tdd must be re-run.
   tdd_version: ""                # MUST exactly match markdown `version`
   tdd_status: draft              # draft | review | approved | superseded
   generated_from:
@@ -210,6 +213,9 @@ change_log:
 #   V-013  TDD-internal integrity: every TDD-prefixed reference resolves to a
 #          real TDD ID; every bounded_by resolves to a BC- id; every
 #          state_machine.entity resolves to an ENT- id
+#   V-017  PRD version lock (needs --prd): meta.prd_version equals the supplied
+#          prd-data.yaml's meta.prd_version. If they differ the PRD has moved on
+#          and the TDD is stale -- re-run make-tdd to re-derive and re-lock.
 #
 # Completeness
 #   V-003  Coverage (needs --prd): every PRD must/should requirement is mapped

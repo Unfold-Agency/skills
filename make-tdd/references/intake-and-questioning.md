@@ -7,6 +7,7 @@ How to turn an approved PRD plus system context into a sourced, traceable TDD dr
 Read the PRD first -- both files: `PRD.md` (the prose people signed) and `prd-data.yaml` (the IDs you will trace to). The PRD is the source of truth for WHAT; this document only decides HOW.
 
 - **Confirm the PRD is `approved`.** If its status is still `draft` or `in-review`, say so and warn: designing against an unapproved PRD risks rework when the WHAT moves under you. Proceed only if the user accepts that risk, and note it as a risk (`RISK-`).
+- **Lock to the PRD version.** Record the PRD's version in `meta.prd_version`. The PRD may have jumped several versions before the TDD existed -- lock to whatever the latest is. This lock is what lets the downstream `make-issues` trust the TDD: it refuses to run when the TDD's `prd_version` no longer matches the live PRD. If you re-open this TDD later and the PRD has moved on, the TDD is stale (V-017) and must be amended and re-locked.
 - **Resolve every item the PRD flagged "for the TDD."** Those are the open HOW questions this document exists to answer. Pull them from the PRD's conflicts/decisions log and constraints.
 - **Inventory the system context** into Appendix A (Source Index) with stable handles -- the existing architecture you must fit into, not the discovery corpus.
 
@@ -59,9 +60,9 @@ Model visually, in Mermaid (the Lane 3 convention):
 
 - Strip every HTML guidance comment from the final Markdown. Write Section 2 (Summary) last, plain words.
 - Default NFRs (accessibility, security, observability) stay unless the user explicitly waives them; record any waiver in the changelog.
-- Derive `tdd-data.yaml`, then run:
+- Derive `tdd-data.yaml` **in chunks** -- write `meta` first, then one record collection at a time (entities, then state machines, then workflows, ...), appending each. Emitting the whole file in one step times out and blows the context window on a real design. Then run:
   ```
   python scripts/validate_tdd.py tdd-data.yaml --prd prd-data.yaml --tdd-md TDD.md
   ```
-  Fix every failure before presenting. Stamp `meta.fingerprint` and set `system_of_record`. Never present a TDD whose data file fails validation, and **never write `status: approved`** -- that is the human review gate.
+  `--prd` enforces both coverage and the PRD version lock (V-017). Fix every failure before presenting. Stamp `meta.fingerprint` and set `system_of_record`. Never present a TDD whose data file fails validation, and **never write `status: approved`** -- that is the human review gate.
 - Report to the user: capability count; **requirement coverage** (PRD `must`/`should` mapped vs. unmapped); binding-constraint count; open assumption count; open risk count; and anything you routed somewhere they might not expect (a "requirement" demoted to an assumption, a decision left as an open question).

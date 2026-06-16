@@ -120,10 +120,12 @@ def check_approval(prd_path, tdd_path):
     The version lock can pass while both docs are still drafts; issues built on a
     draft churn when it lands. This mirrors make-tdd's warn-don't-block posture --
     it never fails the gate; the skill surfaces it and asks the user to confirm."""
+    # _load_meta returns None on a read error, and this advisory deliberately
+    # discards that error, so prd_meta/tdd_meta may be None -- keep the `or {}`.
     prd_meta, _ = _load_meta(prd_path)
     tdd_meta, _ = _load_meta(tdd_path)
-    prd_status = str((prd_meta or {}).get("prd_status") or "") or "unknown"
-    tdd_status = str((tdd_meta or {}).get("tdd_status") or "") or "unknown"
+    prd_status = str((prd_meta or {}).get("prd_status") or "unknown")
+    tdd_status = str((tdd_meta or {}).get("tdd_status") or "unknown")
     approved = prd_status == "approved" and tdd_status == "approved"
     if approved:
         detail = "PRD and TDD are both approved"

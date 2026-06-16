@@ -68,7 +68,8 @@ dynamic:
 # loop parses; the reconciler reads `fingerprint` and `trace_tdd` from it.
 #
 #   trace_tdd:        [<capability IDs>]   # ENT/WF/STM/INTG/TNF/ADR; >=1, required
-#   trace_prd:        [<PRD requirement IDs>]   # what trace_tdd transitively serves
+#   trace_prd:        [<PRD requirement IDs>]   # what the capability links to (its
+#                                               # satisfies / PRD-side derived_from); may be empty
 #   source_versions:  { prd: "<v>", tdd: "<v>" }   # the locked versions at birth
 #   autonomy:         afk | hitl
 #   fingerprint:      "<sha256>"           # from scripts/item_fingerprint.py

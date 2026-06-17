@@ -112,12 +112,12 @@ git push -u origin <branch>
 
 # Completed work — open ready for review (the default)
 gh pr create \
-  --title "<emoji> <type>(scope): summary" \
+  --title "<emoji> <type>(<optional-scope>): <summary>" \
   --body "<body>"
 
 # Mid-work — open as a draft because there is more to do
 gh pr create --draft \
-  --title "<emoji> <type>(scope): summary" \
+  --title "<emoji> <type>(<optional-scope>): <summary>" \
   --body "<body>"
 ```
 

@@ -160,7 +160,11 @@ def select(issues, me, autonomy="afk"):
 
         state = issue_state(issue)
         assignees = _assignee_logins(issue)
-        if state == "started" and me and assignees and me not in assignees:
+        # Exclude work in flight under another name. There is deliberately no `me`
+        # guard: if the current login could not be resolved (me == ""), then
+        # `me not in assignees` is True for any assigned issue, so we conservatively
+        # exclude it rather than risk claiming someone else's in-progress work.
+        if state == "started" and assignees and me not in assignees:
             excluded.append({"number": num,
                              "reason": f"in flight by {', '.join(sorted(assignees))}"})
             continue

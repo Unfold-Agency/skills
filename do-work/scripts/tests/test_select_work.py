@@ -113,6 +113,14 @@ res_any = select(issues, ME, autonomy="any")
 check("#8 becomes actionable under autonomy=any",
       8 in [a["number"] for a in res_any["actionable"]])
 
+# When the current login can't be resolved (me == ""), an issue in flight under
+# someone else's name must STILL be excluded -- never claimed by accident.
+res_nome = select(issues, "", autonomy="afk")
+exc_nome = {e["number"]: e["reason"] for e in res_nome["excluded"]}
+check("#3 excluded even when 'me' is unknown", "in flight by bob" in exc_nome.get(3, ""))
+check("nothing is resumable when 'me' is unknown",
+      all(not a["resumable"] for a in res_nome["actionable"]))
+
 print()
 if failures:
     print(f"FAILURES: {failures}")

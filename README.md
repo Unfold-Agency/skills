@@ -32,12 +32,26 @@ The test is output vs. action: if the skill hands back an artifact, it is `make-
 
 If you know the output or the action, you know the command.
 
+### The pipeline skills
+
+These four chain end to end -- see [How these skills chain](#how-these-skills-chain).
+
 | Skill | What it does |
 |---|---|
 | [`make-prd`](./make-prd) | Generates and amends Product Requirements Documents from discovery material, with citation discipline, a derived machine-readable data file, and a validator. |
 | [`make-tdd`](./make-tdd) | Generates and amends Technical Design Documents from an approved PRD -- recommend-then-refine architecture, full PRD-to-design traceability, a derived data file, and a validator. |
 | [`make-issues`](./make-issues) | Turns an approved, version-locked PRD and TDD into traceable GitHub Issues and keeps them in sync as the TDD changes -- thin work items, AFK/HITL autonomy flags, a version-lock gate, and a stale-resistant reconciliation engine. |
 | [`do-work`](./do-work) | Builds the project from those GitHub Issues -- claims the next actionable issue, implements it on a branch, runs the build gate, and opens a PR that closes it. Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
+
+### Utility skills
+
+Standalone `do-` skills -- they perform actions, like the pipeline's `do-work`, but run on their own rather than as a lane in the planning-and-build chain:
+
+| Skill | What it does |
+|---|---|
+| [`do-git-workflow`](./do-git-workflow) | Enforces a branch-first Git workflow -- `type/short-description` branches, Conventional Commits with GitMoji prefixes, and draft PRs opened via the `gh` CLI. |
+| [`do-pr-review`](./do-pr-review) | Reviews a GitHub PR diff, posts inline review comments, validates or rejects existing comments in-thread, and submits a verdict. Comment-only -- never edits code. |
+| [`do-pr-fix`](./do-pr-fix) | Implements the requested changes on a reviewed PR, replies in-thread explaining each fix, runs tests/build, and pushes the commits -- the back-half of the review loop and companion to `do-pr-review`. |
 
 Skills load progressively: only the frontmatter `description` sits in context at all times; the `SKILL.md` body loads when the skill is triggered, and supporting files load only when referenced. Keep that in mind when adding to a skill -- bundled reference files are effectively free until used.
 

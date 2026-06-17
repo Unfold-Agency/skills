@@ -22,9 +22,9 @@ const A = (typeof args === 'object' && args) || {}
 const REPO = A.repo
 const SKILL = A.skillDir
 const AUTO_MERGE = !!A.autoMerge
-const PARALLEL = Math.max(1, Math.min(3, A.parallel || 1))
-const MAX_ISSUES = A.maxIssues || 50
-const MAX_ROUNDS = A.maxRounds || 100
+const PARALLEL = Math.max(1, Math.min(3, parseInt(A.parallel, 10) || 1))
+const MAX_ISSUES = parseInt(A.maxIssues, 10) || 50
+const MAX_ROUNDS = parseInt(A.maxRounds, 10) || 100
 const AUTONOMY = A.autonomy || 'afk'
 
 if (!REPO || !SKILL) {

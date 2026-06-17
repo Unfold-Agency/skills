@@ -4,7 +4,7 @@
   issue does, so the thread (PRD -> TDD -> issue -> PR) stays intact.
 
   Fill the angle-bracket placeholders, strip these authoring comments, then open
-  the PR. Title follows git-workflow: "<emoji> <type>(scope): <summary>".
+  the PR. Title follows do-git-workflow: "<emoji> <type>(scope): <summary>".
   One issue = one slice = one PR.
 -->
 

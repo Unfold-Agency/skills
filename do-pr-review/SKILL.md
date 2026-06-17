@@ -101,19 +101,27 @@ Skip threads that are resolved, outdated, or already answered by `$ME`.
 
 Post all inline findings and the verdict in a single review call. Use line-based comments (modern API; `position` is the legacy fallback):
 
-```bash
-gh api repos/$OWNER/$REPO/pulls/$NUMBER/reviews -X POST \
-  -f commit_id="$COMMIT_ID" \
-  -f event="<EVENT>" \
-  -f body="<succinct summary>" \
-  -f 'comments[][path]=src/foo.ts' -F 'comments[][line]=42' -f 'comments[][side]=RIGHT' \
-  -f 'comments[][body]=Major: <finding>. <why>.
+`gh api -f/-F` can build nested objects (`key[subkey]`) and scalar arrays (`key[]`), but **not** an array of objects, which `comments` requires. Pass a JSON body on stdin via `--input -`:
 
-```suggestion
-<fixed code>
-```'
-  # repeat the three comments[] lines per finding
+```bash
+cat <<EOF | gh api repos/$OWNER/$REPO/pulls/$NUMBER/reviews --input -
+{
+  "commit_id": "$COMMIT_ID",
+  "event": "<EVENT>",
+  "body": "<succinct summary>",
+  "comments": [
+    {
+      "path": "src/foo.ts",
+      "line": 42,
+      "side": "RIGHT",
+      "body": "Major: <finding>. <why>."
+    }
+  ]
+}
+EOF
 ```
+
+Add one object to the `comments` array per finding. To attach a suggested change, embed a fenced `suggestion` block in that comment's `body` as an escaped JSON string (`...\n\n\`\`\`suggestion\n<fixed code>\n\`\`\``).
 
 **Verdict logic:**
 - Any **Critical** or **Major** finding → `REQUEST_CHANGES`.

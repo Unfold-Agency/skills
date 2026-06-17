@@ -31,8 +31,8 @@ Before the first commit of a unit of work, ensure work is happening on a feature
 git rev-parse --abbrev-ref HEAD
 
 # Default branch (falls back to main/master if origin/HEAD is unset)
-git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' \
-  || git branch -r | grep -qE 'origin/(main)$' && echo main || echo master
+git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's@^origin/@@' | grep . \
+  || (git branch -r | grep -qE 'origin/(main)$' && echo main || echo master)
 ```
 
 - If currently on the default branch (`main`/`master`) or any protected branch, create a new branch before committing:

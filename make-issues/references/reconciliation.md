@@ -64,17 +64,14 @@ An AUTO-UPDATE rewrites only the managed regions: the prose above the meta marke
    - changelog: `<!-- make-issues:changelog -->` ... `<!-- /make-issues:changelog -->`
    - human: `<!-- make-issues:human -->` ... `<!-- /make-issues:human -->`
 3. Capture the human block verbatim. It is never a replacement target.
-4. Substitute the new meta (re-stamped `fingerprint` + `source_versions`) and the new changelog (append a dated entry on top; never rewrite old entries). Recompute the summary prose region from the updated capability.
+4. Substitute the new meta (re-stamped `fingerprint` + `source_versions`) and the new changelog (append a dated entry on top; never rewrite old entries). Recompute the summary prose region from the updated capability -- including the `## Traceability` table, whose IDs/titles and "Born from" versions must match the re-stamped meta.
 5. **Defensive asserts before writing:** exactly one match for each managed marker pair; the captured human block appears unchanged in the new body (`human_before in body_after`); no nested or duplicated markers. If any assert fails, a human edited the markers -- **abort the edit and COMMENT-AND-FLAG instead.**
 6. Apply via stdin so nothing touches disk:
    ```
    printf '%s' "$NEW_BODY" | gh issue edit <N> --repo <owner/name> --body-file -
    ```
-7. Update stamps idempotently:
-   ```
-   gh issue edit <N> --repo <owner/name> \
-     --add-label "src:tdd-<new>" --remove-label "src:tdd-<old>"
-   ```
+   The version bump rides along in the re-stamped `source_versions` and the
+   Traceability table's "Born from" line -- there is no separate label to swap.
 
 ## 5. Dependencies are write-only
 

@@ -61,4 +61,4 @@ Before creating or changing **anything**, present the breakdown and get approval
 - The **coverage check**: every `active` capability has at least one item, or the gap is named. Every PRD `must`/`should` requirement traces through to an item, or it is listed as unmapped.
 - For a sync, the **reconciliation plan**: what will be created, updated, flagged, closed, or followed-up (see `reconciliation.md`).
 
-Iterate until the human approves. Only then create issues -- in dependency order, blockers first, so each `--blocked-by` references an issue number that already exists. Stamp every issue per the template and apply its labels (`make-issues`, `afk`/`hitl`, `src:prd-<v>`, `src:tdd-<v>`). Traceability is carried in the body's `## Traceability` table and the meta block, not as labels.
+Iterate until the human approves. Only then create issues -- in dependency order, blockers first, so each `--blocked-by` references an issue number that already exists. Stamp every issue per the template and apply its labels: just `make-issues` and `afk`/`hitl`. Traceability and source versions are carried in the body (`## Traceability` table) and the meta block, not as labels.

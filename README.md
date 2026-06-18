@@ -80,7 +80,7 @@ discovery ──/make-prd──▶  PRD  ──/make-tdd──▶  TDD  ──/m
 |---|---|---|
 | PRD | "Customers can check out" -- a user objective and the functional requirement under it | `UO-001`, `FR-002` |
 | TDD | A Shopify checkout integration whose `satisfies: [FR-002]` | `INTG-001` |
-| Issues | "Build the Shopify order-create call (per `INTG-001`)" -- stamped `trace_tdd: [INTG-001]`, `trace_prd: [FR-002]`, labels `src:prd-1.0` / `src:tdd-0.1` | issue #N |
+| Issues | "Build the Shopify order-create call (per `INTG-001`)" -- meta block stamps `trace_tdd: [INTG-001]`, `trace_prd: [FR-002]`, `source_versions: {prd: 1.0, tdd: 0.1}`; labels stay human-facing (`make-issues`, `afk`/`hitl`) | issue #N |
 | Build | A branch + PR implementing issue #N that `Closes #N`; the merge closes it COMPLETED and unblocks its dependents | PR, branch `feat/issue-N-order-create` |
 
 Change `INTG-001`'s contract in the TDD and re-run `/make-issues`: the per-capability fingerprint changes, so issue #N is updated (if unstarted) or flagged (if in flight) -- and the engineer's notes in the issue's human region are never touched.

@@ -33,9 +33,9 @@ except ImportError:
 
 MIN_GH = (2, 94, 0)
 # Static labels make-issues always relies on (mirrors assets/labels.yaml).
-# The dynamic src: version labels are minted per run by the skill, not here.
-# Traceability is not labelled (it lives in the issue body), so there are no
-# per-ID trace: labels.
+# This is the whole scheme -- no per-run dynamic labels. Traceability and source
+# versions live in the issue body (the ## Traceability table and the meta block),
+# so there are no trace: or src: labels.
 STATIC_LABELS = ["make-issues", "afk", "hitl", "needs-rebase", "spec-drift", "orphaned"]
 
 

@@ -30,9 +30,25 @@ def yaml_file(text):
     return path
 
 
-def issue(number, state, labels, reason=None):
+def meta_body(tdd):
+    """A managed issue body carrying source_versions.tdd in the meta block --
+    where do-work now reads the TDD stamp from (no more src:tdd-* label)."""
+    if tdd is None:
+        return ""
+    return ("## Goal\n\n"
+            "<!-- make-issues:meta -->\n"
+            "```yaml\n"
+            "trace_tdd: [WF-001]\n"
+            f'source_versions: {{ prd: "1.0", tdd: "{tdd}" }}\n'
+            "autonomy: afk\n"
+            "```\n"
+            "<!-- /make-issues:meta -->\n")
+
+
+def issue(number, state, labels, reason=None, tdd=None):
     return {"number": number, "state": state, "stateReason": reason,
-            "labels": [{"name": n} for n in labels]}
+            "labels": [{"name": n} for n in labels],
+            "body": meta_body(tdd)}
 
 
 tmps = []
@@ -66,22 +82,30 @@ check("could not list -> backlog FAIL", r["ok"] is False)
 
 # ── advisories (non-gating) ─────────────────────────────────────────────
 issues = [
-    issue(1, "OPEN", ["make-issues", "afk", "spec-drift", "src:tdd-1.0"]),
-    issue(2, "OPEN", ["make-issues", "afk", "src:tdd-1.0"]),
-    issue(3, "CLOSED", ["make-issues", "src:tdd-0.9"], "COMPLETED"),  # closed: ignored
+    issue(1, "OPEN", ["make-issues", "afk", "spec-drift"], tdd="1.0"),
+    issue(2, "OPEN", ["make-issues", "afk"], tdd="1.0"),
+    issue(3, "CLOSED", ["make-issues"], "COMPLETED", tdd="0.9"),  # closed: ignored
 ]
 adv = scan_advisories(issues, tdd10, have_labels={"status:doing"})
 check("drift scan flags only the open spec-drift issue",
       [f["number"] for f in adv["flagged"]] == [1] and adv["flagged"][0]["flags"] == ["spec-drift"])
-check("src:tdd seen counts only open issues", adv["src_tdd_seen"] == ["1.0"])
+check("tdd versions seen count only open issues (from meta block)",
+      adv["tdd_versions_seen"] == ["1.0"])
 check("sync owed when live TDD 1.1 not in stamps {1.0}", adv["sync_owed"] is True)
 check("missing do-work labels computed", adv["missing_labels"] == ["escalated"])
 
 adv2 = scan_advisories(
-    [issue(2, "OPEN", ["make-issues", "afk", "src:tdd-1.1"])], tdd10,
+    [issue(2, "OPEN", ["make-issues", "afk"], tdd="1.1")], tdd10,
     have_labels={"status:doing", "escalated"})
 check("no sync owed when live TDD 1.1 is represented", adv2["sync_owed"] is False)
 check("no missing labels when both present", adv2["missing_labels"] == [])
+
+# A body with no meta block contributes no stamp -- and with zero stamps, a sync
+# is not asserted as owed (we cannot prove staleness from nothing).
+adv3 = scan_advisories([issue(1, "OPEN", ["make-issues", "afk"])], tdd10,
+                       have_labels={"status:doing", "escalated"})
+check("missing meta block -> no stamp seen", adv3["tdd_versions_seen"] == [])
+check("no stamps -> sync not asserted owed", adv3["sync_owed"] is False)
 
 for p in tmps:
     try:

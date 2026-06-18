@@ -1,23 +1,27 @@
 # ═══════════════════════════════════════════════════════════════════
 # labels.yaml — the make-issues label scheme + meta-block contract
 #
-# The label scheme is the FAST FILTER over skill-managed issues; the
-# meta block embedded in each issue body (see issue-body-template.md) is
-# the AUTHORITATIVE machine record. Labels and the meta block must agree;
-# the meta block wins if they ever disagree.
+# Labels carry ONLY what a human filters and scans by -- provenance,
+# autonomy, and the reconciliation flags. The meta block embedded in each
+# issue body (see issue-body-template.md) is the AUTHORITATIVE machine
+# record for everything else; the meta block wins if they ever disagree.
 #
 # scripts/gh_preflight.py ensures these labels exist on every run
-# (create-if-missing, idempotent, `gh label create --force`). Static
-# labels are listed below; the dynamic `src:` version labels are computed
-# per run from the versions that will actually appear.
+# (create-if-missing, idempotent, `gh label create --force`). The whole
+# scheme is the small static set below -- there are no per-run dynamic
+# labels.
 #
-# Traceability is NOT carried as labels. Per-ID `trace:<ID>` labels were
-# dropped: they flooded the repo's label namespace (one per PRD requirement
-# and TDD capability, all sharing one description), drowned the actionable
-# labels on every card, and were a redundant projection of the meta block.
-# The human-readable copy now lives in the issue body's `## Traceability`
-# table; the authoritative machine copy is the meta block's trace_tdd /
-# trace_prd. No `trace:` labels are created.
+# Two things deliberately do NOT get labels, because labels are a scarce,
+# human-facing, repo-global namespace and these are neither scarce nor for
+# humans:
+#   - Traceability. Per-ID `trace:<ID>` labels flooded the namespace (one
+#     per PRD requirement and TDD capability, all sharing one description)
+#     and drowned the actionable labels on every card. The human-readable
+#     copy lives in the issue body's `## Traceability` table; the machine
+#     copy is the meta block's trace_tdd / trace_prd.
+#   - Source versions. `src:prd-<v>` / `src:tdd-<v>` stamps live in the meta
+#     block's source_versions. do-work reads source_versions.tdd from there
+#     (not a label) to decide when a /make-issues sync is owed.
 #
 # GitHub label names may contain `:` and `.`, so the prefixed forms below
 # are valid label names as written.
@@ -51,25 +55,12 @@ static:
     color: "5319e7"              # deep purple
     description: "The TDD capability behind this issue was removed or superseded."
 
-# ── Dynamic label families (computed per run, ensured on demand) ─────
-# These are documented patterns, not a fixed list. gh_preflight.py mints
-# the specific names needed for the issues this run will touch.
-dynamic:
-  # Version stamps for quick filtering. Only two per run (one prd, one tdd),
-  # so they do not bloat the namespace. The authoritative copy lives in the
-  # issue meta block's source_versions; these mirror it. do-work reads the
-  # src:tdd-<v> stamp to advise when a /make-issues sync is owed, so this
-  # family is load-bearing -- keep it.
-  src:
-    pattern: "src:prd-<v> / src:tdd-<v>"   # e.g. src:prd-2.1, src:tdd-1.0
-    color: "1d76db"              # blue
-    description: "The PRD/TDD version this issue was generated against."
-
 # ═══════════════════════════════════════════════════════════════════
 # META-BLOCK CONTRACT
 # The YAML between <!-- make-issues:meta --> and <!-- /make-issues:meta -->
 # in every managed issue body. This is what an automation or the overnight
-# loop parses; the reconciler reads `fingerprint` and `trace_tdd` from it.
+# loop parses; the reconciler reads `fingerprint` and `trace_tdd`, and do-work
+# reads `source_versions.tdd` (the version stamp that used to be a src: label).
 #
 #   trace_tdd:        [<capability IDs>]   # ENT/WF/STM/INTG/TNF/ADR; >=1, required
 #   trace_prd:        [<PRD requirement IDs>]   # what the capability links to (its

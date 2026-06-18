@@ -71,9 +71,10 @@ static:
 #
 # Rules:
 #   - Every managed issue has a meta block with all five keys.
-#   - trace_tdd is the primary match key (issue <-> TDD capability). If the
-#     block is malformed, recover from the `## Traceability` table in the body
-#     (a human can read the capability ID and re-stamp the block).
+#   - trace_tdd is the primary match key (issue <-> TDD capability). A malformed
+#     block is NOT auto-recovered (the reconciler does not parse the prose body);
+#     it is flagged for a human, who reads the capability ID from the body's
+#     `## Traceability` table and re-stamps the block.
 #   - fingerprint is compared against the live per-capability hash to
 #     detect drift; on change, reconciliation acts by issue state.
 # ═══════════════════════════════════════════════════════════════════

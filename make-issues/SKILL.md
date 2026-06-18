@@ -56,7 +56,7 @@ No managed issues -> **Generate**. Managed issues exist -> **Sync**. Both run th
 ## Sync mode workflow
 
 1. **Read `references/reconciliation.md`** and pull the managed issues with the `--json` field set it lists.
-2. **Build the maps:** issue-by-capability (match on the meta block's `trace_tdd`, recover from the body's `## Traceability` table if the block is malformed) and capability-to-fingerprint (`item_fingerprint.py`).
+2. **Build the maps:** issue-by-capability (match on the meta block's `trace_tdd`; a missing or malformed block is not auto-recovered -- flag it for a human, who reads the capability ID from the body's `## Traceability` table and re-stamps the block) and capability-to-fingerprint (`item_fingerprint.py`).
 3. **Detect each issue's state** (not-started / started / completed / won't-do / orphan) and **apply the decision tree:** skip unchanged; auto-update not-started; comment-and-flag started; follow-up completed; close or flag orphans.
 4. **Auto-update touches only the managed regions** -- the human region is spliced back byte-for-byte, with asserts that abort to comment-and-flag if the markers were hand-edited.
 5. **Present the reconciliation plan for approval** before writing, then execute and print the report.

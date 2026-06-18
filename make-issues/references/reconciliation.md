@@ -11,7 +11,7 @@ gh issue list --repo <owner/name> --label make-issues --state all --limit 1000 \
   --json number,title,state,stateReason,labels,body,assignees,closedByPullRequestsReferences,updatedAt,url
 ```
 
-- **`by_cap[cap_id] -> issue`.** The match key is the meta block's `trace_tdd` (parse the YAML between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`). If the meta block is missing or malformed, recover the capability ID from the body's `## Traceability` table (the human-readable mirror) and re-stamp the block before reconciling. One capability may map to more than one issue (it was sliced into several) -- keep them all.
+- **`by_cap[cap_id] -> issue`.** The match key is the meta block's `trace_tdd` (parse the YAML between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`). If the meta block is missing or malformed, **do not try to auto-recover by parsing the body** -- the `## Traceability` table is free prose, not a machine contract. Flag the issue and stop reconciling it; a human reads the capability ID from that table, re-stamps the meta block, and re-runs the sync. One capability may map to more than one issue (it was sliced into several) -- keep them all.
 - **`tdd_caps[cap_id] -> {record, fingerprint}`.** From `item_fingerprint.py <tdd-data.yaml>` plus the records themselves. Skip `superseded`/`deferred` capabilities when deciding what should exist, but keep their IDs so you can recognize an issue that points at one (an orphan, below).
 
 ## 2. Detect each issue's state

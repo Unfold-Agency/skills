@@ -21,8 +21,8 @@ Checks, in order of dependency (a gating failure aborts before the next):
 Then non-gating ADVISORIES (reported, never abort):
   - drift          -- open managed issues carrying needs-rebase/spec-drift/
                       orphaned/escalated are NOT buildable; resolve them first
-  - sync_owed      -- the live TDD version is not represented in the issues'
-                      src:tdd-* stamps; a /make-issues sync may be owed
+  - sync_owed      -- the live TDD version is not represented in the open issues'
+                      meta-block source_versions.tdd; a /make-issues sync may be owed
   - labels         -- the do-work lifecycle labels (status:doing, escalated)
                       the skill creates if missing
 
@@ -53,6 +53,11 @@ MAKE_WORK_LABELS = ["status:doing", "escalated"]
 # make-issues reconciliation (a drifted spec); `escalated` is set by do-work
 # when it hands an issue back upstream.
 NOT_BUILDABLE_FLAGS = ["needs-rebase", "spec-drift", "orphaned", "escalated"]
+# The make-issues meta block embedded in each managed issue body. Its
+# source_versions.tdd is the authoritative version stamp do-work reads to decide
+# whether a /make-issues sync is owed -- there is no src: label anymore.
+_META_RE = re.compile(
+    r"<!--\s*make-issues:meta\s*-->(.*?)<!--\s*/make-issues:meta\s*-->", re.DOTALL)
 
 
 def _run(cmd, timeout=30):
@@ -158,7 +163,7 @@ def _list_managed_issues(repo):
     (issues, ok)."""
     rc, out, _ = _run(["gh", "issue", "list", "--repo", repo, "--label",
                        "make-issues", "--state", "all", "--limit", "1000",
-                       "--json", "number,state,labels"])
+                       "--json", "number,state,labels,body"])
     if rc != 0:
         return [], False
     try:
@@ -169,6 +174,27 @@ def _list_managed_issues(repo):
 
 def _label_names(issue):
     return {lab.get("name", "") for lab in issue.get("labels") or []}
+
+
+def _issue_meta(body):
+    """Parse the YAML inside an issue body's make-issues:meta markers. Returns {}
+    when the block is missing or malformed. The meta block is the authoritative
+    record for trace + source_versions (see make-issues)."""
+    m = _META_RE.search(body or "")
+    if not m:
+        return {}
+    inner = re.sub(r"```[a-zA-Z]*", "", m.group(1)).replace("```", "")
+    try:
+        data = yaml.safe_load(inner)
+    except yaml.YAMLError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _issue_tdd_version(issue):
+    """The source_versions.tdd stamped in the issue's meta block, or '' if absent."""
+    sv = _issue_meta(issue.get("body", "")).get("source_versions") or {}
+    return str(sv.get("tdd") or "").strip() if isinstance(sv, dict) else ""
 
 
 def check_backlog(issues, listed_ok):
@@ -192,7 +218,7 @@ def scan_advisories(issues, tdd_path, have_labels):
     """Non-gating advisories: drifted (not-buildable) open issues, a possibly-owed
     sync, and missing do-work labels."""
     flagged = []
-    src_tdd_seen = set()
+    tdd_versions_seen = set()
     for i in issues:
         if i.get("state") != "OPEN":
             continue
@@ -200,15 +226,16 @@ def scan_advisories(issues, tdd_path, have_labels):
         hit = sorted(names & set(NOT_BUILDABLE_FLAGS))
         if hit:
             flagged.append({"number": i.get("number"), "flags": hit})
-        for n in names:
-            if n.startswith("src:tdd-"):
-                src_tdd_seen.add(n[len("src:tdd-"):])
+        tdd_v = _issue_tdd_version(i)
+        if tdd_v:
+            tdd_versions_seen.add(tdd_v)
 
     live_tdd, _ = _meta_field(tdd_path, "tdd_version")
-    sync_owed = bool(live_tdd) and bool(src_tdd_seen) and live_tdd not in src_tdd_seen
+    sync_owed = (bool(live_tdd) and bool(tdd_versions_seen)
+                 and live_tdd not in tdd_versions_seen)
     missing_labels = [n for n in MAKE_WORK_LABELS if n not in (have_labels or set())]
     return {"flagged": flagged, "live_tdd": live_tdd or None,
-            "src_tdd_seen": sorted(src_tdd_seen), "sync_owed": sync_owed,
+            "tdd_versions_seen": sorted(tdd_versions_seen), "sync_owed": sync_owed,
             "missing_labels": missing_labels}
 
 
@@ -273,7 +300,7 @@ def _report(checks, repo, advisories, as_json):
             print(f"  warn   not buildable (resolve first): {ids}")
         if advisories["sync_owed"]:
             print(f"  warn   sync may be owed: live TDD v{advisories['live_tdd']} "
-                  f"not in issue stamps {advisories['src_tdd_seen']}; run /make-issues")
+                  f"not in issue stamps {advisories['tdd_versions_seen']}; run /make-issues")
         if advisories["missing_labels"]:
             print("  note   missing do-work labels (skill must create): "
                   + ", ".join(advisories["missing_labels"]))

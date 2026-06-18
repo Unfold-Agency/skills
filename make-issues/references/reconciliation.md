@@ -11,7 +11,7 @@ gh issue list --repo <owner/name> --label make-issues --state all --limit 1000 \
   --json number,title,state,stateReason,labels,body,assignees,closedByPullRequestsReferences,updatedAt,url
 ```
 
-- **`by_cap[cap_id] -> issue`.** The match key is the meta block's `trace_tdd` (parse the YAML between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`). If the meta block is missing or malformed, fall back to the `trace:<CAP>` label whose ID has a capability prefix (`ENT|WF|STM|INTG|TNF|ADR`). One capability may map to more than one issue (it was sliced into several) -- keep them all.
+- **`by_cap[cap_id] -> issue`.** The match key is the meta block's `trace_tdd` (parse the YAML between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`). If the meta block is missing or malformed, **do not try to auto-recover by parsing the body** -- the `## Traceability` table is free prose, not a machine contract. Flag the issue and stop reconciling it; a human reads the capability ID from that table, re-stamps the meta block, and re-runs the sync. One capability may map to more than one issue (it was sliced into several) -- keep them all.
 - **`tdd_caps[cap_id] -> {record, fingerprint}`.** From `item_fingerprint.py <tdd-data.yaml>` plus the records themselves. Skip `superseded`/`deferred` capabilities when deciding what should exist, but keep their IDs so you can recognize an issue that points at one (an orphan, below).
 
 ## 2. Detect each issue's state
@@ -38,7 +38,7 @@ fingerprint != stamped:
     not-started            -> AUTO-UPDATE managed regions; append changelog; re-stamp
     started + autonomy afk  -> AUTO-UPDATE + COMMENT-AND-FLAG; add label needs-rebase
     started + autonomy hitl -> COMMENT-AND-FLAG only (no body edit); add label spec-drift
-    completed              -> FOLLOW-UP issue (new; trace:<cap>; "supersedes #<closed>")
+    completed              -> FOLLOW-UP issue (new; traces to <cap>; "supersedes #<closed>")
                               -- a follow-up that backs out shipped work is HITL
     won't-do               -> SKIP, note in report (respect the human decision)
 ```
@@ -64,17 +64,14 @@ An AUTO-UPDATE rewrites only the managed regions: the prose above the meta marke
    - changelog: `<!-- make-issues:changelog -->` ... `<!-- /make-issues:changelog -->`
    - human: `<!-- make-issues:human -->` ... `<!-- /make-issues:human -->`
 3. Capture the human block verbatim. It is never a replacement target.
-4. Substitute the new meta (re-stamped `fingerprint` + `source_versions`) and the new changelog (append a dated entry on top; never rewrite old entries). Recompute the summary prose region from the updated capability.
+4. Substitute the new meta (re-stamped `fingerprint` + `source_versions`) and the new changelog (append a dated entry on top; never rewrite old entries). Recompute the summary prose region from the updated capability -- including the `## Traceability` table, whose IDs/titles and "Born from" versions must match the re-stamped meta.
 5. **Defensive asserts before writing:** exactly one match for each managed marker pair; the captured human block appears unchanged in the new body (`human_before in body_after`); no nested or duplicated markers. If any assert fails, a human edited the markers -- **abort the edit and COMMENT-AND-FLAG instead.**
 6. Apply via stdin so nothing touches disk:
    ```
    printf '%s' "$NEW_BODY" | gh issue edit <N> --repo <owner/name> --body-file -
    ```
-7. Update stamps idempotently:
-   ```
-   gh issue edit <N> --repo <owner/name> \
-     --add-label "src:tdd-<new>" --remove-label "src:tdd-<old>"
-   ```
+   The version bump rides along in the re-stamped `source_versions` and the
+   Traceability table's "Born from" line -- there is no separate label to swap.
 
 ## 5. Dependencies are write-only
 

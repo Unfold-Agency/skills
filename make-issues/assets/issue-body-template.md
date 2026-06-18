@@ -47,6 +47,21 @@
      numbers/titles this waits on, or "None". The authoritative edges are the
      GitHub dependency links set with `gh issue create --blocked-by`. -->
 
+## Traceability
+
+<!-- Human-readable mirror of the trace_tdd / trace_prd / source_versions in the
+     meta block below (which is the machine-authoritative copy). One row per
+     traced ID, with its title pulled from the TDD/PRD so a reader knows what it
+     is without opening the source doc. This replaces the old per-ID `trace:`
+     labels -- it is synced like any other managed region. -->
+
+| Source | ID | What it is |
+|---|---|---|
+| TDD capability | <CAP-000> | <capability title from the TDD> |
+| PRD requirement | <UO-000> | <requirement title from the PRD> |
+
+Born from PRD v<X> / TDD v<Y>.
+
 <!-- make-issues:meta -->
 ```yaml
 trace_tdd: [CAP-000]               # TDD capability IDs this issue satisfies (ENT/WF/STM/INTG/TNF/ADR)

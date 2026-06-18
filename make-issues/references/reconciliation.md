@@ -11,7 +11,7 @@ gh issue list --repo <owner/name> --label make-issues --state all --limit 1000 \
   --json number,title,state,stateReason,labels,body,assignees,closedByPullRequestsReferences,updatedAt,url
 ```
 
-- **`by_cap[cap_id] -> issue`.** The match key is the meta block's `trace_tdd` (parse the YAML between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`). If the meta block is missing or malformed, fall back to the `trace:<CAP>` label whose ID has a capability prefix (`ENT|WF|STM|INTG|TNF|ADR`). One capability may map to more than one issue (it was sliced into several) -- keep them all.
+- **`by_cap[cap_id] -> issue`.** The match key is the meta block's `trace_tdd` (parse the YAML between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`). If the meta block is missing or malformed, recover the capability ID from the body's `## Traceability` table (the human-readable mirror) and re-stamp the block before reconciling. One capability may map to more than one issue (it was sliced into several) -- keep them all.
 - **`tdd_caps[cap_id] -> {record, fingerprint}`.** From `item_fingerprint.py <tdd-data.yaml>` plus the records themselves. Skip `superseded`/`deferred` capabilities when deciding what should exist, but keep their IDs so you can recognize an issue that points at one (an orphan, below).
 
 ## 2. Detect each issue's state
@@ -38,7 +38,7 @@ fingerprint != stamped:
     not-started            -> AUTO-UPDATE managed regions; append changelog; re-stamp
     started + autonomy afk  -> AUTO-UPDATE + COMMENT-AND-FLAG; add label needs-rebase
     started + autonomy hitl -> COMMENT-AND-FLAG only (no body edit); add label spec-drift
-    completed              -> FOLLOW-UP issue (new; trace:<cap>; "supersedes #<closed>")
+    completed              -> FOLLOW-UP issue (new; traces to <cap>; "supersedes #<closed>")
                               -- a follow-up that backs out shipped work is HITL
     won't-do               -> SKIP, note in report (respect the human decision)
 ```

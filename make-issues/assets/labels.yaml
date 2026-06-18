@@ -8,8 +8,16 @@
 #
 # scripts/gh_preflight.py ensures these labels exist on every run
 # (create-if-missing, idempotent, `gh label create --force`). Static
-# labels are listed below; dynamic `trace:` and `src:` labels are
-# computed per run from the IDs/versions that will actually appear.
+# labels are listed below; the dynamic `src:` version labels are computed
+# per run from the versions that will actually appear.
+#
+# Traceability is NOT carried as labels. Per-ID `trace:<ID>` labels were
+# dropped: they flooded the repo's label namespace (one per PRD requirement
+# and TDD capability, all sharing one description), drowned the actionable
+# labels on every card, and were a redundant projection of the meta block.
+# The human-readable copy now lives in the issue body's `## Traceability`
+# table; the authoritative machine copy is the meta block's trace_tdd /
+# trace_prd. No `trace:` labels are created.
 #
 # GitHub label names may contain `:` and `.`, so the prefixed forms below
 # are valid label names as written.
@@ -47,15 +55,11 @@ static:
 # These are documented patterns, not a fixed list. gh_preflight.py mints
 # the specific names needed for the issues this run will touch.
 dynamic:
-  # One per PRD requirement ID and per TDD capability ID an issue traces
-  # to. The trace index: `gh issue list --label trace:CAP-003`.
-  trace:
-    pattern: "trace:<ID>"        # e.g. trace:UO-001, trace:WF-003
-    color: "c2e0c6"              # light purple-green
-    description: "Traceability link to a PRD requirement or TDD capability ID."
-
-  # Version stamps for quick filtering. The authoritative copy lives in
-  # the issue meta block's source_versions; these mirror it.
+  # Version stamps for quick filtering. Only two per run (one prd, one tdd),
+  # so they do not bloat the namespace. The authoritative copy lives in the
+  # issue meta block's source_versions; these mirror it. do-work reads the
+  # src:tdd-<v> stamp to advise when a /make-issues sync is owed, so this
+  # family is load-bearing -- keep it.
   src:
     pattern: "src:prd-<v> / src:tdd-<v>"   # e.g. src:prd-2.1, src:tdd-1.0
     color: "1d76db"              # blue
@@ -76,8 +80,9 @@ dynamic:
 #
 # Rules:
 #   - Every managed issue has a meta block with all five keys.
-#   - trace_tdd is the primary match key (issue <-> TDD capability);
-#     a trace:<CAP> label is the recovery key if the block is malformed.
+#   - trace_tdd is the primary match key (issue <-> TDD capability). If the
+#     block is malformed, recover from the `## Traceability` table in the body
+#     (a human can read the capability ID and re-stamp the block).
 #   - fingerprint is compared against the live per-capability hash to
 #     detect drift; on change, reconciliation acts by issue state.
 # ═══════════════════════════════════════════════════════════════════

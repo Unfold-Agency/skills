@@ -45,6 +45,7 @@ Fill the template (`assets/issue-body-template.md`) from the two sources:
 | `source_versions` | the locked PRD + TDD versions from the two `meta` blocks |
 | `fingerprint` | `scripts/item_fingerprint.py <tdd-data.yaml> --id <CAP>` |
 | `autonomy` | AFK or HITL, from step 3 |
+| `## Traceability` table | one row per `trace_tdd` / `trace_prd` ID, each with the capability/requirement **title** from the source doc so a reader knows what the ID is without opening it; close with "Born from PRD v<X> / TDD v<Y>" from `source_versions`. This is the human-readable mirror of the trace fields above -- it replaces the old per-ID `trace:` labels |
 
 **No item without a trace.** Every issue stamps at least one `trace_tdd` capability -- that is the required trace. `trace_prd` lists the PRD IDs that capability serves; it is usually non-empty, but a pure-infrastructure capability that serves no single requirement directly may leave it empty. An empty `trace_prd` is allowed; an empty `trace_tdd` is not. An item you cannot trace to the TDD is an item the TDD does not justify -- cut it or fix the TDD.
 
@@ -60,4 +61,4 @@ Before creating or changing **anything**, present the breakdown and get approval
 - The **coverage check**: every `active` capability has at least one item, or the gap is named. Every PRD `must`/`should` requirement traces through to an item, or it is listed as unmapped.
 - For a sync, the **reconciliation plan**: what will be created, updated, flagged, closed, or followed-up (see `reconciliation.md`).
 
-Iterate until the human approves. Only then create issues -- in dependency order, blockers first, so each `--blocked-by` references an issue number that already exists. Stamp every issue per the template and apply its labels (`make-issues`, `afk`/`hitl`, one `trace:<ID>` per traced ID, `src:prd-<v>`, `src:tdd-<v>`).
+Iterate until the human approves. Only then create issues -- in dependency order, blockers first, so each `--blocked-by` references an issue number that already exists. Stamp every issue per the template and apply its labels (`make-issues`, `afk`/`hitl`, `src:prd-<v>`, `src:tdd-<v>`). Traceability is carried in the body's `## Traceability` table and the meta block, not as labels.

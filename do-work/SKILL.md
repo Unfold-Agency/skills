@@ -13,17 +13,20 @@ Like `make-issues`, this skill has **no local data file**. GitHub state is the r
 
 do-work runs as an **orchestrator plus workers** -- always, even for a single issue. The orchestrator (this session) does preflight, selection, dispatch, merge, and the report; it **never builds in its own context**. Each issue is built by a **worker** -- a fresh subagent handed only a pointer (the issue number and repo) that reads the issue and its TDD/PRD trace, builds on a branch, runs the gate, opens the PR, and returns a one-line verdict. The worker's heavy context (file reads, diffs, test logs) is discarded on return, so a run stays bounded however long the backlog is -- context compaction is a non-issue by design.
 
-- **Default** -- orchestrator + one worker, then stop.
-- **`--ralph`** -- a worker per issue across rounds, re-selecting after each (a merge unblocks the next tier), until the queue is dry or only HITL / blocked work remains.
+- **Default** -- drain the whole actionable queue: a worker per issue across rounds, re-selecting after each (a merge unblocks the next tier), until the queue is dry or only HITL / blocked work remains.
+- **`--limit=<N>`** -- stop after N issues this run (`--limit=1` builds a single issue, the old default).
 - **Parallel (opt-in, 2-3)** -- when a round's issues are file-disjoint, dispatch 2-3 workers at once, each in its own **git worktree** (`isolation: worktree`) so they never clobber each other. Merges are always serial; the default is one worker at a time.
 
-The mechanics (the worker brief, the verdict contract, worktrees, resuming) live in `references/execution-loop.md`; the deterministic drain is `workflows/drain-queue.js`.
+Every built PR then runs through a **review -> fix loop**: `do-pr-review` posts inline findings, `do-pr-fix` addresses them and replies in-thread, and a re-review repeats until no Critical/Major findings remain (max `maxReviewRounds`, default 2). This happens on every run; merge stays manual unless `--auto-merge`.
+
+The mechanics (the worker brief, the verdict contract, the review/merge gate, worktrees, resuming) live in `references/execution-loop.md`; the deterministic drain is `workflows/drain-queue.js`.
 
 ## Flags (parse from the invocation)
 
-- **default** -- build one issue this run, then stop at a **ready-for-review PR**; a human merges.
-- **`--ralph`** -- drain the actionable AFK queue: after one issue, pick the next, until none are actionable or one needs a human.
-- **`--auto-merge`** -- merge each PR once the build gate and required CI checks pass (the issue auto-closes COMPLETED), which unblocks its dependents, then continue. Pair with `--ralph` for the full overnight loop.
+- **default** -- drain the whole actionable AFK queue: build each issue, **review and fix** its PR, then re-select until none are actionable or only HITL / blocked work remains. Clean PRs are left **ready-for-review**; a human merges.
+- **`--limit=<N>`** -- cap the run at N issues processed (`--limit=1` builds a single issue then stops; `--limit=0` or omitted = unlimited).
+- **`--auto-merge`** -- once a PR's review loop comes back clean and required CI checks pass, merge it (the issue auto-closes COMPLETED), which unblocks its dependents, then continue. The full overnight loop. The merge agent reports each PR accepted and merged back to the orchestrator.
+- **`--ralph`** -- deprecated no-op; draining is now the default.
 - **Invariant:** HITL issues are **never** auto-merged and **never** drained past. They always stop for a human, whatever the flags.
 
 ## Files in this skill
@@ -33,7 +36,7 @@ The mechanics (the worker brief, the verdict contract, worktrees, resuming) live
 - `references/execution-loop.md` -- read before building: the orchestrator/worker split, the worker brief (claim, read, build, verify, PR), the verdict contract, worktrees and parallel rounds, and how a killed run resumes.
 - `references/escalation-and-handback.md` -- read when a build is blocked: when to route to `/make-tdd` (a design gap) vs `/make-prd` (a wrong requirement) vs `/make-issues` (a stale issue), and how to write the hand-back so the upstream skill can act.
 - `assets/pr-body-template.md` -- the PR body the build opens: the closing reference, the trace mirrored from the issue, the acceptance checklist, and how it was verified.
-- `workflows/drain-queue.js` -- the deterministic drain (run via the Workflow tool): preflight, then a loop of select -> build workers -> serial auto-merge -> re-select until the queue is dry. The robust unattended path.
+- `workflows/drain-queue.js` -- the deterministic drain (run via the Workflow tool): preflight, then a loop of select -> build workers -> review -> fix loop -> serial auto-merge -> re-select until the queue is dry. The robust unattended path.
 
 ## Preflight (always, first action)
 
@@ -52,16 +55,16 @@ python scripts/select_work.py --repo <owner/name>                 # afk queue, n
 python scripts/select_work.py --repo <owner/name> --autonomy any --json
 ```
 
-Actionable means: open, no not-buildable flag, **every blocker closed-completed**, autonomy matches the filter (default `afk`), and not in flight under someone else's name. An issue already assigned to you is **resumable** and sorts first, so an interrupted build is finished before a fresh one starts. Read `references/execution-loop.md`, then present the queue and the pick. In the default single-issue run, confirm the pick before building; under `--ralph`, proceed and report each issue in order.
+Actionable means: open, no not-buildable flag, **every blocker closed-completed**, autonomy matches the filter (default `afk`), and not in flight under someone else's name. An issue already assigned to you is **resumable** and sorts first, so an interrupted build is finished before a fresh one starts. Read `references/execution-loop.md`, then present the queue and the pick. With `--limit=1`, confirm the pick before building; otherwise proceed round by round and report each issue in order.
 
 ## Build (the orchestrator dispatches a worker)
 
-For each selected issue the orchestrator spawns a **worker subagent** -- it does not build in its own context, not even for one issue. The full worker brief and the verdict contract are in `references/execution-loop.md`. In a default single-issue run, confirm the pick first; under `--ralph`, proceed round by round. The invariants every worker holds:
+For each selected issue the orchestrator spawns a **worker subagent** -- it does not build in its own context, not even for one issue. The full worker brief and the verdict contract are in `references/execution-loop.md`. With `--limit=1`, confirm the pick first; otherwise proceed round by round. The invariants every worker holds:
 
 - Build **only** the selected slice -- read the TDD capability by its `trace_tdd` ID (do not re-derive the design) and the `trace_prd` for the why; respect binding constraints (`BC-`).
 - **No PR on a red build gate.** Open the PR with `Closes #N`, the trace mirrored from the issue meta, and the acceptance checklist; ready-for-review by default, merged only under `--auto-merge` once the gate and CI are green.
 - **Never edit the `make-issues` managed regions** of the issue body (prose, meta, changelog). Progress is GitHub state: the assignment, the `status:doing` label, the PR, and comments. The TDD/PRD stay canonical.
-- The worker returns a compact verdict (`built` / `escalated` / `failed`); the orchestrator records it, merges greens under `--auto-merge`, and re-selects.
+- The worker returns a compact verdict (`built` / `escalated` / `failed`); the orchestrator records it, runs the **review -> fix loop** on each built PR, merges clean greens under `--auto-merge`, and re-selects.
 
 ## When to stop and hand back
 
@@ -75,7 +78,7 @@ Comment the reason on the issue, add the `escalated` label, and stop on that iss
 
 ## Report (every run)
 
-Print the receipt: issues claimed; PRs opened (and merged, under `--auto-merge`); issues completed; anything flagged or escalated and why; what stays blocked and on which issue; and the remaining actionable queue. Under `--ralph`, report each issue in order and why the loop stopped.
+Print the receipt: issues claimed; PRs opened, reviewed, and fixed (and merged, under `--auto-merge`); issues completed; any PR parked for a human because the review loop could not converge; anything flagged or escalated and why; what stays blocked and on which issue; and the remaining actionable queue. Report each issue in order, its review outcome (clean, or parked after N rounds), and why the loop stopped.
 
 ## Honest limits
 
@@ -87,19 +90,21 @@ State these plainly; do not pretend past them.
 - **Builds only current work.** It trusts `make-issues` for drift detection (the flags) and refuses flagged issues; it does not recompute fingerprints.
 - **Parallel needs disjoint slices.** Worktrees stop parallel workers from clobbering each other's tree, but two issues that touch the same file still conflict at merge, and under `--auto-merge` later same-round PRs may need a rebase. Keep parallel to 2-3 file-disjoint issues; otherwise run serial. Worktrees that committed work may need pruning (`git worktree prune`) after their branches merge.
 - **No locking.** A run killed mid-build leaves a branch and an assignment; re-running resumes the issue already assigned to you, because selection puts resumable issues first. The attempted-set prevents re-processing within a drain.
+- **Review runs as the same gh identity.** Builder, reviewer, and fixer authenticate as the same user, so the in-loop review **cannot post a formal `REQUEST_CHANGES`** (GitHub forbids it on your own PR). The merge gate runs off the reviewer's **structured verdict** -- the count of open Critical/Major findings -- not GitHub's review state; the fixer is told to act on the reviewer's same-user threads and always reply in-thread. A separate review identity (a bot token) would let GitHub's review state carry the signal natively.
+- **Default drains only the unblocked tier.** Dependent issues unblock only when their blockers **merge**, and nothing merges without `--auto-merge` -- so a default run produces a stack of reviewed, ready-to-merge PRs for the independent front. Draining a full dependency chain in one pass needs `--auto-merge`.
 
 ## Automation (cron / CI)
 
 do-work runs unattended only when something invokes it. Two paths:
 
-- **Headless skill call** -- `claude -p "/do-work --ralph --auto-merge"` from inside the repo (a cron job, or CI on a schedule or on issue events). The orchestrator drains the AFK queue and stops at the first thing that needs a human. Good for a handful of issues.
+- **Headless skill call** -- `claude -p "/do-work --auto-merge"` from inside the repo (a cron job, or CI on a schedule or on issue events). The orchestrator drains the AFK queue, reviews and fixes each PR, and stops at the first thing that needs a human. Good for a handful of issues.
 - **The drain workflow** -- for a long backlog, run `workflows/drain-queue.js` via the Workflow tool:
   ```
   Workflow({ scriptPath: "<do-work>/workflows/drain-queue.js",
              args: { repo: "owner/name", skillDir: "<do-work>",
-                     autoMerge: true, parallel: 2 } })
+                     autoMerge: true, limit: 0, maxReviewRounds: 2, parallel: 2 } })
   ```
-  It encodes the same select -> build -> merge -> re-select loop deterministically, keeps each build in a fresh worker, and returns a structured run summary. The durable drain path. (The Workflow tool requires explicit opt-in.)
+  It encodes the same select -> build -> review -> fix -> merge -> re-select loop deterministically, keeps each build, review, and fix in a fresh worker, and returns a structured run summary (built, merged, parked-for-review, escalated, failed). It locates `do-pr-review` and `do-pr-fix` as siblings of `skillDir` by default (override with `reviewSkillDir` / `fixSkillDir`). The durable drain path. (The Workflow tool requires explicit opt-in.)
 
 Either way: grant the run the permissions the build needs (edit files, run the repo's test/build commands, and `gh`/`git`); HITL issues are never auto-built or auto-merged; keep a human reviewing the merged PRs -- the loop ships work, it does not own the product.
 

@@ -69,10 +69,16 @@ const EFFORT = {
   review: A.effortReview || 'high',
   fix:    A.effortFix    || 'medium',
 }
-// Haiku rejects the effort parameter (it 400s), and xhigh/max are Opus-only.
-// Attach effort only for models that accept it, so a build/review/fix override
-// to haiku stays safe.
-const withEffort = (model, effort) => (model === 'haiku' ? { model } : { model, effort })
+// Haiku rejects the effort parameter entirely (it 400s); xhigh/max are only
+// accepted on the Opus/Fable tiers (Sonnet tops out at high). Attach effort only
+// where the model takes it, and clamp an over-spec'd override -- e.g. effortFix
+// set to xhigh while modelFix stays the default sonnet -- down to high rather
+// than let it 400 mid-drain.
+const TOP_EFFORT = new Set(['opus', 'fable'])
+const withEffort = (model, effort) =>
+  model === 'haiku' ? { model }
+    : !TOP_EFFORT.has(model) && (effort === 'xhigh' || effort === 'max') ? { model, effort: 'high' }
+      : { model, effort }
 
 // ── schemas (workers return data, not prose) ────────────────────────────
 const PREFLIGHT_SCHEMA = {
@@ -246,8 +252,8 @@ const fixPrompt = (v, findings) =>
   `6. Resolve every thread you addressed (the resolveReviewThread mutation on each thread node id) -- the do-pr-fix --resolve behaviour.\n` +
   `Return ONLY: issue, pr_url, commits_pushed, addressed, rejected, replies_posted, verification_passed, summary (one line).`
 
-const escalatePrompt = (v, review) =>
-  `The automated review loop could not clear the blocking findings on PR ${v.pr_url} (issue #${v.issue} in ${REPO}) after ${MAX_REVIEW_ROUNDS} fix round(s). Park it for a human.\n` +
+const escalatePrompt = (v, review, round) =>
+  `The automated review loop could not clear the blocking findings on PR ${v.pr_url} (issue #${v.issue} in ${REPO}) after ${round} fix round(s). Park it for a human.\n` +
   `1. Comment on the PR (gh pr comment ${v.pr_url} --body ...) summarising the unresolved blocking findings: ${review ? review.blocking_open : 'unknown'} remaining -- ${review ? (review.summary || '').replace(/\n/g, ' ') : 'no review verdict'}.\n` +
   `2. Label the issue so it leaves the actionable queue: gh issue edit ${v.issue} --repo ${REPO} --add-label escalated\n` +
   `3. Leave the PR OPEN -- do NOT merge it and do NOT close the issue.\n` +
@@ -271,13 +277,20 @@ async function reviewFixLoop(v) {
     { schema: REVIEW_SCHEMA, phase: 'Review', label: `review #${v.issue}`, ...withEffort(MODEL.review, EFFORT.review), ...ISO })
   while (review && review.blocking_open > 0 && round < MAX_REVIEW_ROUNDS) {
     round++
-    await agent(fixPrompt(v, review.findings || []),
+    const fix = await agent(fixPrompt(v, review.findings || []),
       { schema: FIX_SCHEMA, phase: 'Fix', label: `fix #${v.issue} r${round}`, ...withEffort(MODEL.fix, EFFORT.fix), ...ISO })
+    // A fix that fails its build gate pushes nothing, so re-reviewing would just
+    // re-find the same blocking findings and burn another expensive round. Stop
+    // and park it for a human instead.
+    if (fix && fix.verification_passed === false) {
+      review = { ...review, summary: `fix could not pass the build gate: ${fix.summary || 'gate stayed red'}` }
+      break
+    }
     review = await agent(reviewPrompt(v, round),
       { schema: REVIEW_SCHEMA, phase: 'Review', label: `re-review #${v.issue} r${round}`, ...withEffort(MODEL.review, EFFORT.review), ...ISO })
   }
   if (!review || review.blocking_open > 0) {
-    const esc = await agent(escalatePrompt(v, review),
+    const esc = await agent(escalatePrompt(v, review, round),
       { schema: ESCALATE_SCHEMA, phase: 'Review', label: `block #${v.issue}`, model: MODEL.escalate })
     return {
       ...v, status: 'review_unresolved',

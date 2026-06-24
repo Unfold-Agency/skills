@@ -17,9 +17,10 @@ A worker gets a **pointer** -- the issue number and repo -- not shared context. 
 2. **Select** (`select_work.py --autonomy afk`). This is the actionable queue: open, unflagged, unblocked, autonomy-matched, not in flight elsewhere -- resumable-by-you first.
 3. **Dispatch a worker per issue.** Spawn a subagent with the worker brief below (the do-work session does this with its Task/subagent tool; the bundled `workflows/drain-queue.js` does it with `agent()`). Do **not** build in the orchestrator's own context -- not even for a single issue. That is the rule.
 4. **Collect the verdict** (the contract below). Record it; do not absorb the worker's transcript.
-5. **Merge** (only under `--auto-merge`, and only for `built` verdicts): merge each green PR **serially** (autonomy + CI guards in the merge step). A merge closes the issue COMPLETED and unblocks its dependents.
-6. **Re-select and repeat** under `--ralph`: a fresh `select_work.py` pass surfaces issues a merge just unblocked. Keep an **attempted set** -- never re-dispatch an issue already tried this run -- so the loop terminates instead of rebuilding the same item. Stop when the queue is dry, or when only HITL / blocked / flagged items remain. Without `--ralph`, do one issue and stop.
-7. **Report** (every run): built, merged, escalated, failed, still-blocked, and the remaining queue.
+5. **Review and fix each built PR** (every run, not behind a flag). For each `built` verdict run the review -> fix loop (below): a fresh reviewer (`do-pr-review`) posts findings and returns a count of open Critical/Major findings; if any, a fixer (`do-pr-fix`) addresses them and replies in-thread; re-review repeats until clean or `maxReviewRounds` is spent. A PR that can't be cleared is parked for a human (`review_unresolved`), never merged.
+6. **Merge** (only under `--auto-merge`, and only for `built` verdicts whose review came back **clean**): merge each green PR **serially** (autonomy + CI guards in the merge step, including a wait for the post-fix CI). A merge closes the issue COMPLETED and unblocks its dependents.
+7. **Re-select and repeat** (the default): a fresh `select_work.py` pass surfaces issues a merge just unblocked. Keep an **attempted set** -- never re-dispatch an issue already tried this run -- so the loop terminates instead of rebuilding the same item. Stop when the queue is dry, when `--limit=<N>` issues have been processed, or when only HITL / blocked / flagged items remain.
+8. **Report** (every run): built, reviewed/fixed, merged, parked-for-review, escalated, failed, still-blocked, and the remaining queue.
 
 ## The worker's job (one issue)
 
@@ -50,6 +51,17 @@ summary: <one line>
 - **escalated** -- could not be built as written; the worker has commented the reason and added the `escalated` label (so the next select excludes it). The orchestrator routes it per `escalation-and-handback.md`; it never silently retries.
 - **failed** -- the gate stayed red for a reason that is not an escalation. The orchestrator records it and the attempted-set keeps the loop from re-trying it this run.
 
+## The review and merge gate
+
+Every PR a worker opens is reviewed and fixed before the run is done with it -- on every run, not behind a flag. Each step is a fresh agent (the reviewer and fixer never share the builder's context).
+
+1. **Review** -- a fresh agent runs `do-pr-review` against the PR's current diff: inline findings posted to GitHub, and a structured verdict back to the orchestrator. The control signal is **`blocking_open`** -- the count of unresolved Critical/Major findings in the current code.
+2. **Fix** -- if `blocking_open > 0`, a fresh agent runs `do-pr-fix` on those findings: it edits, runs the build gate, pushes, and **always replies in-thread** (`Fixed.` / `Rejected.`) on each comment it addresses, then resolves those threads.
+3. **Re-review** -- a fresh reviewer re-assesses the new diff. Repeat until `blocking_open == 0` or `maxReviewRounds` fix attempts (default 2) are spent.
+4. **Outcome** -- clean -> eligible to merge (under `--auto-merge`). Not clean after the cap -> comment the unresolved findings, add the `escalated` label (so the next `select_work` excludes it), leave the PR **open** for a human, and report it as `review_unresolved`.
+
+**Same-identity caveat.** Builder, reviewer, and fixer share one gh login, so GitHub forces the submitted review event to `COMMENT`, and `do-pr-fix` would normally skip the reviewer's "own" threads. The orchestrator handles both: the merge decision keys off `blocking_open` (not the GitHub review state), and the fixer is instructed to act on same-user threads and reply in-thread regardless. A dedicated review identity (a bot token) would remove the workaround and let GitHub's review state carry the signal natively.
+
 ## Serial by default, parallel by round
 
 - **Serial (the baseline)** -- one worker at a time, in the main working tree. This already bounds context fully and is always safe.
@@ -62,4 +74,4 @@ A run killed mid-build leaves a branch and an assignment. Because `select_work.p
 
 ## Draining the whole backlog
 
-For an unattended drain, the orchestration above is encoded deterministically in `workflows/drain-queue.js` (run via the Workflow tool): preflight, then a loop of select -> parallel build workers -> serial auto-merge -> re-select, until the queue is dry. It takes `args.repo` and `args.skillDir`, plus `autoMerge`, `parallel` (1-3), and `maxIssues`. The script holds the loop and the verdicts; each build is still a fresh worker. See SKILL.md, *Execution model*.
+For an unattended drain, the orchestration above is encoded deterministically in `workflows/drain-queue.js` (run via the Workflow tool): preflight, then a loop of select -> parallel build workers -> review -> fix loop -> serial auto-merge -> re-select, until the queue is dry. It takes `args.repo` and `args.skillDir`, plus `autoMerge`, `parallel` (1-3), `limit` (0 = unlimited), `maxReviewRounds`, and optional `reviewSkillDir` / `fixSkillDir` (default: siblings of `skillDir`). The script holds the loop and the verdicts; each build, review, and fix is still a fresh worker. See SKILL.md, *Execution model*.

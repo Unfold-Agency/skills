@@ -2,7 +2,7 @@
 
 When a build cannot be done as the issue is written, the answer is never to edit the issue, the TDD, or the PRD to make it pass. The prime directive: **do-work raises the problem and stops; the right upstream lane fixes it.** The pipeline is forward-only -- upstream amends, re-locks, and re-syncs; then the work comes back here. Routing the problem to the wrong lane (or quietly coding around it) is how a clean trace rots.
 
-**Who does what.** The worker building the issue is the one that hits the wall, so the *worker* raises the escalation -- it comments the reason, adds the `escalated` label, opens no PR, and returns `status: escalated`. That label is also the mechanism that takes the issue out of the queue: `select_work.py` excludes anything flagged `escalated`, so the orchestrator never re-dispatches it and a `--ralph` drain simply moves on to other work. The *orchestrator's* part is to record it in the run report and tell the user which lane to run next; it does not retry.
+**Who does what.** The worker building the issue is the one that hits the wall, so the *worker* raises the escalation -- it comments the reason, adds the `escalated` label, opens no PR, and returns `status: escalated`. That label is also the mechanism that takes the issue out of the queue: `select_work.py` excludes anything flagged `escalated`, so the orchestrator never re-dispatches it and the drain simply moves on to other work. The *orchestrator's* part is to record it in the run report and tell the user which lane to run next; it does not retry.
 
 ## The triage question
 
@@ -50,7 +50,7 @@ An HITL issue is not blocked -- it is gated on a human, by design (a visual or b
 - If the human decision must come **before** the build, do not start -- surface the decision needed and wait.
 - If a human must **review or sign off** before merge, build it, open the PR, and leave it for the human (do not auto-merge, ever).
 
-HITL items never escalate upstream and never drain under `--ralph`; they wait for a person. Note each one in the run report so it is not silently skipped.
+HITL items never escalate upstream and are never drained or auto-merged; they wait for a person. Note each one in the run report so it is not silently skipped.
 
 ## What hand-back never does
 

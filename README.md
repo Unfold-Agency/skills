@@ -85,6 +85,48 @@ discovery ──/make-prd──▶  PRD  ──/make-tdd──▶  TDD  ──/m
 
 Change `INTG-001`'s contract in the TDD and re-run `/make-issues`: the per-capability fingerprint changes, so issue #N is updated (if unstarted) or flagged (if in flight) -- and the engineer's notes in the issue's human region are never touched.
 
+### The build loop: build → review → fix → merge
+
+`do-work` doesn't just open a PR and stop. It **drains the backlog by default** (no flag = work every actionable issue; `--limit=<N>` caps the run, `--limit=1` does a single issue), and every PR it opens runs through an automatic **review → fix loop** before the run is done with it:
+
+```
+select next issue
+   │
+   ▼
+build  ──▶  PR opened
+   │
+   ▼
+review  ──▶  fix  ──▶  re-review  ──▶ … (until no Critical/Major findings, max ~2 rounds)
+   │                                         │
+   │ can't converge after N rounds           │ clean
+   ▼                                         ▼
+park for a human (label `escalated`)     ready-for-review  ──▶  merge (only with --auto-merge)
+```
+
+- **Review** is `do-pr-review` (posts inline findings, comment-only). **Fix** is `do-pr-fix` (addresses the findings, replies in-thread, pushes). They run as **independent workers** -- the reviewer never shares the builder's context, so it's genuinely a second set of eyes.
+- **Merge stays manual** unless you pass `--auto-merge`; a merge closes the issue and unblocks its dependents, which is what lets a full dependency chain drain in one pass.
+- A PR the loop can't get clean is **left open and labelled** for a human, never merged.
+
+Each lane of the loop runs on the **model that fits the task** -- build and review get the strongest model (build quality is upstream of everything; bug-finding is where the top model earns its cost), fix is bounded so it runs mid-tier, and the mechanical steps run on the cheapest tier. Every default is overridable per run.
+
+| Stage | Default model | Why |
+|---|---|---|
+| Build (`do-work`) | **Opus** | The quality-upstream step -- a weak build becomes review/fix churn. |
+| Review (`do-pr-review`) | **Opus** | The adversarial gate -- a cheaper reviewer misses real bugs. |
+| Fix (`do-pr-fix`) | **Sonnet** | Bounded: the reviewer hands it a findings list to implement. |
+| Preflight / Select / Escalate / Merge | **Haiku** | Run a script or a few `gh` calls -- the cheapest tier is plenty. |
+
+This whole loop is encoded deterministically in `do-work/workflows/drain-queue.js`, run via the Workflow tool:
+
+```js
+Workflow({ scriptPath: "<do-work>/workflows/drain-queue.js",
+           args: { repo: "owner/name", skillDir: "<do-work>",
+                   autoMerge: true, limit: 0, parallel: 2,
+                   modelBuild: "opus", modelFix: "sonnet", effortReview: "high" } })
+```
+
+The script locates `do-pr-review` and `do-pr-fix` as siblings of `skillDir` automatically. For the full mechanics -- the worker brief, the review/merge gate, the same-identity handling, and resuming a killed run -- see [`do-work/SKILL.md`](./do-work/SKILL.md) and [`do-work/references/execution-loop.md`](./do-work/references/execution-loop.md).
+
 ## Use these skills in Claude Code
 
 Claude Code discovers skills from the filesystem -- no upload step. Skills live in one of two places:

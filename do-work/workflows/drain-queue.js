@@ -3,12 +3,12 @@ export const meta = {
   description: 'Drain the make-issues backlog: build each actionable issue in its own isolated worker, then ALWAYS review and fix the PR (do-pr-review -> do-pr-fix loop) until no blocking findings remain, optionally auto-merge on green, and re-select until the queue is dry. The orchestrator (this script) holds only the queue and one verdict per issue; every build/review/fix runs in a fresh worker context.',
   whenToUse: 'Run do-work over a backlog (drain-by-default). Each PR is reviewed and fixed automatically; pass autoMerge:true to also merge clean green PRs. Pass args.repo and args.skillDir; cap with args.limit.',
   phases: [
-    { title: 'Preflight' },
-    { title: 'Select' },
-    { title: 'Build' },
-    { title: 'Review' },
-    { title: 'Fix' },
-    { title: 'Merge' },
+    { title: 'Preflight', model: 'haiku' },
+    { title: 'Select', model: 'haiku' },
+    { title: 'Build', model: 'opus' },
+    { title: 'Review', model: 'opus' },
+    { title: 'Fix', model: 'sonnet' },
+    { title: 'Merge', model: 'haiku' },
   ],
 }
 
@@ -23,6 +23,8 @@ export const meta = {
 // parallel:        workers per round, 1..3 (default 1 -- serial, the baseline)
 // maxRounds:       hard cap on select rounds (default 100 -- safety backstop)
 // autonomy:        which queue to drain (default "afk"; the HITL invariant never auto-builds hitl)
+// model<Stage>:    per-stage model override (opus|sonnet|haiku|fable) -- see MODEL below
+// effort<Stage>:   per-stage effort override (low|medium|high|xhigh|max) for build/review/fix
 const A = (typeof args === 'object' && args) || {}
 const REPO = A.repo
 const SKILL = A.skillDir
@@ -43,6 +45,34 @@ if (!REPO || !SKILL) {
   log('ERROR: pass args.repo ("owner/name") and args.skillDir (path to do-work/). Nothing to drain.')
   return { error: 'missing args', repo: REPO || null, skillDir: SKILL || null }
 }
+
+// ── per-stage model + effort ────────────────────────────────────────────
+// Match the model to the task. Build and review get the strongest model -- build
+// quality is upstream of everything (a weak build becomes review/fix churn), and
+// bug-finding is exactly where the top model earns its cost. Fix is bounded (the
+// reviewer hands it a findings list), so a mid-tier model fits. The mechanical
+// agents (preflight, select, escalate, merge) run a script or a few gh calls --
+// the cheapest tier is plenty. Override any of these via args.
+// CAVEAT: if the CLAUDE_CODE_SUBAGENT_MODEL env var is set, it overrides ALL of
+// these -- leave it unset in CI/cron or the whole loop collapses to one tier.
+const MODEL = {
+  preflight: A.modelPreflight || 'haiku',
+  select:    A.modelSelect    || 'haiku',
+  build:     A.modelBuild     || 'opus',
+  review:    A.modelReview    || 'opus',
+  fix:       A.modelFix       || 'sonnet',
+  escalate:  A.modelEscalate  || 'haiku',
+  merge:     A.modelMerge     || 'haiku',
+}
+const EFFORT = {
+  build:  A.effortBuild  || 'high',
+  review: A.effortReview || 'high',
+  fix:    A.effortFix    || 'medium',
+}
+// Haiku rejects the effort parameter (it 400s), and xhigh/max are Opus-only.
+// Attach effort only for models that accept it, so a build/review/fix override
+// to haiku stays safe.
+const withEffort = (model, effort) => (model === 'haiku' ? { model } : { model, effort })
 
 // ── schemas (workers return data, not prose) ────────────────────────────
 const PREFLIGHT_SCHEMA = {
@@ -238,17 +268,17 @@ const mergePrompt = (v) =>
 async function reviewFixLoop(v) {
   let round = 0
   let review = await agent(reviewPrompt(v, round),
-    { schema: REVIEW_SCHEMA, phase: 'Review', label: `review #${v.issue}`, ...ISO })
+    { schema: REVIEW_SCHEMA, phase: 'Review', label: `review #${v.issue}`, ...withEffort(MODEL.review, EFFORT.review), ...ISO })
   while (review && review.blocking_open > 0 && round < MAX_REVIEW_ROUNDS) {
     round++
     await agent(fixPrompt(v, review.findings || []),
-      { schema: FIX_SCHEMA, phase: 'Fix', label: `fix #${v.issue} r${round}`, ...ISO })
+      { schema: FIX_SCHEMA, phase: 'Fix', label: `fix #${v.issue} r${round}`, ...withEffort(MODEL.fix, EFFORT.fix), ...ISO })
     review = await agent(reviewPrompt(v, round),
-      { schema: REVIEW_SCHEMA, phase: 'Review', label: `re-review #${v.issue} r${round}`, ...ISO })
+      { schema: REVIEW_SCHEMA, phase: 'Review', label: `re-review #${v.issue} r${round}`, ...withEffort(MODEL.review, EFFORT.review), ...ISO })
   }
   if (!review || review.blocking_open > 0) {
     const esc = await agent(escalatePrompt(v, review),
-      { schema: ESCALATE_SCHEMA, phase: 'Review', label: `block #${v.issue}` })
+      { schema: ESCALATE_SCHEMA, phase: 'Review', label: `block #${v.issue}`, model: MODEL.escalate })
     return {
       ...v, status: 'review_unresolved',
       review: { clean: false, rounds: round, blocking_open: review ? review.blocking_open : -1, escalated: !!(esc && esc.labeled) },
@@ -262,7 +292,7 @@ log(`Draining ${AUTONOMY} backlog for ${REPO} -- parallel=${PARALLEL}, autoMerge
     `limit=${LIMIT === Infinity ? 'all' : LIMIT}, reviewRounds=${MAX_REVIEW_ROUNDS}`)
 
 phase('Preflight')
-const pf = await agent(preflightPrompt(), { schema: PREFLIGHT_SCHEMA, phase: 'Preflight', label: 'preflight' })
+const pf = await agent(preflightPrompt(), { schema: PREFLIGHT_SCHEMA, phase: 'Preflight', label: 'preflight', model: MODEL.preflight })
 if (!pf || !pf.ok) {
   log(`Preflight failed: ${pf ? pf.detail : 'no verdict'}. Stopping.`)
   return { stopped: 'preflight', detail: pf ? pf.detail : null }
@@ -275,7 +305,7 @@ let rounds = 0
 while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
   rounds++
   phase('Select')
-  const q = await agent(selectPrompt(), { schema: QUEUE_SCHEMA, phase: 'Select', label: `select r${rounds}` })
+  const q = await agent(selectPrompt(), { schema: QUEUE_SCHEMA, phase: 'Select', label: `select r${rounds}`, model: MODEL.select })
   const fresh = (q && q.actionable ? q.actionable : []).filter(i => !attempted.has(i.number))
   if (!fresh.length) { log(`Queue dry after ${rounds} round(s): no fresh actionable ${AUTONOMY} issues.`); break }
 
@@ -294,7 +324,8 @@ while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
   phase('Build')
   const processed = (await pipeline(batch,
     item => agent(workerPrompt(item), {
-      schema: VERDICT_SCHEMA, phase: 'Build', label: `build #${item.number}`, ...ISO,
+      schema: VERDICT_SCHEMA, phase: 'Build', label: `build #${item.number}`,
+      ...withEffort(MODEL.build, EFFORT.build), ...ISO,
     }),
     async (v) => (v && v.status === 'built' && v.pr_url) ? reviewFixLoop(v) : v
   )).filter(Boolean)
@@ -313,7 +344,7 @@ while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
     // disjoint PRs are safe in order; concurrent merges are not. A merge unblocks
     // dependents -> loop and re-select to surface the next tier.
     for (const v of greens) {
-      const m = await agent(mergePrompt(v), { schema: MERGE_SCHEMA, phase: 'Merge', label: `merge #${v.issue}` })
+      const m = await agent(mergePrompt(v), { schema: MERGE_SCHEMA, phase: 'Merge', label: `merge #${v.issue}`, model: MODEL.merge })
       if (m) merged.push(m)
     }
   }

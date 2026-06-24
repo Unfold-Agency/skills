@@ -105,6 +105,7 @@ do-work runs unattended only when something invokes it. Two paths:
                      autoMerge: true, limit: 0, maxReviewRounds: 2, parallel: 2 } })
   ```
   It encodes the same select -> build -> review -> fix -> merge -> re-select loop deterministically, keeps each build, review, and fix in a fresh worker, and returns a structured run summary (built, merged, parked-for-review, escalated, failed). It locates `do-pr-review` and `do-pr-fix` as siblings of `skillDir` by default (override with `reviewSkillDir` / `fixSkillDir`). The durable drain path. (The Workflow tool requires explicit opt-in.)
+  - **Per-stage models.** Each stage runs on a fitted model by default -- build and review on **Opus**, fix on **Sonnet**, the mechanical steps (preflight/select/escalate/merge) on **Haiku** -- overridable per run via `model<Stage>` / `effort<Stage>` args (`modelBuild`, `modelReview`, `modelFix`, `effortBuild`, `effortReview`, `effortFix`, etc.). Note: if the `CLAUDE_CODE_SUBAGENT_MODEL` env var is set it overrides all of these, so leave it unset in CI/cron.
 
 Either way: grant the run the permissions the build needs (edit files, run the repo's test/build commands, and `gh`/`git`); HITL issues are never auto-built or auto-merged; keep a human reviewing the merged PRs -- the loop ships work, it does not own the product.
 

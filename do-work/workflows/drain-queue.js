@@ -238,13 +238,13 @@ const mergePrompt = (v) =>
 async function reviewFixLoop(v) {
   let round = 0
   let review = await agent(reviewPrompt(v, round),
-    { schema: REVIEW_SCHEMA, phase: 'Review', label: `review #${v.issue}` })
+    { schema: REVIEW_SCHEMA, phase: 'Review', label: `review #${v.issue}`, ...ISO })
   while (review && review.blocking_open > 0 && round < MAX_REVIEW_ROUNDS) {
     round++
     await agent(fixPrompt(v, review.findings || []),
       { schema: FIX_SCHEMA, phase: 'Fix', label: `fix #${v.issue} r${round}`, ...ISO })
     review = await agent(reviewPrompt(v, round),
-      { schema: REVIEW_SCHEMA, phase: 'Review', label: `re-review #${v.issue} r${round}` })
+      { schema: REVIEW_SCHEMA, phase: 'Review', label: `re-review #${v.issue} r${round}`, ...ISO })
   }
   if (!review || review.blocking_open > 0) {
     const esc = await agent(escalatePrompt(v, review),
@@ -287,15 +287,16 @@ while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
 
   // Build, then ALWAYS review+fix, per issue and independently (pipeline -- no barrier
   // between build and review, so issue B can build while issue A is in review).
-  // PARALLEL>1 runs builds and fixes in isolated git worktrees so they never clobber
-  // each other's working tree; callers must only set parallel>1 when the batch is
-  // file-disjoint. Serial (PARALLEL===1) uses the main tree -- no worktree cost.
+  // PARALLEL>1 runs builds, reviews, and fixes in isolated git worktrees so they never
+  // clobber each other's working tree (the reviewer may check out the PR branch to read
+  // PR-version context); callers must only set parallel>1 when the batch is file-disjoint.
+  // Serial (PARALLEL===1) uses the main tree -- no worktree cost.
   phase('Build')
   const processed = (await pipeline(batch,
     item => agent(workerPrompt(item), {
       schema: VERDICT_SCHEMA, phase: 'Build', label: `build #${item.number}`, ...ISO,
     }),
-    async (v) => (v && v.status === 'built') ? reviewFixLoop(v) : v
+    async (v) => (v && v.status === 'built' && v.pr_url) ? reviewFixLoop(v) : v
   )).filter(Boolean)
 
   const greens = []

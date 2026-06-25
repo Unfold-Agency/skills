@@ -22,6 +22,13 @@
 #   - Source versions. `src:prd-<v>` / `src:tdd-<v>` stamps live in the meta
 #     block's source_versions. do-work reads source_versions.tdd from there
 #     (not a label) to decide when a /make-issues sync is owed.
+#   - Implementation phase. The phase an issue belongs to is carried by a
+#     GitHub MILESTONE ("Phase <N>: <name>"), one per phase from the TDD's
+#     implementation_phases (see scripts/phase_milestones.py) -- native,
+#     filterable, and shown on the card. It is NOT a label and NOT in the meta
+#     block: phase is sequencing, not contract, so it stays out of the
+#     fingerprint-keyed regions and is re-asserted on the milestone each sync.
+#     do-work --phase=N reads it from the milestone.
 #
 # GitHub label names may contain `:` and `.`, so the prefixed forms below
 # are valid label names as written.

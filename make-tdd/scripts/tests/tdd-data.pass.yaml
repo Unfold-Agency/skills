@@ -16,7 +16,7 @@ meta:
     url: ''
     path: ''
   promoted_at: ''
-  fingerprint: cbcfc5deee9a10f0639f0f3d4008f4981dc7c99e9e013188b1aa70c60adee195
+  fingerprint: 46f5a9a70166dfeefea36c77770ee5c1d6a5957e93fcc7ded4072e470a82390d
   related_docs:
     prd: prd-data.fixture.yaml
     brief: ''
@@ -152,6 +152,30 @@ traceability:
     satisfied_by:
     - TNF-001
   unmapped: []
+implementation_phases:
+- number: 1
+  name: Foundation
+  summary: Data model, lifecycle, and the core architecture decision.
+  delivers: An order entity with its lifecycle, ready to build flows on.
+  capabilities:
+  - ENT-001
+  - STM-001
+  - ADR-001
+  exit_criteria: Order entity and state machine merged; storefront stack decided.
+  depends_on: []
+  status: active
+- number: 2
+  name: Checkout
+  summary: The checkout workflow, the Shopify integration, and its latency NFR.
+  delivers: A working checkout that creates orders in Shopify within budget.
+  capabilities:
+  - WF-001
+  - INTG-001
+  - TNF-001
+  exit_criteria: Checkout creates an order via Shopify and meets the latency target.
+  depends_on:
+  - 1
+  status: active
 change_log:
 - version: '0.1'
   date: '2026-06-15'

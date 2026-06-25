@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validate_tdd.py — enforce validator rules V-001..V-016 against tdd-data.yaml
+validate_tdd.py — enforce validator rules V-001..V-018 against tdd-data.yaml
 
 Usage:
   python validate_tdd.py <tdd-data.yaml> [--prd <prd-data.yaml>]
@@ -20,6 +20,8 @@ Rules (see assets/tdd-data-schema.yaml for prose):
   Status gates: V-010 approved blocks on open high risks / blocking assumptions,
                 V-011 status enum, V-014 system_of_record valid,
                 V-015 fingerprint matches, V-016 version sync (--tdd-md)
+  Impl plan:    V-018 implementation_phases (when present): phase shape, every
+                active capability in exactly one active phase, acyclic depends_on
 
 Fingerprint normalization (V-015) — used by BOTH this validator and the Skill
 when it writes the data file, so the two never disagree:
@@ -439,6 +441,92 @@ def main():
                 fail("V-016", f"tdd_version '{tdd_version}' != markdown version '{md_version}'")
         except Exception as e:
             fail("V-016", f"could not read markdown for version check: {e}")
+
+    # ---- V-018: implementation plan (only when phases are present) ------
+    # The plan is recommended, not required: an absent/empty collection is
+    # valid. When present it must be a total, single-home cover of the active
+    # capabilities with an acyclic phase order. Phase lives only here (not on a
+    # capability record), so a phase move never touches a per-capability
+    # fingerprint -- a re-sequence is sequencing, not a contract change.
+    phases = doc.get("implementation_phases") or []
+    if phases:
+        active_caps = set()
+        for path in ("entities", "state_machines", "workflows",
+                     "integrations", "nfrs", "decisions"):
+            for item in get_path(doc, path):
+                if (isinstance(item, dict) and item.get("id")
+                        and item.get("status", "active") == "active"):
+                    active_caps.add(str(item["id"]))
+
+        seen_numbers, phase_nums, assigned = {}, set(), {}
+        for ph in phases:
+            if not isinstance(ph, dict):
+                fail("V-018", "an implementation_phases entry is not a mapping")
+                continue
+            num = ph.get("number")
+            name = str(ph.get("name") or "").strip()
+            status = str(ph.get("status") or "")
+            if not isinstance(num, int) or isinstance(num, bool) or num < 1:
+                fail("V-018", f"phase '{name or num}' needs an integer number >= 1")
+            elif num in seen_numbers:
+                fail("V-018", f"duplicate phase number {num}")
+            else:
+                seen_numbers[num] = name
+                phase_nums.add(num)
+            if not name:
+                fail("V-018", f"phase {num} has no name")
+            if status not in ("active", "superseded", "deferred"):
+                fail("V-018", f"phase {num} status '{status}' is not "
+                              "active | superseded | deferred")
+            for cap in ph.get("capabilities") or []:
+                cap = str(cap)
+                if cap not in known:
+                    fail("V-018", f"phase {num} lists '{cap}', not a TDD ID")
+                elif cap not in active_caps:
+                    fail("V-018", f"phase {num} lists '{cap}', not an active capability")
+                if status == "active":
+                    assigned.setdefault(cap, []).append(num)
+
+        for cap in sorted(active_caps):
+            homes = assigned.get(cap, [])
+            if not homes:
+                fail("V-018", f"active capability '{cap}' is not assigned to any "
+                              "active phase")
+            elif len(homes) > 1:
+                fail("V-018", f"active capability '{cap}' is assigned to multiple "
+                              f"phases {sorted(homes)} (assign it to exactly one)")
+
+        graph = {}
+        for ph in phases:
+            if not isinstance(ph, dict):
+                continue
+            num = ph.get("number")
+            deps = []
+            for d in ph.get("depends_on") or []:
+                if d not in phase_nums:
+                    fail("V-018", f"phase {num} depends_on {d}, not a phase number")
+                elif d == num:
+                    fail("V-018", f"phase {num} depends on itself")
+                else:
+                    deps.append(d)
+            graph[num] = deps
+
+        WHITE, GREY, BLACK = 0, 1, 2
+        color = {n: WHITE for n in graph}
+
+        def visit(n, stack):
+            color[n] = GREY
+            for m in graph.get(n, []):
+                if color.get(m) == GREY:
+                    cyc = " -> ".join(str(x) for x in stack[stack.index(m):] + [m])
+                    fail("V-018", f"phase dependency cycle: {cyc}")
+                elif color.get(m) == WHITE:
+                    visit(m, stack + [m])
+            color[n] = BLACK
+
+        for n in list(graph):
+            if color.get(n) == WHITE:
+                visit(n, [n])
 
     # ---- report ---------------------------------------------------------
     if errors:

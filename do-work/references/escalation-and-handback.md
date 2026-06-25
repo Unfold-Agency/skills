@@ -52,6 +52,16 @@ An HITL issue is not blocked -- it is gated on a human, by design (a visual or b
 
 HITL items never escalate upstream and are never drained or auto-merged; they wait for a person. Note each one in the run report so it is not silently skipped.
 
+## Dangerous mode (`--dangerously`)
+
+Under `--dangerously` (SKILL.md, *Dangerous mode*) the rules above are deliberately overridden for maximum throughput: the worker does **not** escalate-and-stop and HITL is **not** a stop point. Instead of raising a problem and waiting, the worker **resolves and proceeds**:
+
+- **A design gap or an ambiguous/unsatisfiable criterion** -> pick the best-practice resolution, build it, and open a `needs-human-review` follow-up issue describing the decision. Do not add the `escalated` label; do not stop the run.
+- **A missing external** (an API, seed data, a credential, an upstream service) -> create a clearly-marked mock/placeholder (a fixture, a stub, env defaults) tagged `FIXME(dangerously)` so the gate passes against the mock, then open a follow-up issue for it.
+- **HITL** -> build it and merge it like any other issue.
+
+The line that does **not** move: you still **never edit the PRD, the TDD, or an issue's managed scope**. Dangerous mode resolves *implementation* ambiguity and mocks *missing externals* -- it does not rewrite requirements. And it still respects the make-issues drift gates: an issue flagged `needs-rebase` / `spec-drift` / `orphaned` / `escalated` is **skipped**, because the spec itself is known stale and only `/make-issues` can sync it. A follow-up issue is a `needs-human-review` triage marker, not a `make-issues` work item, so the loop never re-builds its own mocks. See SKILL.md for the merge policy (merge on green CI even with open findings; never merge a red CI).
+
 ## What hand-back never does
 
 - It never edits the PRD, the TDD, or the scope inside an issue. Those are owned upstream.

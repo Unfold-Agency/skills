@@ -41,7 +41,7 @@ These four chain end to end -- see [How these skills chain](#how-these-skills-ch
 | [`make-prd`](./make-prd) | Generates and amends Product Requirements Documents from discovery material, with citation discipline, a derived machine-readable data file, and a validator. |
 | [`make-tdd`](./make-tdd) | Generates and amends Technical Design Documents from an approved PRD -- recommend-then-refine architecture, full PRD-to-design traceability, a derived data file, and a validator. |
 | [`make-issues`](./make-issues) | Turns an approved, version-locked PRD and TDD into traceable GitHub Issues and keeps them in sync as the TDD changes -- thin work items, AFK/HITL autonomy flags, a version-lock gate, and a stale-resistant reconciliation engine. |
-| [`do-work`](./do-work) | Builds the project from those GitHub Issues -- drains the actionable backlog by default (cap with `--limit=<N>`), implements each issue on a branch, runs the build gate, opens a PR that closes it, and then **reviews and fixes that PR** (via `do-pr-review` / `do-pr-fix`) before optionally merging (`--auto-merge`). Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
+| [`do-work`](./do-work) | Builds the project from those GitHub Issues -- drains the actionable backlog by default (cap with `--limit=<N>`, scope to one implementation phase with `--phase=<N>`, target one ticket with `--issue=<N>`, or go fully autonomous with `--dangerously`), implements each issue on a branch, runs the build gate, opens a PR that closes it, and then **reviews and fixes that PR** (via `do-pr-review` / `do-pr-fix`) before optionally merging (`--auto-merge`). Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
 
 ### Utility skills
 
@@ -126,6 +126,43 @@ Workflow({ scriptPath: "<do-work>/workflows/drain-queue.js",
 ```
 
 The script locates `do-pr-review` and `do-pr-fix` as siblings of `skillDir` automatically. For the full mechanics -- the worker brief, the review/merge gate, the same-identity handling, and resuming a killed run -- see [`do-work/SKILL.md`](./do-work/SKILL.md) and [`do-work/references/execution-loop.md`](./do-work/references/execution-loop.md).
+
+### Driving do-work: flags and modes
+
+Invoke `do-work` as `/do-work [flags]` (or headless: `claude -p "/do-work [flags]"`). With no flags it drains the whole **AFK** queue and leaves clean PRs ready for a human to merge. The flags compose:
+
+| Flag | What it does |
+|---|---|
+| *(none)* | Drain every actionable **AFK** issue: build → review → fix each PR, then re-select until the queue is dry or only HITL / blocked work remains. Clean PRs are left **ready-for-review**; a human merges. |
+| `--limit=<N>` | Cap the run at N issues (`--limit=1` builds a single issue then stops; `0` or omitted = unlimited). |
+| `--phase=<N>` | Drain only issues in **implementation phase N** -- the GitHub milestone `Phase N: …` that `make-issues` creates from the TDD's implementation plan. Composes with `--limit`. |
+| `--issue=<N>` | Build exactly issue **#N**, then stop. Bypasses the phase/autonomy filters (you picked it explicitly), but still skips a flagged, blocked, or in-flight target. Takes precedence over `--phase`. |
+| `--auto-merge` | After a PR's review loop is clean and CI is green, merge it -- closing the issue and unblocking its dependents -- then continue. The full overnight loop. |
+| `--dangerously` | **Full autonomy, accept the risk.** Build **and merge every** issue (AFK **and** HITL) with no human prompts. See below. |
+
+**`--phase` and the implementation plan.** A TDD authored with `/make-tdd` can carry a phased **Implementation Plan** (e.g. *Phase 1: Foundation*, *Phase 2: Checkout*). `/make-issues` turns each phase into a GitHub **milestone** and files every issue under its phase. `/do-work --phase=1` then builds only that phase's issues -- so you can ship the foundation, review it, and only then drain phase 2. The dependency gate still applies: a phase-2 issue blocked by an unmerged phase-1 issue waits, so a clean phase-by-phase drive usually pairs `--phase` with `--auto-merge`.
+
+**`--dangerously` -- maximum throughput, you own the risk.** It iterates over **every** buildable issue, AFK and HITL alike, and never stops for input:
+
+- It **builds and merges HITL** issues like any other (the one mode where the HITL gate is lifted).
+- Instead of escalating a gap, it **resolves** it with a best-practice default and **mocks** any missing external (an API, seed data, a credential) so work keeps moving.
+- It **merges on green CI even with unresolved review findings** -- a red CI is never merged; it is flagged and left open.
+- Everything it decided on its own is opened as a **`needs-human-review` follow-up issue** for a human to triage afterward.
+
+It still **skips** issues `make-issues` flagged stale (the spec is known out of date), and it never edits the PRD/TDD or an issue's scope -- it resolves *implementation* ambiguity and mocks *missing externals* only. Use it solely when a human will work the follow-up queue after the run.
+
+**Examples**
+
+```bash
+/do-work                          # drain the AFK queue; humans merge
+/do-work --limit=1                # build just the next issue
+/do-work --phase=1 --auto-merge   # ship implementation phase 1 end to end
+/do-work --issue=42               # build one specific issue
+/do-work --auto-merge             # overnight loop: build, review, fix, merge
+/do-work --dangerously            # full autonomy over the whole backlog
+```
+
+The same loop runs deterministically via the drain workflow (above) for long backlogs -- pass `phase`, `issue`, or `dangerously: true` as args alongside `repo` and `skillDir`.
 
 ## Use these skills in Claude Code
 

@@ -24,6 +24,7 @@ This skill has two modes. Decide which one applies before doing anything else:
 - `references/reconciliation.md` -- read in Sync mode: the match maps, state detection, the decision tree, the managed-region surgery, and the report.
 - `scripts/gh_preflight.py` -- the preflight gate (read-only): auth, gh version, repo, the version-lock gate, mode, and missing labels. Run it first, every run.
 - `scripts/item_fingerprint.py` -- per-capability fingerprint over the contract-bearing TDD fields; the hash stamped on each issue and compared on sync.
+- `scripts/phase_milestones.py` -- maps the TDD's `implementation_phases` to GitHub milestones (capability -> phase, phase -> milestone title) and, with `--ensure`, creates/patches them. Used only when the TDD has a plan.
 
 ## Preflight (always, first action)
 
@@ -47,11 +48,11 @@ No managed issues -> **Generate**. Managed issues exist -> **Sync**. Both run th
 
 ## Generate mode workflow
 
-1. **Read both sources.** `tdd-data.yaml` (the capabilities, traceability, binding constraints) and `prd-data.yaml` (objectives, success criteria). Read `references/slicing-and-review.md` now.
+1. **Read both sources.** `tdd-data.yaml` (the capabilities, traceability, binding constraints, and `implementation_phases` if present) and `prd-data.yaml` (objectives, success criteria). Read `references/slicing-and-review.md` now.
 2. **Slice thin.** Cut active capabilities into independently-completable, end-to-end work items; prefer many thin slices to few thick ones; mark each AFK or HITL, preferring AFK.
-3. **Assemble each item.** Goal + success criteria from the PRD; what-to-build + test plan + NFRs from the TDD; `trace_tdd` + `trace_prd`; `source_versions` from the two `meta` blocks; `fingerprint` from `item_fingerprint.py --id <CAP>`. No item without a trace.
-4. **Review pass (the human gate).** Present the numbered breakdown (per item: title, AFK/HITL, blocked-by, trace IDs) plus the coverage check. Iterate to approval. Create nothing first.
-5. **Create in dependency order**, blockers first, so each `--blocked-by` references a real issue number. Stamp every issue per the template and apply its labels.
+3. **Assemble each item.** Goal + success criteria from the PRD; what-to-build + test plan + NFRs from the TDD; `trace_tdd` + `trace_prd`; `source_versions` from the two `meta` blocks; `fingerprint` from `item_fingerprint.py --id <CAP>`. No item without a trace. When the TDD has a plan, also note each item's phase from `phase_milestones.py` (carried by the milestone, not the body).
+4. **Review pass (the human gate).** Present the breakdown -- grouped by phase when the TDD has a plan (per item: title, AFK/HITL, blocked-by, trace IDs) -- plus the coverage check (capabilities, requirements, and phases). Iterate to approval. Create nothing first.
+5. **Create in dependency order**, blockers first, so each `--blocked-by` references a real issue number. When the TDD has a plan, first ensure the milestones exist (`phase_milestones.py --ensure --repo <owner/name>`), then assign each issue its phase milestone (`gh issue create ... --milestone "Phase <N>: <name>"`). Stamp every issue per the template and apply its labels.
 
 ## Sync mode workflow
 
@@ -59,11 +60,12 @@ No managed issues -> **Generate**. Managed issues exist -> **Sync**. Both run th
 2. **Build the maps:** issue-by-capability (match on the meta block's `trace_tdd`; a missing or malformed block is not auto-recovered -- flag it for a human, who reads the capability ID from the body's `## Traceability` table and re-stamps the block) and capability-to-fingerprint (`item_fingerprint.py`).
 3. **Detect each issue's state** (not-started / started / completed / won't-do / orphan) and **apply the decision tree:** skip unchanged; auto-update not-started; comment-and-flag started; follow-up completed; close or flag orphans.
 4. **Auto-update touches only the managed regions** -- the human region is spliced back byte-for-byte, with asserts that abort to comment-and-flag if the markers were hand-edited.
-5. **Present the reconciliation plan for approval** before writing, then execute and print the report.
+5. **Re-assert phase milestones** (when the TDD has a plan) -- a separate axis from the fingerprint decision tree, run every sync: ensure the milestones exist, then re-assign any issue whose phase moved, silently and without a flag (a re-sequence is not a scope change). See `references/reconciliation.md` §6.
+6. **Present the reconciliation plan for approval** before writing, then execute and print the report.
 
 ## Report (every run)
 
-Always print the receipt: coverage (every active capability has an issue, or the gap is named), traceability (every issue resolves to a current capability with PRD trace and both versions), DAG integrity (the desired dependency graph is acyclic, or the cycle is named), the lock (asserted in preflight), and drift (every changed capability accounted for by an action). Summarize counts: created, updated, flagged, closed, follow-ups, skipped.
+Always print the receipt: coverage (every active capability has an issue, or the gap is named), traceability (every issue resolves to a current capability with PRD trace and both versions), DAG integrity (the desired dependency graph is acyclic, or the cycle is named), the lock (asserted in preflight), and drift (every changed capability accounted for by an action). When the TDD has a plan, also report phase coverage (every active phase has an issue; every issue has a milestone) and any phase-spanning issue. Summarize counts: created, updated, flagged, closed, follow-ups, skipped; and, with a plan, milestones created/updated and issues re-assigned to a new phase.
 
 ## Honest limits
 
@@ -73,6 +75,7 @@ State these plainly; do not pretend past them.
 - **Dependencies are write-only.** GitHub dependency edges cannot be read back via `gh ... --json`. Reconciliation works from the desired DAG derived from the TDD, cycle-checks it, and re-asserts edges idempotently; it does not diff live edges or detect a human-removed one.
 - **"Started" is inferred.** GitHub has no native in-progress state, so it is read from assignee + closing-PR. A hand-started branch with no closing PR reads as not-started.
 - **No locking, no atomic multi-issue transaction.** A sync is a sequence of `gh` calls; a process killed mid-run leaves some issues updated. Re-running reconciles it, because every action is keyed on fingerprint equality.
+- **Milestones are repo-global.** Phase milestones (`Phase N: name`) live at the repo level, not scoped to a project -- one project per repo is the assumption. An issue whose `trace_tdd` spans phases is filed under the **latest** and reported as a slicing smell; phase grouping is only as clean as the slicing. The phase axis is re-asserted every sync but, like dependency edges, a human-removed milestone is silently restored, not detected as drift.
 
 ## Tone and writing rules for issues
 

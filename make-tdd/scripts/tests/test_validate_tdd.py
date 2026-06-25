@@ -77,6 +77,10 @@ def m_v008(d):
     d["workflows"].append({"id": "WF-002", "name": "Refund", "trigger": "x",
                            "steps": [], "satisfies": [], "needs_diagram": True,
                            "status": "active"})
+    # keep the new active capability phased so only V-008 (missing diagram) trips,
+    # not V-018 (an unphased active capability)
+    if d.get("implementation_phases"):
+        d["implementation_phases"][0]["capabilities"].append("WF-002")
 
 def m_v010(d):
     d["meta"]["tdd_status"] = "approved"
@@ -104,6 +108,24 @@ def m_v016(d):
 def m_v017(d):
     d["meta"]["prd_version"] = "0.9"  # prd fixture is locked at 1.0
 
+def m_v018_uncovered(d):
+    d["implementation_phases"][1]["capabilities"].remove("WF-001")  # active cap unphased
+
+def m_v018_double(d):
+    d["implementation_phases"][0]["capabilities"].append("WF-001")  # also in phase 2
+
+def m_v018_cycle(d):
+    d["implementation_phases"][0]["depends_on"] = [2]  # 1->2 and 2->1
+
+def m_v018_badcap(d):
+    d["implementation_phases"][0]["capabilities"].append("ENT-999")  # not a real cap
+
+def m_v018_badnum(d):
+    d["implementation_phases"].append({"number": 0, "name": "Bad", "summary": "",
+                                       "delivers": "", "capabilities": [],
+                                       "exit_criteria": "", "depends_on": [],
+                                       "status": "active"})  # number must be >= 1
+
 
 MUTATION_CASES = [
     ("V-001", m_v001), ("V-002", m_v002), ("V-002", m_v002_missing_id),
@@ -111,6 +133,8 @@ MUTATION_CASES = [
     ("V-007", m_v007), ("V-008", m_v008), ("V-010", m_v010), ("V-011", m_v011),
     ("V-012", m_v012), ("V-013", m_v013), ("V-013", m_v013_satisfied_by),
     ("V-014", m_v014), ("V-016", m_v016), ("V-017", m_v017),
+    ("V-018", m_v018_uncovered), ("V-018", m_v018_double), ("V-018", m_v018_cycle),
+    ("V-018", m_v018_badcap), ("V-018", m_v018_badnum),
 ]
 
 

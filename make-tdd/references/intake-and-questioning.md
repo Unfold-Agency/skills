@@ -48,7 +48,16 @@ Batch the highest-value open decisions into one pass, **capped at ~7**, highest 
 - Everything not asked becomes a recorded **assumption** (`ASM-`, owner `TBD`) the design proceeds on, or an **open question** (`OQ-`) if it blocks a design element. The difference: you can build on an assumption; an open question must be answered first.
 - **Do not block generation waiting for answers.** Ship v0.1 with honest assumptions and a populated Open Questions section. A long Section 13 in v0.1 is healthy; a long one at approval is not.
 
-## 5. Diagrams
+## 5. Propose the implementation plan
+
+Once the architecture has settled -- the capabilities exist and their dependencies are clear -- propose how to **build** it, in order. This is the Implementation Plan (TDD Section 14, `implementation_phases`); recommend it on every generate. It is what downstream `make-issues` turns into one GitHub milestone per phase, and what `do-work --phase=N` drains a single phase at a time.
+
+- **Cluster the active capabilities into a handful of phases**, ordered by dependency and risk. A phase is a coherent, shippable increment -- the foundation others build on first, the riskiest integration early enough to fail cheap, the polish last. Every active capability lands in exactly one phase; the validator enforces total, single-home coverage (V-018).
+- **Describe each phase, do not just list IDs.** For each: what it *covers* and why it sits where it does; what it *delivers* (working / demoable); its *exit criteria*; and which earlier phases it *depends on*. A reader should grasp the build narrative without decoding capability IDs.
+- **Present it recommendation-first and invite changes** -- the same recommend-then-refine posture as the rest of the design: *Recommend three phases: (1) data + auth foundation, (2) the checkout workflow and its Shopify integration, (3) reporting and admin. Phase 2 depends on 1, phase 3 on 2. Adjust the split or the order?* Record the approved phases in `implementation_phases` and Section 14.
+- **Phase is sequencing, not scope.** It carries no capability contract, so it lives in `implementation_phases` only -- never on a capability record. Moving a capability between phases later re-sequences the build without churning its per-capability fingerprint or its issues' contract.
+
+## 6. Diagrams
 
 Model visually, in Mermaid (the Lane 3 convention):
 
@@ -56,7 +65,7 @@ Model visually, in Mermaid (the Lane 3 convention):
 - **Show failure branches, not just happy paths** -- a flow that only diagrams success is not done. Inferring a failure branch from stated behavior is allowed; inventing new behavior is not.
 - Each diagrammed record sets `needs_diagram: true` in the data file; validator rule V-008 confirms a matching Mermaid block exists in the Markdown.
 
-## 6. Output hygiene
+## 7. Output hygiene
 
 - Strip every HTML guidance comment from the final Markdown. Write Section 2 (Summary) last, plain words.
 - Default NFRs (accessibility, security, observability) stay unless the user explicitly waives them; record any waiver in the changelog.

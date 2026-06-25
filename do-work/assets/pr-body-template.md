@@ -42,6 +42,16 @@ Closes #<N>
 - Source versions: PRD v`<x>` / TDD v`<y>`
 - Autonomy: `<afk | hitl>`  <!-- hitl PRs are never auto-merged; a human reviews and merges -->
 
+## Assumptions & mocks
+
+<!-- DANGEROUS MODE ONLY (omit this section otherwise). When built under
+     --dangerously, list every best-practice default chosen for an ambiguous spec
+     and every mock/placeholder created for a missing external (each tagged
+     FIXME(dangerously) in the code), with the needs-human-review follow-up issue
+     opened for it. This is the reviewer's debt list -- what shipped on an
+     assumption and must be confirmed. -->
+- <what was assumed/mocked, where in the code> -- follow-up: #<M>
+
 ## Notes
 
 <!-- Anything a reviewer needs: a caveat, a follow-up issue to file, a deliberate

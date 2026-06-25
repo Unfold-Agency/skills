@@ -189,6 +189,8 @@ marketing language.
 
 **Biggest open items:** <!-- Top risks/open questions from Sections 11/13, by impact -->
 
+**Build sequence:** <!-- One line: the phases the work is split into, in order. The full plan is Section 14. -->
+
 ---
 
 ## 3. System Overview
@@ -442,6 +444,36 @@ v0.1 is healthy; it being long at approval is not.
 
 ---
 
+## 14. Implementation Plan
+
+<!--
+The build sequence: how the active capabilities above are grouped into phases
+and in what order we build them. Each phase is a coherent, shippable increment,
+ordered by dependency and risk -- keep it to a handful of phases. This plan is
+PROPOSED to and APPROVED by the engineer during design (recommend-then-refine),
+then it drives the GitHub Milestones make-issues creates (one per phase, titled
+"Phase <number>: <name>") and the phase do-work --phase=<N> drains.
+
+Rules the validator enforces (V-018) when this section exists:
+- every ACTIVE capability (ENT-/WF-/STM-/INTG-/TNF-/ADR-) appears in exactly one
+  active phase -- no capability unplaced, none in two phases;
+- phase numbers are unique integers >= 1; the number is the stable key (the name
+  may change without breaking do-work --phase=N);
+- "Depends on" lists earlier phase numbers only, and the phase order is acyclic.
+
+Be descriptive: a reader should understand what each phase delivers and why it
+comes where it does, not just see a list of IDs. Repeat the block per phase.
+-->
+
+### Phase 1 -- [Name]
+- **Covers:** <!-- What this phase builds and why it comes first. A few plain sentences. -->
+- **Capabilities:** <!-- The ENT-/WF-/STM-/INTG-/TNF-/ADR- ids delivered in this phase -->
+- **Delivers:** <!-- What is working / demoable at the end of this phase -->
+- **Exit criteria:** <!-- How we know the phase is complete and the next can start -->
+- **Depends on:** <!-- Earlier phase numbers, or "none" -->
+
+---
+
 ## Appendix A: Source Index
 
 <!--
@@ -465,6 +497,7 @@ AUTHOR / SKILL CHECKLIST — strip before publishing
 □ Every binding constraint has a source
 □ Every decision states alternatives considered and what it serves
 □ Every assumption and risk has an owner and a status
+□ If a plan exists (Section 14), every active capability is in exactly one phase
 □ No open high-severity risk or unresolved blocking assumption if status: approved
 □ System of record (1.4) set; promotion handled if this entered a repo
 □ tdd-data.yaml regenerated; validator passes; versions match; fingerprint set

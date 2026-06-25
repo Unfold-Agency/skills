@@ -13,7 +13,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from select_work import (  # noqa: E402
-    parse_meta, parse_dependencies, autonomy_of, issue_state, select)
+    parse_meta, parse_dependencies, autonomy_of, issue_state, select,
+    milestone_phase)
 
 failures = []
 
@@ -42,7 +43,15 @@ def body(autonomy="afk", deps="None", trace="WF-001"):
 
 def issue(number, state="OPEN", labels=("make-issues", "afk"), assignees=(),
           reason=None, body_text=None, autonomy="afk", deps="None",
-          closing_prs=()):
+          closing_prs=(), milestone=None):
+    # milestone: an int -> a "Phase N: ..." milestone; a str -> that exact title;
+    # None -> no milestone (the shape gh returns for an unmilestoned issue).
+    if isinstance(milestone, int):
+        ms = {"title": f"Phase {milestone}: P{milestone}", "number": milestone}
+    elif isinstance(milestone, str):
+        ms = {"title": milestone, "number": 0}
+    else:
+        ms = None
     return {
         "number": number, "title": f"Issue {number}", "state": state,
         "stateReason": reason,
@@ -50,6 +59,7 @@ def issue(number, state="OPEN", labels=("make-issues", "afk"), assignees=(),
         "assignees": [{"login": a} for a in assignees],
         "closedByPullRequestsReferences": list(closing_prs),
         "body": body_text if body_text is not None else body(autonomy, deps),
+        "milestone": ms,
         "url": f"https://example/{number}",
     }
 
@@ -120,6 +130,57 @@ exc_nome = {e["number"]: e["reason"] for e in res_nome["excluded"]}
 check("#3 excluded even when 'me' is unknown", "in flight by bob" in exc_nome.get(3, ""))
 check("nothing is resumable when 'me' is unknown",
       all(not a["resumable"] for a in res_nome["actionable"]))
+
+# ── milestone_phase parsing ──────────────────────────────────────────────
+check("milestone_phase reads the ordinal", milestone_phase(issue(1, milestone=3)) == 3)
+check("milestone_phase None when no milestone", milestone_phase(issue(1)) is None)
+check("milestone_phase None for a non-phase title",
+      milestone_phase(issue(1, milestone="Backlog")) is None)
+
+# ── --phase filter ───────────────────────────────────────────────────────
+ph_issues = [
+    issue(20, milestone=1),               # phase 1 -> kept
+    issue(21, milestone=2),               # phase 2 -> excluded under --phase=1
+    issue(22),                            # no milestone -> excluded
+    issue(23, milestone="Backlog"),       # non-phase milestone -> excluded
+]
+res_p1 = select(ph_issues, ME, autonomy="afk", phase=1)
+exc_p1 = {e["number"]: e["reason"] for e in res_p1["excluded"]}
+check("phase=1 keeps only #20", [a["number"] for a in res_p1["actionable"]] == [20])
+check("#21 excluded: wrong phase", "phase 2 (filter: 1)" in exc_p1.get(21, ""))
+check("#22 excluded: no phase milestone", "phase none (filter: 1)" in exc_p1.get(22, ""))
+check("#23 excluded: non-phase milestone", "phase none (filter: 1)" in exc_p1.get(23, ""))
+check("phase=2 flips the set to #21",
+      [a["number"] for a in select(ph_issues, ME, autonomy="afk", phase=2)["actionable"]] == [21])
+
+# ── --issue (targeted single build) ──────────────────────────────────────
+only_issues = [
+    issue(30),                                                   # afk, free
+    issue(31, labels=("make-issues", "hitl"), autonomy="hitl"),  # hitl
+    issue(32, labels=("make-issues", "afk", "spec-drift")),      # flagged stale
+    issue(33, deps="- #34 blocker"),                             # blocked by open #34
+    issue(34),                                                   # the blocker
+    issue(35, milestone=2),                                      # phase 2
+]
+r = select(only_issues, ME, only=30)
+check("only=30 -> just #30 actionable", [a["number"] for a in r["actionable"]] == [30])
+r = select(only_issues, ME, autonomy="afk", only=31)
+check("only=31 hitl -> actionable despite the afk filter",
+      [a["number"] for a in r["actionable"]] == [31])
+r = select(only_issues, ME, only=32)
+exc = {e["number"]: e["reason"] for e in r["excluded"]}
+check("only=32 flagged -> excluded, not built (gate still applies)",
+      not r["actionable"] and exc.get(32) == "flagged spec-drift")
+r = select(only_issues, ME, only=33)
+exc = {e["number"]: e["reason"] for e in r["excluded"]}
+check("only=33 blocked -> excluded (blocker gate still applies)",
+      not r["actionable"] and exc.get(33) == "blocked by #34")
+r = select(only_issues, ME, phase=1, only=35)
+check("only=35 bypasses the phase filter (it is phase 2)",
+      [a["number"] for a in r["actionable"]] == [35])
+r = select(only_issues, ME, only=999)
+check("only=999 not in the set -> empty actionable AND excluded",
+      not r["actionable"] and not r["excluded"])
 
 print()
 if failures:

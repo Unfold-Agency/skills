@@ -1,7 +1,7 @@
 export const meta = {
   name: 'do-work-drain',
   description: 'Drain the make-issues backlog: build each actionable issue in its own isolated worker, then ALWAYS review and fix the PR (do-pr-review -> do-pr-fix loop) until no blocking findings remain, optionally auto-merge on green, and re-select until the queue is dry. The orchestrator (this script) holds only the queue and one verdict per issue; every build/review/fix runs in a fresh worker context.',
-  whenToUse: 'Run do-work over a backlog (drain-by-default). Each PR is reviewed and fixed automatically; pass autoMerge:true to also merge clean green PRs. Pass args.repo and args.skillDir; cap with args.limit.',
+  whenToUse: 'Run do-work over a backlog (drain-by-default). Each PR is reviewed and fixed automatically; pass autoMerge:true to also merge clean green PRs, or dangerously:true for full autonomy (build AND merge every issue incl. hitl, mock blockers, never stop -- flags follow-ups). Pass args.repo and args.skillDir; cap with args.limit, scope to one phase with args.phase, or target a single issue with args.issue.',
   phases: [
     { title: 'Preflight', model: 'haiku' },
     { title: 'Select', model: 'haiku' },
@@ -18,7 +18,18 @@ export const meta = {
 // reviewSkillDir:  absolute path to do-pr-review/ (default: sibling of do-work)
 // fixSkillDir:     absolute path to do-pr-fix/    (default: sibling of do-work)
 // autoMerge:       merge each clean green PR, unblocking dependents, then continue (default false)
+// dangerously:     FULL AUTONOMY -- build AND merge every buildable issue (afk + hitl),
+//                  resolve blockers with best-practice defaults / mocks instead of
+//                  escalating, merge on green CI even with unresolved review findings,
+//                  open a needs-human-review follow-up issue for anything decided, and
+//                  never stop for a human. Forces autonomy=any + autoMerge. Still skips
+//                  make-issues stale/escalated issues. Red CI is never merged.
 // limit:           max issues processed this run; <=0 / absent = unlimited (drain all)
+// phase:           drain only issues in implementation phase N (the milestone
+//                  "Phase N: ..."); absent = all phases. Composes with limit.
+// issue:           build only this one issue number; bypasses the phase/autonomy
+//                  filters but still skips a flagged/blocked/in-flight target.
+//                  Takes precedence over phase.
 // maxReviewRounds: fix attempts per PR before parking it for a human (default 2)
 // parallel:        workers per round, 1..3 (default 1 -- serial, the baseline)
 // maxRounds:       hard cap on select rounds (default 100 -- safety backstop)
@@ -28,14 +39,23 @@ export const meta = {
 const A = (typeof args === 'object' && args) || {}
 const REPO = A.repo
 const SKILL = A.skillDir
-const AUTO_MERGE = !!A.autoMerge
+// DANGEROUS is the full-autonomy master switch: build AND merge EVERY buildable
+// issue (afk + hitl), resolve blockers with best-practice defaults and mocks
+// instead of escalating, merge on green CI even with unresolved review findings,
+// and never stop for a human -- flag anything it decided as a needs-human-review
+// follow-up issue and keep moving. It forces autonomy=any and autoMerge=on. It
+// still skips make-issues stale/escalated issues (the spec is known out of date).
+const DANGEROUS = !!A.dangerously
+const AUTO_MERGE = DANGEROUS || !!A.autoMerge
 const PARALLEL = Math.max(1, Math.min(3, parseInt(A.parallel, 10) || 1))
 const ISO = PARALLEL > 1 ? { isolation: 'worktree' } : {}
 const LIMIT = parseInt(A.limit, 10) > 0 ? parseInt(A.limit, 10) : Infinity
+const PHASE = parseInt(A.phase, 10) > 0 ? parseInt(A.phase, 10) : null
+const ISSUE = parseInt(A.issue, 10) > 0 ? parseInt(A.issue, 10) : null
 const MAX_ROUNDS = parseInt(A.maxRounds, 10) || 100
 const _mrr = parseInt(A.maxReviewRounds, 10)
 const MAX_REVIEW_ROUNDS = Number.isNaN(_mrr) ? 2 : Math.max(0, _mrr)
-const AUTONOMY = A.autonomy || 'afk'
+const AUTONOMY = DANGEROUS ? 'any' : (A.autonomy || 'afk')
 
 const ROOT = (SKILL || '').replace(/\/+do-work\/?$/, '')
 const REVIEW_SKILL = A.reviewSkillDir || `${ROOT}/do-pr-review`
@@ -129,6 +149,10 @@ const VERDICT_SCHEMA = {
     pr_url: { type: 'string' },
     gate: { type: 'string' },
     summary: { type: 'string' },
+    // dangerous mode: best-practice defaults / mocks the worker introduced, and
+    // the needs-human-review follow-up issues it opened for them.
+    assumptions: { type: 'integer' },
+    followups: { type: 'array', items: { type: 'string' } },
   },
   required: ['issue', 'status', 'summary'],
 }
@@ -195,6 +219,7 @@ const MERGE_SCHEMA = {
     issue: { type: 'integer' },
     merged: { type: 'boolean' },
     detail: { type: 'string' },
+    followup: { type: 'string' },   // dangerous mode: follow-up issue URL on a red-CI skip
   },
   required: ['issue', 'merged'],
 }
@@ -204,18 +229,26 @@ const preflightPrompt = () =>
   `Run the do-work preflight gate for ${REPO} and report the verdict.\n` +
   `Execute: python ${SKILL}/scripts/work_preflight.py --prd prd-data.yaml --tdd tdd-data.yaml --repo ${REPO} --json\n` +
   `Ensure the do-work lifecycle labels exist (create any the advisory lists as missing): ` +
-  `gh label create status:doing --color 1d76db --force; gh label create escalated --color d93f0b --force.\n` +
+  `gh label create status:doing --color 1d76db --force; gh label create escalated --color d93f0b --force; ` +
+  `gh label create needs-human-review --color fbca04 --force.\n` +
   `Return ok=true only if the gate's top-level "ok" is true. Put the failing check (or "clear") in detail.`
 
+const selectCmd =
+  `python ${SKILL}/scripts/select_work.py --repo ${REPO} --autonomy ${AUTONOMY}` +
+  (PHASE !== null ? ` --phase ${PHASE}` : ``) +
+  (ISSUE !== null ? ` --issue ${ISSUE}` : ``) + ` --json`
 const selectPrompt = () =>
   `List the actionable do-work queue for ${REPO}.\n` +
-  `Execute: python ${SKILL}/scripts/select_work.py --repo ${REPO} --autonomy ${AUTONOMY} --json\n` +
+  `Execute: ${selectCmd}\n` +
   `Return the parsed actionable[] and excluded[] arrays verbatim. Do not build anything.`
 
-const workerPrompt = (item) =>
+const workerPrompt = (item, dangerous) =>
   `You are a do-work build worker. Build EXACTLY ONE GitHub issue to a pull request, then return a verdict. Do not touch any other issue.\n\n` +
   `Repo: ${REPO}\nIssue: #${item.number} -- ${item.title || ''}\n` +
   `TDD trace: ${(item.trace_tdd || []).join(', ') || '(read it from the issue meta block)'}\n\n` +
+  (dangerous
+    ? `MODE: --dangerously. Full autonomy: do NOT stop for a human and do NOT escalate. Build this issue (it may be hitl -- build it anyway).\n\n`
+    : ``) +
   `Follow the do-work execution loop -- full detail in ${SKILL}/references/execution-loop.md:\n` +
   `1. Claim: gh issue edit ${item.number} --repo ${REPO} --add-assignee @me --add-label status:doing\n` +
   `2. Read: gh issue view ${item.number} --repo ${REPO} (Goal, What to build, Acceptance criteria, Test plan, and the make-issues:meta block). Read the traced TDD capability by ID in tdd-data.yaml / TDD.md, and the trace_prd requirement for the why. Respect any binding constraints (BC-).\n` +
@@ -223,9 +256,14 @@ const workerPrompt = (item) =>
   `4. Verify: detect and run the repo's build gate (typecheck / lint / tests -- check package.json, Makefile, pyproject.toml, CI config, CLAUDE.md) AND the issue's Test plan. Do NOT open a PR on a red gate.\n` +
   `5. git push -u origin <branch>, then open a PR using ${SKILL}/assets/pr-body-template.md: include "Closes #${item.number}", the trace mirrored from the issue meta, and the acceptance checklist. Open it ready-for-review (not draft).\n` +
   `6. NEVER edit the make-issues managed regions of the issue body; track acceptance in the PR.\n\n` +
-  `If you CANNOT satisfy the issue as written (a design gap, a wrong or unsatisfiable acceptance criterion, or the issue is flagged stale), STOP: comment the reason on the issue, run gh issue edit ${item.number} --repo ${REPO} --add-label escalated, do NOT open a PR, and return status "escalated". See ${SKILL}/references/escalation-and-handback.md.\n` +
-  `If the build gate stays red for reasons you cannot fix and it is not an escalation, return status "failed" with the reason in summary.\n\n` +
-  `Return ONLY the verdict: issue, status (built|escalated|failed), branch, pr_url (when built), gate (e.g. "tests+lint pass"), summary (one line).`
+  (dangerous
+    ? `RESOLVE, DON'T ESCALATE. If you would normally escalate (a design gap, an ambiguous or unsatisfiable acceptance criterion) -- instead pick the best-practice resolution and build it. If the slice needs a missing external (an API, seed data, a credential, an upstream service), create a CLEARLY-MARKED mock/placeholder (a fixture, a stub module, env defaults) tagged with a "FIXME(dangerously)" comment so the gate passes against the mock. Never edit the PRD/TDD or the issue's managed scope -- you resolve IMPLEMENTATION ambiguity and mock MISSING EXTERNALS, you do not rewrite requirements.\n` +
+      `FLAG EACH DECISION. For every best-practice default you chose and every mock/placeholder you created, open a follow-up issue: gh issue create --repo ${REPO} --label needs-human-review --title "Follow-up: <what> on #${item.number}" --body "<what you assumed/mocked, where in the code, and why>". Add a PR comment linking each follow-up. List each assumption/mock in an "Assumptions & mocks" section of the PR body.\n` +
+      `Only if NO green build is possible even with mocks: open a needs-human-review follow-up describing the blocker, then return status "failed" (do NOT add the escalated label, do NOT stop the run). Never return "escalated" in this mode.\n` +
+      `Return ONLY the verdict: issue, status (built|failed), branch, pr_url (when built), gate, assumptions (count of defaults/mocks), followups (the follow-up issue URLs), summary (one line).`
+    : `If you CANNOT satisfy the issue as written (a design gap, a wrong or unsatisfiable acceptance criterion, or the issue is flagged stale), STOP: comment the reason on the issue, run gh issue edit ${item.number} --repo ${REPO} --add-label escalated, do NOT open a PR, and return status "escalated". See ${SKILL}/references/escalation-and-handback.md.\n` +
+      `If the build gate stays red for reasons you cannot fix and it is not an escalation, return status "failed" with the reason in summary.\n\n` +
+      `Return ONLY the verdict: issue, status (built|escalated|failed), branch, pr_url (when built), gate (e.g. "tests+lint pass"), summary (one line).`)
 
 const reviewPrompt = (v, round) =>
   `You are a code reviewer in an automated build loop. Review GitHub PR ${v.pr_url} (issue #${v.issue} in ${REPO}) and return a structured verdict. Do NOT edit code.\n\n` +
@@ -259,13 +297,26 @@ const escalatePrompt = (v, review, round) =>
   `3. Leave the PR OPEN -- do NOT merge it and do NOT close the issue.\n` +
   `Return: issue, labeled (true if the escalated label was added), summary (one line).`
 
-const mergePrompt = (v) =>
+// --dangerously: instead of parking an unconverged PR, flag the residual findings
+// as a follow-up issue and let it proceed to the merge step (which still gates on CI).
+const reviewFollowupPrompt = (v, review, round) =>
+  `In --dangerously mode the review loop could not clear all blocking findings on PR ${v.pr_url} (issue #${v.issue} in ${REPO}) after ${round} fix round(s). Do NOT park it and do NOT add the escalated label -- flag and proceed.\n` +
+  `1. Open a follow-up issue: gh issue create --repo ${REPO} --label needs-human-review --title "Follow-up: unresolved review findings on #${v.issue}" --body "PR ${v.pr_url} was merged under --dangerously with ${review ? review.blocking_open : 'unknown'} unresolved Critical/Major finding(s): ${review ? (review.summary || '').replace(/\n/g, ' ') : 'see PR'}. Human review needed."\n` +
+  `2. Comment on the PR linking the follow-up issue.\n` +
+  `Return: issue, labeled (false -- this mode does not escalate), summary (the follow-up issue URL).`
+
+const mergePrompt = (v, dangerous) =>
   `Merge the PR for do-work issue #${v.issue} in ${REPO}, but only if it is safe, then report that it was accepted and merged.\n` +
   `PR: ${v.pr_url}\n` +
-  `1. Autonomy guard: gh issue view ${v.issue} --repo ${REPO} --json labels. If it carries the "hitl" label, DO NOT merge -- return merged=false, detail "hitl: human merges".\n` +
-  `2. Wait for checks: gh pr checks ${v.pr_url} --watch (bounded -- the last fix push may still be running CI). If any required check ends failing, DO NOT merge -- return merged=false, detail "checks not green".\n` +
-  `3. If afk and green: gh pr merge ${v.pr_url} --repo ${REPO} --squash --delete-branch. This closes issue #${v.issue} COMPLETED and unblocks its dependents.\n` +
-  `Return: issue, merged (bool), detail (use "accepted & merged" on success).`
+  (dangerous
+    ? `1. --dangerously: there is NO autonomy guard. Merge this PR even if the issue is hitl.\n` +
+      `2. Wait for checks: gh pr checks ${v.pr_url} --watch (bounded -- the last fix push may still be running CI). If any required check ends FAILING, do NOT merge a red build (it would break the default branch): open a follow-up issue (gh issue create --repo ${REPO} --label needs-human-review --title "Follow-up: red CI on #${v.issue}" --body "PR ${v.pr_url} could not go green under --dangerously; left open for a human."), leave the PR OPEN, and return merged=false, detail "ci red: flagged for follow-up", followup=<the follow-up issue URL>.\n` +
+      `3. If checks are green: gh pr merge ${v.pr_url} --repo ${REPO} --squash --delete-branch (merge it even with unresolved review findings -- those were already flagged as follow-ups). This closes issue #${v.issue} COMPLETED and unblocks its dependents.\n` +
+      `Return: issue, merged (bool), detail (use "accepted & merged" on success), followup (URL when a red-CI follow-up was opened).`
+    : `1. Autonomy guard: gh issue view ${v.issue} --repo ${REPO} --json labels. If it carries the "hitl" label, DO NOT merge -- return merged=false, detail "hitl: human merges".\n` +
+      `2. Wait for checks: gh pr checks ${v.pr_url} --watch (bounded -- the last fix push may still be running CI). If any required check ends failing, DO NOT merge -- return merged=false, detail "checks not green".\n` +
+      `3. If afk and green: gh pr merge ${v.pr_url} --repo ${REPO} --squash --delete-branch. This closes issue #${v.issue} COMPLETED and unblocks its dependents.\n` +
+      `Return: issue, merged (bool), detail (use "accepted & merged" on success).`)
 
 // ── review -> fix loop (runs on every built PR) ─────────────────────────
 // Build -> review -> fix -> re-review, repeating until no blocking (Critical/Major)
@@ -290,6 +341,17 @@ async function reviewFixLoop(v) {
       { schema: REVIEW_SCHEMA, phase: 'Review', label: `re-review #${v.issue} r${round}`, ...withEffort(MODEL.review, EFFORT.review), ...ISO })
   }
   if (!review || review.blocking_open > 0) {
+    // --dangerously: do NOT park. Flag the residual findings as a follow-up issue and
+    // keep the verdict 'built' so it stays a merge candidate (CI is still the gate).
+    if (DANGEROUS) {
+      const fu = await agent(reviewFollowupPrompt(v, review, round),
+        { schema: ESCALATE_SCHEMA, phase: 'Review', label: `flag #${v.issue}`, model: MODEL.escalate })
+      return {
+        ...v,   // status stays 'built'
+        review: { clean: false, rounds: round, blocking_open: review ? review.blocking_open : -1, dangerously_proceed: true },
+        followups: [...(v.followups || []), ...(fu && fu.summary ? [fu.summary] : [])],
+      }
+    }
     const esc = await agent(escalatePrompt(v, review, round),
       { schema: ESCALATE_SCHEMA, phase: 'Review', label: `block #${v.issue}`, model: MODEL.escalate })
     return {
@@ -301,8 +363,17 @@ async function reviewFixLoop(v) {
 }
 
 // ── orchestration ───────────────────────────────────────────────────────
+if (DANGEROUS) {
+  log(`⚠️  --dangerously: building AND merging EVERY buildable issue (afk + hitl) for ${REPO}, ` +
+      `resolving blockers with best-practice defaults / mocks, merging on green CI even with ` +
+      `unresolved review findings, opening needs-human-review follow-ups, and NEVER stopping for a ` +
+      `human. Red CI is never merged. make-issues stale/escalated issues are still skipped.`)
+}
 log(`Draining ${AUTONOMY} backlog for ${REPO} -- parallel=${PARALLEL}, autoMerge=${AUTO_MERGE}, ` +
-    `limit=${LIMIT === Infinity ? 'all' : LIMIT}, reviewRounds=${MAX_REVIEW_ROUNDS}`)
+    `${DANGEROUS ? 'DANGEROUS, ' : ''}` +
+    `limit=${LIMIT === Infinity ? 'all' : LIMIT}, ` +
+    `${ISSUE !== null ? `issue=#${ISSUE}, ` : PHASE !== null ? `phase=${PHASE}, ` : ``}` +
+    `reviewRounds=${MAX_REVIEW_ROUNDS}`)
 
 phase('Preflight')
 const pf = await agent(preflightPrompt(), { schema: PREFLIGHT_SCHEMA, phase: 'Preflight', label: 'preflight', model: MODEL.preflight })
@@ -336,7 +407,7 @@ while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
   // Serial (PARALLEL===1) uses the main tree -- no worktree cost.
   phase('Build')
   const processed = (await pipeline(batch,
-    item => agent(workerPrompt(item), {
+    item => agent(workerPrompt(item, DANGEROUS), {
       schema: VERDICT_SCHEMA, phase: 'Build', label: `build #${item.number}`,
       ...withEffort(MODEL.build, EFFORT.build), ...ISO,
     }),
@@ -346,7 +417,9 @@ while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
   const greens = []
   for (const v of processed) {
     if (v.status === 'review_unresolved') reviewUnresolved.push(v)
-    else if (v.status === 'built') { built.push(v); if (v.pr_url && (!v.review || v.review.clean)) greens.push(v) }
+    // Under --dangerously every built PR is a merge candidate (an unconverged review
+    // was already flagged as a follow-up); CI is still the gate inside the merge step.
+    else if (v.status === 'built') { built.push(v); if (v.pr_url && (DANGEROUS || !v.review || v.review.clean)) greens.push(v) }
     else if (v.status === 'escalated') escalated.push(v)
     else failed.push(v)
   }
@@ -357,7 +430,7 @@ while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
     // disjoint PRs are safe in order; concurrent merges are not. A merge unblocks
     // dependents -> loop and re-select to surface the next tier.
     for (const v of greens) {
-      const m = await agent(mergePrompt(v), { schema: MERGE_SCHEMA, phase: 'Merge', label: `merge #${v.issue}`, model: MODEL.merge })
+      const m = await agent(mergePrompt(v, DANGEROUS), { schema: MERGE_SCHEMA, phase: 'Merge', label: `merge #${v.issue}`, model: MODEL.merge })
       if (m) merged.push(m)
     }
   }
@@ -367,12 +440,24 @@ const stopped = attempted.size >= LIMIT ? `limit (${LIMIT})`
   : rounds >= MAX_ROUNDS ? `round cap (${MAX_ROUNDS})`
     : 'queue dry'
 
+// --dangerously: every needs-human-review follow-up opened this run (worker
+// assumptions/mocks, unresolved review findings merged anyway, red-CI skips).
+const followups = [
+  ...built.flatMap(v => v.followups || []),
+  ...failed.flatMap(v => v.followups || []),
+  ...merged.map(m => m.followup).filter(Boolean),
+]
+
 log(`Done (${stopped}). built=${built.length} merged=${merged.filter(m => m.merged).length} ` +
-    `review_unresolved=${reviewUnresolved.length} escalated=${escalated.length} failed=${failed.length}`)
+    `review_unresolved=${reviewUnresolved.length} escalated=${escalated.length} failed=${failed.length}` +
+    `${DANGEROUS ? ` followups=${followups.length}` : ''}`)
 
 return {
-  stopped, rounds,
-  built: built.map(v => ({ issue: v.issue, pr_url: v.pr_url, review: v.review || null, summary: v.summary })),
+  stopped, rounds, dangerous: DANGEROUS,
+  built: built.map(v => ({
+    issue: v.issue, pr_url: v.pr_url, review: v.review || null, summary: v.summary,
+    ...(v.assumptions ? { assumptions: v.assumptions } : {}),
+  })),
   merged: merged.filter(m => m.merged).map(m => m.issue),
   reviewUnresolved: reviewUnresolved.map(v => ({
     issue: v.issue, pr_url: v.pr_url,
@@ -380,4 +465,5 @@ return {
   })),
   escalated: escalated.map(v => ({ issue: v.issue, summary: v.summary })),
   failed: failed.map(v => ({ issue: v.issue, summary: v.summary })),
+  ...(DANGEROUS ? { followups } : {}),
 }

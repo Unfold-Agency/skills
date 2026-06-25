@@ -43,6 +43,7 @@ Borderline calls: classify conservatively (prefer major) and log the reasoning. 
 
 - Edit only the affected sections of the Markdown.
 - **Never delete or renumber an ID.** Items leave service via `status: superseded` (replaced or cut) or `status: deferred` (pushed to a later phase). A superseded decision's replacement gets a NEW id with a note pointing back.
+- **Keep the implementation plan covering** (if the TDD has one, Section 14 / `implementation_phases`). Place every new active capability in a phase and drop superseded/deferred ones, so the plan stays a total cover (V-018). Unlike a capability ID, a phase is a planning overlay -- you may re-sequence, merge, or renumber phases. Re-present the plan when the phasing changes materially. Re-sequencing a capability does not change its per-capability fingerprint, so downstream `make-issues` re-aligns the milestone on the next sync silently, without flagging the issue.
 - Add a Version History row (Section 1.1): version, class, changed IDs, summary, trigger reference.
 - Update frontmatter: `version`, `supersedes`, `last_updated`, and `prd_version` if the trigger was a PRD amendment. Major amendments set `status: review` until approval lands.
 

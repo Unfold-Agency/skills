@@ -10,13 +10,22 @@ An issue is ACTIONABLE when all of these hold:
     native blocked-by edges through `gh ... --json`, see SKILL.md, Honest limits);
   - its autonomy matches the filter (default: afk only -- hitl items stop for a
     human and are surfaced separately);
+  - when --phase=N is given, its GitHub milestone is that phase ("Phase N: ...",
+    set by make-issues from the TDD's implementation plan);
   - it is not already in flight under someone else's name.
 
 An issue already started by ME (assigned to me) is actionable and RESUMABLE -- it
 sorts first so an interrupted build is picked back up before a fresh one starts.
 
+`--issue=N` targets one specific issue: it ignores the rest and bypasses the
+autonomy/phase queue filters (you picked it explicitly), but still applies the
+not-buildable gates, so a flagged, blocked, or in-flight target is reported with
+its reason rather than built. It takes precedence over --phase.
+
   python scripts/select_work.py --repo owner/name
   python scripts/select_work.py --repo owner/name --autonomy any --json
+  python scripts/select_work.py --repo owner/name --phase 1
+  python scripts/select_work.py --repo owner/name --issue 42
   python scripts/select_work.py --repo owner/name --me <login>
 
 Exit codes: 0 = listed (queue may be empty), 2 = could not query GitHub.
@@ -44,6 +53,7 @@ _META_RE = re.compile(
 _DEPS_RE = re.compile(
     r"##\s*Dependencies\s*(.*?)(?=\n<!--|\n##\s|\Z)", re.DOTALL | re.IGNORECASE)
 _ISSUE_NUM_RE = re.compile(r"#(\d+)")
+_PHASE_TITLE_RE = re.compile(r"^Phase\s+(\d+)\b")
 
 
 def _run(cmd, timeout=30):
@@ -88,6 +98,16 @@ def parse_dependencies(body):
     return sorted({int(n) for n in _ISSUE_NUM_RE.findall(text)})
 
 
+def milestone_phase(issue):
+    """The integer phase N from the issue's milestone title 'Phase N: ...', or None.
+    make-issues sets one milestone per implementation phase; the leading ordinal is
+    the stable key do-work --phase matches on (the name may change)."""
+    ms = issue.get("milestone")
+    title = ms.get("title") if isinstance(ms, dict) else ""
+    m = _PHASE_TITLE_RE.match(str(title or "").strip())
+    return int(m.group(1)) if m else None
+
+
 def autonomy_of(issue, meta):
     """afk | hitl | None. The meta block wins; labels are the fallback."""
     val = str((meta or {}).get("autonomy") or "").strip().lower()
@@ -121,14 +141,23 @@ def _assignee_logins(issue):
     return {a.get("login", "") for a in issue.get("assignees") or []}
 
 
-def select(issues, me, autonomy="afk"):
+def select(issues, me, autonomy="afk", phase=None, only=None):
     """Partition managed issues into an ordered actionable queue and an excluded
-    list with reasons. `autonomy` is 'afk', 'hitl', or 'any'."""
+    list with reasons. `autonomy` is 'afk', 'hitl', or 'any'; `phase` (when set)
+    restricts to issues whose milestone is that implementation phase. `only` (an
+    issue number) targets a single issue: the other issues are ignored and the
+    queue-narrowing filters (autonomy, phase) are bypassed for it -- the human
+    picked it explicitly -- but the real not-buildable gates (flags, unmet
+    blockers, in flight elsewhere) still apply, so a stale or blocked target is
+    reported, not built. HITL is still never auto-MERGED; that gate is separate."""
     by_number = {i.get("number"): i for i in issues}
     actionable, excluded = [], []
 
     for issue in issues:
         num = issue.get("number")
+        if only is not None and num != only:
+            continue  # targeting one issue; the rest are not in play this run
+
         if issue.get("state") != "OPEN":
             continue  # closed issues are not work; they only resolve blockers
 
@@ -140,11 +169,19 @@ def select(issues, me, autonomy="afk"):
 
         meta = parse_meta(issue.get("body", ""))
         item_autonomy = autonomy_of(issue, meta)
-        if autonomy != "any" and item_autonomy != autonomy:
+        if only is None and autonomy != "any" and item_autonomy != autonomy:
             excluded.append({"number": num,
                              "reason": f"autonomy {item_autonomy or 'unset'} "
                                        f"(filter: {autonomy})"})
             continue
+
+        if only is None and phase is not None:
+            iphase = milestone_phase(issue)
+            if iphase != phase:
+                excluded.append({"number": num,
+                                 "reason": f"phase {iphase if iphase is not None else 'none'} "
+                                           f"(filter: {phase})"})
+                continue
 
         deps = parse_dependencies(issue.get("body", ""))
         unmet = []
@@ -191,7 +228,7 @@ def _list_issues(repo, limit):
     rc, out, err = _run(["gh", "issue", "list", "--repo", repo, "--label",
                          "make-issues", "--state", "all", "--limit", str(limit),
                          "--json", "number,title,state,stateReason,labels,"
-                         "assignees,body,closedByPullRequestsReferences,url"])
+                         "assignees,body,closedByPullRequestsReferences,milestone,url"])
     if rc != 0:
         print(f"ERROR: could not list issues for {repo}: {err.strip()}", file=sys.stderr)
         return None
@@ -216,6 +253,12 @@ def main():
                     help="which autonomy to surface as actionable (default: afk)")
     ap.add_argument("--me", help="my gh login (default: gh api user)")
     ap.add_argument("--limit", type=int, default=1000)
+    ap.add_argument("--phase", type=int,
+                    help="only issues in this implementation phase "
+                         "(the GitHub milestone 'Phase N: ...')")
+    ap.add_argument("--issue", type=int,
+                    help="target a single issue by number; bypasses the autonomy/"
+                         "phase filters but still honors the not-buildable gates")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
 
@@ -223,22 +266,34 @@ def main():
     if issues is None:
         sys.exit(2)
 
-    result = select(issues, _me(args.me), args.autonomy)
+    result = select(issues, _me(args.me), args.autonomy, args.phase, args.issue)
 
     if args.json:
         print(json.dumps(result, indent=2))
         sys.exit(0)
 
+    scope = f"autonomy={args.autonomy}"
+    if args.phase is not None:
+        scope += f", phase={args.phase}"
+    if args.issue is not None:
+        scope = f"issue=#{args.issue}"
+
+    # A targeted issue that matched nothing at all is not in the managed set.
+    if args.issue is not None and not result["actionable"] and not result["excluded"]:
+        print(f"Issue #{args.issue} is not a make-issues issue in {args.repo} "
+              "(no managed issue with that number).")
+        sys.exit(0)
+
     q = result["actionable"]
     if q:
-        print(f"Actionable ({len(q)}, autonomy={args.autonomy}):")
+        print(f"Actionable ({len(q)}, {scope}):")
         for it in q:
             tag = " [resume]" if it["resumable"] else ""
             trace = f" trace:{','.join(it['trace_tdd'])}" if it["trace_tdd"] else ""
             print(f"  #{it['number']} [{it['autonomy']}] {it['title']}{trace}{tag}")
         print(f"\nNext: #{q[0]['number']}{' (resume)' if q[0]['resumable'] else ''}")
     else:
-        print(f"No actionable issues (autonomy={args.autonomy}).")
+        print(f"No actionable issues ({scope}).")
     if result["excluded"]:
         print(f"\nExcluded ({len(result['excluded'])}):")
         for ex in result["excluded"]:

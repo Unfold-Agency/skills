@@ -5,7 +5,7 @@
 # GENERATED FILE. The Skill compiles this from the TDD markdown on every
 # version bump. Never hand-edit. If this file and the markdown disagree,
 # the markdown wins and this file is regenerated. The validator enforces
-# the rules listed at the bottom (V-001 .. V-016) and fails the build on
+# the rules listed at the bottom (V-001 .. V-018) and fails the build on
 # any violation.
 #
 # Consumers:
@@ -183,6 +183,31 @@ traceability:
       satisfied_by: []           # capability IDs (ENT/WF/STM/INTG/TNF/ADR)
   unmapped: []                   # PRD must/should IDs with no satisfier yet
 
+# ── Section 14: Implementation Plan ──────────────────────────────────
+# OPTIONAL collection. When non-empty it is the build sequence: the active
+# capabilities grouped into ordered, shippable phases, approved by the
+# engineer during design. make-issues projects it onto GitHub milestones
+# (one per phase, title "Phase <number>: <name>") and assigns each issue to
+# the milestone for its capability's phase; do-work --phase=<N> drains a
+# single phase. Phase lives HERE, never on a capability record, so a
+# capability moving phases does NOT change its per-capability fingerprint --
+# a re-sequence is sequencing, not a contract change. Phases key on the
+# integer `number`; they are a planning overlay and may be reorganized (they
+# are not subject to the no-vanishing-IDs rule, V-009). V-018 applies only
+# when this collection is non-empty; an absent/empty plan is valid.
+implementation_phases:
+  - number: 1                    # ordinal >=1, unique across phases; the stable
+                                 # key. do-work --phase=N matches it; the
+                                 # milestone title is "Phase <number>: <name>"
+    name: ""                     # short label, e.g. "Foundation"
+    summary: ""                  # what this phase covers and why it is here
+    delivers: ""                 # what is working / demoable at the phase end
+    capabilities: []             # capability IDs delivered here
+                                 # (ENT/WF/STM/INTG/TNF/ADR)
+    exit_criteria: ""            # how we know the phase is complete
+    depends_on: []               # earlier phase NUMBERS that must finish first
+    status: active               # active | superseded | deferred
+
 # ── Section 1.1 ──────────────────────────────────────────────────────
 change_log:
   - version: "0.1"
@@ -239,4 +264,14 @@ change_log:
 #          data file (detects hand-edits and drift)
 #   V-016  Version sync (needs --tdd-md): markdown frontmatter version equals
 #          meta.tdd_version
+#
+# Implementation plan (only when implementation_phases is non-empty)
+#   V-018  Each phase has a unique integer number >= 1, a non-empty name, and a
+#          status of active | superseded | deferred; every capability listed in
+#          a phase resolves to an active capability (ENT/WF/STM/INTG/TNF/ADR);
+#          every ACTIVE capability appears in exactly one ACTIVE phase (total
+#          coverage, no double-assignment); every depends_on resolves to a real
+#          phase number, no phase depends on itself, and the phase graph is
+#          acyclic. An absent or empty implementation_phases is valid -- the
+#          plan is recommended, not required.
 # ═══════════════════════════════════════════════════════════════════

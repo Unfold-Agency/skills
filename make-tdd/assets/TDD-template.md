@@ -102,9 +102,8 @@ prd_version: ""           # LOCK: the latest PRD version this TDD was derived
                           # versions before the TDD existed -- lock to whatever
                           # the latest is. If the PRD later bumps past this, the
                           # TDD is out of date and /make-tdd must be re-run.
-data_file: ""             # path to derived tdd-data.yaml (generated,
-                          # never hand-edited; version must match).
-                          # Canonical: docs/tdd-data.yaml
+data_file: "docs/tdd-data.yaml"   # canonical derived path (generated,
+                          # never hand-edited; version must match)
 # --- System of record & location (see Section 1.4) ---
 system_of_record: claude-project   # claude-project | git
 repo:                     # null/blank until the promotion event

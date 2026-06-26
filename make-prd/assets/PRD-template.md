@@ -91,9 +91,8 @@ supersedes: ""            # previous version, e.g. "1.3"
 status: draft             # draft | review | approved | superseded
 last_updated: ""          # YYYY-MM-DD
 authors: []
-data_file: ""             # path to derived prd-data.yaml (generated,
-                          # never hand-edited; version must match).
-                          # Canonical: docs/prd-data.yaml
+data_file: "docs/prd-data.yaml"   # canonical derived path (generated,
+                          # never hand-edited; version must match)
 shards: []                # e.g. ["07-requirements/checkout.md"] (relative
                           # to docs/) — empty for single-file PRDs
 related_docs:

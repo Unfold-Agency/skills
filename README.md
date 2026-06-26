@@ -74,6 +74,21 @@ discovery ──/make-prd──▶  PRD  ──/make-tdd──▶  TDD  ──/m
 
 **Loop-back.** Change flows forward only. Amend the PRD → re-run `/make-tdd` to re-derive and re-lock → re-run `/make-issues` to reconcile → `/do-work` resumes building. You never edit scope inside an issue or skip a lane: each skill diffs rather than rewrites, preserves IDs, and reports what downstream work the change owes. When a build hits a wall, `/do-work` escalates *back* up the same chain -- a design gap to `/make-tdd`, a wrong requirement to `/make-prd` -- rather than coding around it.
 
+**Where the artifacts live.** In a project repo the planning artifacts have one canonical home -- `docs/`:
+
+```
+docs/
+├─ PRD-<project>.md  +  prd-data.yaml     # what / why  (make-prd)
+├─ TDD-<project>.md  +  tdd-data.yaml     # how         (make-tdd)
+└─ archive/                               # prior versions, stamped with their version
+   ├─ PRD-<project>-v1.0.md  +  prd-data-v1.0.yaml
+   └─ TDD-<project>-v0.2.md  +  tdd-data-v0.2.yaml
+```
+
+The Markdown is the document people read and sign; the derived `*-data.yaml` is the never-hand-edited file the downstream skills consume. The live files keep their canonical names -- the version lives in the frontmatter. On every version bump the amending skill snapshots the outgoing pair into `docs/archive/` before applying the diff, so each prior version is frozen with its version in the filename (and the archived `*-data.yaml` is exactly what the validator's `--prev` reads). `make-issues` and `do-work` read `docs/prd-data.yaml` and `docs/tdd-data.yaml` by default.
+
+> **Migrating an existing repo:** move `prd-data.yaml` / `tdd-data.yaml` and the PRD/TDD Markdown into `docs/`, update the frontmatter `data_file` (and the TDD's `repo.path`) to the new paths, and seed `docs/archive/` from prior versions if you have them. After that the default `docs/` paths just work.
+
 **One thread, end to end:**
 
 | Lane | Artifact | IDs |

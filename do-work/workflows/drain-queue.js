@@ -227,7 +227,7 @@ const MERGE_SCHEMA = {
 // ── prompts ─────────────────────────────────────────────────────────────
 const preflightPrompt = () =>
   `Run the do-work preflight gate for ${REPO} and report the verdict.\n` +
-  `Execute: python ${SKILL}/scripts/work_preflight.py --prd prd-data.yaml --tdd tdd-data.yaml --repo ${REPO} --json\n` +
+  `Execute: python ${SKILL}/scripts/work_preflight.py --prd docs/prd-data.yaml --tdd docs/tdd-data.yaml --repo ${REPO} --json\n` +
   `Ensure the do-work lifecycle labels exist (create any the advisory lists as missing): ` +
   `gh label create status:doing --color 1d76db --force; gh label create escalated --color d93f0b --force; ` +
   `gh label create needs-human-review --color fbca04 --force.\n` +
@@ -251,7 +251,7 @@ const workerPrompt = (item, dangerous) =>
     : ``) +
   `Follow the do-work execution loop -- full detail in ${SKILL}/references/execution-loop.md:\n` +
   `1. Claim: gh issue edit ${item.number} --repo ${REPO} --add-assignee @me --add-label status:doing\n` +
-  `2. Read: gh issue view ${item.number} --repo ${REPO} (Goal, What to build, Acceptance criteria, Test plan, and the make-issues:meta block). Read the traced TDD capability by ID in tdd-data.yaml / TDD.md, and the trace_prd requirement for the why. Respect any binding constraints (BC-).\n` +
+  `2. Read: gh issue view ${item.number} --repo ${REPO} (Goal, What to build, Acceptance criteria, Test plan, and the make-issues:meta block). Read the traced TDD capability by ID in docs/tdd-data.yaml (and the TDD markdown alongside it in docs/), and the trace_prd requirement for the why. Respect any binding constraints (BC-).\n` +
   `3. Build ONLY this slice on a new branch <type>/issue-${item.number}-<slug> off the default branch. Conventional Commits + GitMoji, one logical change per commit.\n` +
   `4. Verify: detect and run the repo's build gate (typecheck / lint / tests -- check package.json, Makefile, pyproject.toml, CI config, CLAUDE.md) AND the issue's Test plan. Do NOT open a PR on a red gate.\n` +
   `5. git push -u origin <branch>, then open a PR using ${SKILL}/assets/pr-body-template.md: include "Closes #${item.number}", the trace mirrored from the issue meta, and the acceptance checklist. Open it ready-for-review (not draft).\n` +

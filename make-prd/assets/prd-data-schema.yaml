@@ -35,8 +35,8 @@ meta:
   prd_version: ""                # MUST exactly match markdown `version`
   prd_status: draft              # draft | review | approved | superseded
   generated_from:                # markdown master + shards compiled
-    master: "PRD-[project].md"
-    shards: []
+    master: "docs/PRD-[project].md"
+    shards: []                     # e.g. ["docs/07-requirements/checkout.md"]
   generated_at: ""               # ISO 8601 timestamp
   template_version: "1.1"        # PRD markdown template version used
   related_docs:

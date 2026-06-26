@@ -48,11 +48,11 @@ The derive → validate → fix loop is mechanical and verbose, and the same in 
 
 - The finalized PRD Markdown (master + shards)
 - `assets/prd-data-schema.yaml` and `scripts/validate_prd.py`
-- In Amend mode, the prior `prd-data.yaml` for `--prev`
+- In Amend mode, the prior `docs/archive/prd-data-v<old>.yaml` for `--prev`
 
 The sub-agent:
 
-1. Derives `prd-data.yaml` per the schema.
+1. Derives `docs/prd-data.yaml` per the schema.
 2. Runs the validator (`--prd-md`, plus `--prev` in Amend mode).
 3. Fixes failures -- downgrading unsourced items to Known Unknowns where the guide requires, never inventing sources to pass.
 4. Returns the validated YAML and the standard report: counts per section, open KUs, open conflicts, and anything it downgraded.

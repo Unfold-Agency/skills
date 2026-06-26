@@ -51,10 +51,21 @@ TWO FILES, ONE TRUTH
 SHARDING (LARGE ENGAGEMENTS)
 - When Section 7 exceeds ~30 FRs or review becomes unwieldy, shard:
   keep this file as the master index (Sections 1–6, 8–14) and move
-  Section 7 detail into /prd/07-requirements/[feature-area].md, one
+  Section 7 detail into docs/07-requirements/[feature-area].md, one
   file per feature area from 6.1. List shards in the frontmatter.
   IDs stay globally unique across shards; the derived YAML is always
   compiled from master + all shards as one logical document.
+
+FILING & ARCHIVING
+- The canonical home for the PRD pair in a repo is docs/: the master
+  Markdown at docs/PRD-[project].md and the derived docs/prd-data.yaml.
+  Shards live under docs/07-requirements/. The live files always keep
+  these names -- the version lives in the frontmatter, never the filename.
+- On every version bump (amend mode, before applying the diff), snapshot
+  the OUTGOING version into docs/archive/ with its version in the name:
+  docs/archive/PRD-[project]-v<old>.md and docs/archive/prd-data-v<old>.yaml.
+  The archived prior prd-data.yaml is exactly what the validator's --prev
+  consumes. Generate mode (v0.1) archives nothing.
 
 ID PREFIXES
   BO-  Business objective        FR-  Functional requirement
@@ -80,10 +91,10 @@ supersedes: ""            # previous version, e.g. "1.3"
 status: draft             # draft | review | approved | superseded
 last_updated: ""          # YYYY-MM-DD
 authors: []
-data_file: ""             # path to derived prd-data.yaml (generated,
+data_file: "docs/prd-data.yaml"   # canonical derived path (generated,
                           # never hand-edited; version must match)
-shards: []                # e.g. ["07-requirements/checkout.md"] —
-                          # empty for single-file PRDs
+shards: []                # e.g. ["07-requirements/checkout.md"] (relative
+                          # to docs/) — empty for single-file PRDs
 related_docs:
   brief: ""               # link or path to the Brief
   tdd: ""                 # link or path to the TDD (may not exist yet)

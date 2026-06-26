@@ -21,7 +21,14 @@ The doctrine that governs everything: the PRD states **WHAT and WHY, never HOW**
 - `references/extraction-guide.md` — read in Generate mode: corpus intake, citation discipline, conflict handling, the question pass.
 - `references/amendment-protocol.md` — read in Amend mode: change classification, version bumping, propagation, escalation handling.
 - `references/orchestration.md` — read for large corpora and before YAML derivation: read sources in parallel with sub-agents, keep extraction central, offload the derive+validate loop.
-- `scripts/validate_prd.py` — run after every YAML derivation: `python scripts/validate_prd.py <prd-data.yaml> [--prd-md <PRD.md>] [--prev <previous-prd-data.yaml>]`. Requires PyYAML (`pip install pyyaml --break-system-packages` if missing). Exit code 0 = pass. Never present a PRD whose data file fails validation; fix or downgrade items (e.g., unsourced requirement → known unknown) until it passes, and tell the user about anything you downgraded.
+- `scripts/validate_prd.py` — run after every YAML derivation: `python scripts/validate_prd.py docs/prd-data.yaml [--prd-md docs/PRD-<project>.md] [--prev docs/archive/prd-data-v<old>.yaml]`. Requires PyYAML (`pip install pyyaml --break-system-packages` if missing). Exit code 0 = pass. Never present a PRD whose data file fails validation; fix or downgrade items (e.g., unsourced requirement → known unknown) until it passes, and tell the user about anything you downgraded.
+
+## Location, filing & archiving
+
+The PRD pair has one canonical home in a repo: **`docs/`**. The master Markdown is `docs/PRD-<project>.md` and the derived data file is `docs/prd-data.yaml` (shards, for large engagements, under `docs/07-requirements/`). The live files always keep these names -- the version lives in the frontmatter, never the filename; record the live path in frontmatter `data_file`. Before a repo exists the pair may live in a Claude Project; `docs/` is the repo layout.
+
+**Archive on every bump.** In amend mode, *before* applying the diff, snapshot the outgoing version into `docs/archive/` with its version in the name -- `docs/archive/PRD-<project>-v<old>.md` and `docs/archive/prd-data-v<old>.yaml` -- then amend the live files in place and bump. The archived prior `prd-data.yaml` is exactly what the validator's `--prev` reads, so the archive is functional, not just history. Generate mode (v0.1) archives nothing.
+
 ## Generate mode workflow
  
 1. **Assemble the corpus, then inventory, then extract.** If the user hasn't supplied the full corpus, read `references/corpus-intake.md` and gather within a named scope — never search the whole account. Inventory every input (gathered or supplied) into the Source Index (Appendix A) with a stable handle, and confirm that index with the user before extracting anything. If an input lacks what citations need (a transcript with no timestamps, an unnamed notes file), note it — items from weak sources get weaker locators, not invented ones. Then read `references/extraction-guide.md`; for a large corpus, read `references/orchestration.md` first.
@@ -39,7 +46,7 @@ Version starts at 0.1, status `draft`. Only a human moves it to `approved`. Once
 1. Read `references/amendment-protocol.md`, the existing PRD (both files), and the change trigger. If the trigger references material you don't have (the meeting where a change was decided, an email thread, a UAT report), gather it within a named scope first — `references/corpus-intake.md` applies here too.
 2. **Classify the change** (this is the heart of amend mode): ticket refinement (alters no ID'd item — tell the user it doesn't touch the PRD and stop), minor (additive/clarifying, x.Y bump), or major (changes meaning of an existing item, X.0 bump, approval required).
 3. **Apply the diff.** Never renumber or delete IDs — supersede or defer them. Record the change in Section 1.1 with class, changed IDs, and trigger reference. Log the decision in Section 13 if a judgment call was made.
-4. **Re-derive the YAML, run the validator with `--prev`** pointed at the prior version's data file (this enforces the no-vanishing-IDs rule, V-005).
+4. **Snapshot, then re-derive.** First copy the outgoing live files into `docs/archive/` (`docs/archive/PRD-<project>-v<old>.md` and `docs/archive/prd-data-v<old>.yaml`). Then regenerate `docs/prd-data.yaml` and run the validator with `--prev docs/archive/prd-data-v<old>.yaml` (this enforces the no-vanishing-IDs rule, V-005).
 5. **Report propagation.** For major amendments, output the impact list: changed IDs, which downstream artifacts reference them, and the Section 1.3 steps still owed. A PRD change reaches GitHub issues only through the TDD: re-run `/make-tdd` to re-derive and re-lock to this PRD version, then `/make-issues` to sync -- issues are pinned to a TDD version and never reconciled against the PRD directly. The skill prepares the propagation; humans execute the approvals.
 ## Escalations
  

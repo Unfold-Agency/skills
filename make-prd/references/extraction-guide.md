@@ -59,5 +59,5 @@ Ask the user the top questions directly -- cap around 7, highest value first. Ev
 - Strip every HTML guidance comment from the final Markdown.
 - Write Section 2 (Summary) last, one page max, plain words.
 - Default NFRs (WCAG 2.2 AA, analytics instrumentation) stay unless explicitly waived; record waivers in Section 13.
-- Derive `prd-data.yaml`, run `scripts/validate_prd.py`, and fix every failure before presenting. If fixing means downgrading an item (unsourced FR → KU), say so in your report.
+- Derive `docs/prd-data.yaml`, run `scripts/validate_prd.py`, and fix every failure before presenting. If fixing means downgrading an item (unsourced FR → KU), say so in your report.
 - Report to the user: counts per section, open KUs, open conflicts, questions asked, items routed somewhere they might not expect.

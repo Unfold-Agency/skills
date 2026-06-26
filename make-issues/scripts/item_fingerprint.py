@@ -11,9 +11,9 @@ endpoint, NFR requirement, or satisfied-requirement set does.
 Normalization mirrors make-tdd's compute_fingerprint exactly (deep structure ->
 yaml.safe_dump(sort_keys=True) -> sha256), applied to one record's projection.
 
-  python scripts/item_fingerprint.py <tdd-data.yaml>            # all capabilities
-  python scripts/item_fingerprint.py <tdd-data.yaml> --json     # {id: hash}
-  python scripts/item_fingerprint.py <tdd-data.yaml> --id WF-003 # one capability
+  python scripts/item_fingerprint.py docs/tdd-data.yaml            # all capabilities
+  python scripts/item_fingerprint.py docs/tdd-data.yaml --json     # {id: hash}
+  python scripts/item_fingerprint.py docs/tdd-data.yaml --id WF-003 # one capability
 
 Exit codes: 0 = ok, 1 = --id not found / not a capability, 2 = file/parse error.
 """
@@ -143,7 +143,7 @@ def collect_capabilities(doc):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("data_file", help="tdd-data.yaml")
+    ap.add_argument("data_file", help="path to tdd-data.yaml (e.g. docs/tdd-data.yaml)")
     ap.add_argument("--id", help="print only this capability's fingerprint")
     ap.add_argument("--json", action="store_true", help="emit a JSON {id: hash} map")
     args = ap.parse_args()

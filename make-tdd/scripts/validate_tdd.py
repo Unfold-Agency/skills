@@ -3,8 +3,8 @@
 validate_tdd.py — enforce validator rules V-001..V-018 against tdd-data.yaml
 
 Usage:
-  python validate_tdd.py <tdd-data.yaml> [--prd <prd-data.yaml>]
-                         [--tdd-md <TDD.md>] [--prev <previous-tdd-data.yaml>]
+  python validate_tdd.py docs/tdd-data.yaml [--prd docs/prd-data.yaml]
+                         [--tdd-md docs/TDD-<project>.md] [--prev docs/archive/tdd-data-v<old>.yaml]
 
 Exit codes: 0 = pass, 1 = violations found, 2 = file/parse error.
 
@@ -192,9 +192,9 @@ def md_frontmatter_version(md_text):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("data_file")
-    ap.add_argument("--prd", help="prd-data.yaml, for V-003 coverage and V-007 references")
-    ap.add_argument("--tdd-md", dest="tdd_md", help="TDD.md, for V-008 diagrams and V-016 version sync")
-    ap.add_argument("--prev", help="prior tdd-data.yaml, for V-009 vanished-ID check")
+    ap.add_argument("--prd", help="prd-data.yaml (e.g. docs/prd-data.yaml), for V-003 coverage and V-007 references")
+    ap.add_argument("--tdd-md", dest="tdd_md", help="TDD markdown (e.g. docs/TDD-<project>.md), for V-008 diagrams and V-016 version sync")
+    ap.add_argument("--prev", help="prior tdd-data.yaml (e.g. docs/archive/tdd-data-v<old>.yaml), for V-009 vanished-ID check")
     args = ap.parse_args()
 
     try:

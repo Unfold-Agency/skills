@@ -15,10 +15,10 @@ native dependency edge: derived from the TDD and re-asserted on every sync. The
 leading "Phase <number>" of the title is the stable key both this skill and
 do-work match on; the name is a human label that may change.
 
-  python scripts/phase_milestones.py <tdd-data.yaml>                 # human-readable maps
-  python scripts/phase_milestones.py <tdd-data.yaml> --json          # {cap_to_phase, phase_title, ...}
-  python scripts/phase_milestones.py <tdd-data.yaml> --trace WF-001,INTG-001
-  python scripts/phase_milestones.py <tdd-data.yaml> --ensure --repo owner/name
+  python scripts/phase_milestones.py docs/tdd-data.yaml                 # human-readable maps
+  python scripts/phase_milestones.py docs/tdd-data.yaml --json          # {cap_to_phase, phase_title, ...}
+  python scripts/phase_milestones.py docs/tdd-data.yaml --trace WF-001,INTG-001
+  python scripts/phase_milestones.py docs/tdd-data.yaml --ensure --repo owner/name
 
 Exit codes: 0 = ok, 1 = bad args / unresolved, 2 = file/parse error,
             3 = a gh call failed (with --ensure).
@@ -169,7 +169,7 @@ def ensure_milestones(repo, phase_meta):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("data_file", help="tdd-data.yaml")
+    ap.add_argument("data_file", help="path to tdd-data.yaml (e.g. docs/tdd-data.yaml)")
     ap.add_argument("--json", action="store_true", help="emit the maps as JSON")
     ap.add_argument("--trace", help="comma-separated trace_tdd IDs; print that issue's phase")
     ap.add_argument("--ensure", action="store_true",

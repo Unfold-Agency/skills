@@ -15,7 +15,7 @@ If this run is a promotion event (a `claude-project` TDD now opened inside a rep
 
 Read, in order:
 1. The existing TDD Markdown.
-2. The existing `tdd-data.yaml` (you need it for `--prev` validation).
+2. The existing `docs/tdd-data.yaml` (you need it for `--prev` validation).
 3. The change trigger -- one of:
    - **PRD amendment** (the WHAT changed; the most common trigger -- a new PRD version changed or added a requirement)
    - **Build blocker** (an engineer or agent hit something the design didn't anticipate)
@@ -41,6 +41,7 @@ Borderline calls: classify conservatively (prefer major) and log the reasoning. 
 
 ## 4. Applying the diff
 
+- **Snapshot the outgoing version first.** Before editing, copy the live pair into `docs/archive/` stamped with the current (outgoing) version: `cp docs/TDD-<project>.md docs/archive/TDD-<project>-v<old>.md` and `cp docs/tdd-data.yaml docs/archive/tdd-data-v<old>.yaml`. This freezes the point-in-time record and gives `--prev` (§5) its input. Then amend the live files in place.
 - Edit only the affected sections of the Markdown.
 - **Never delete or renumber an ID.** Items leave service via `status: superseded` (replaced or cut) or `status: deferred` (pushed to a later phase). A superseded decision's replacement gets a NEW id with a note pointing back.
 - **Keep the implementation plan covering** (if the TDD has one, Section 14 / `implementation_phases`). Place every new active capability in a phase and drop superseded/deferred ones, so the plan stays a total cover (V-018). Unlike a capability ID, a phase is a planning overlay -- you may re-sequence, merge, or renumber phases. Re-present the plan when the phasing changes materially. Re-sequencing a capability does not change its per-capability fingerprint, so downstream `make-issues` re-aligns the milestone on the next sync silently, without flagging the issue.
@@ -49,10 +50,10 @@ Borderline calls: classify conservatively (prefer major) and log the reasoning. 
 
 ## 5. Re-derive and validate
 
-Regenerate `tdd-data.yaml` from the amended Markdown, regenerate `meta.fingerprint`, then:
+Regenerate `docs/tdd-data.yaml` from the amended Markdown, regenerate `meta.fingerprint`, then:
 
 ```
-python scripts/validate_tdd.py tdd-data.yaml --prd prd-data.yaml --tdd-md TDD.md --prev <prior tdd-data.yaml>
+python scripts/validate_tdd.py docs/tdd-data.yaml --prd docs/prd-data.yaml --tdd-md docs/TDD-<project>.md --prev docs/archive/tdd-data-v<old>.yaml
 ```
 
 `--prev` is not optional in amend mode -- it enforces V-009 (no ID present in the prior version may vanish). `--prd` should point at the PRD version this TDD now satisfies.

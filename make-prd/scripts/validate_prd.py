@@ -3,7 +3,7 @@
 validate_prd.py — enforce validator rules V-001..V-016 against prd-data.yaml
 
 Usage:
-  python validate_prd.py <prd-data.yaml> [--prd-md <PRD.md>] [--prev <previous-prd-data.yaml>]
+  python validate_prd.py docs/prd-data.yaml [--prd-md docs/PRD-<project>.md] [--prev docs/archive/prd-data-v<old>.yaml]
 
 Exit codes: 0 = pass, 1 = violations found, 2 = file/parse error.
 
@@ -100,7 +100,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("data_file")
     ap.add_argument("--prd-md", help="PRD markdown master, for V-001 version sync")
-    ap.add_argument("--prev", help="prior prd-data.yaml, for V-005 vanished-ID check")
+    ap.add_argument("--prev", help="prior prd-data.yaml (e.g. docs/archive/prd-data-v<old>.yaml), for V-005 vanished-ID check")
     args = ap.parse_args()
 
     try:

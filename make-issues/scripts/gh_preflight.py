@@ -14,7 +14,8 @@ Checks, in order of dependency:
   5. mode + labels -- existing make-issues-labelled issues -> generate|sync, and
                       which static labels are missing (the skill creates them)
 
-  python scripts/gh_preflight.py --prd prd-data.yaml --tdd tdd-data.yaml
+  python scripts/gh_preflight.py --prd docs/prd-data.yaml --tdd docs/tdd-data.yaml
+  python scripts/gh_preflight.py   # --prd/--tdd default to docs/{prd,tdd}-data.yaml
   python scripts/gh_preflight.py --prd ... --tdd ... --repo owner/name --json
 
 Exit codes: 0 = gate passes, 1 = a check failed, 2 = the data files can't be read.
@@ -103,8 +104,9 @@ def check_version_lock(prd_path, tdd_path):
     locked, err2 = _meta_version(tdd_path)
     if err1 or err2:
         return {"name": "version_lock", "ok": False, "fatal": True,
-                "detail": f"{err1 or err2} -- both prd-data.yaml and tdd-data.yaml "
-                          "must be in the working tree to verify the lock"}
+                "detail": f"{err1 or err2} -- both data files (canonically "
+                          "docs/prd-data.yaml and docs/tdd-data.yaml) "
+                          "must be present to verify the lock"}
     ok = bool(live) and bool(locked) and live == locked
     if ok:
         detail = f"PRD v{live} == TDD lock v{locked}"
@@ -187,8 +189,8 @@ def detect_mode_and_labels(repo):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--prd", required=True, help="prd-data.yaml")
-    ap.add_argument("--tdd", required=True, help="tdd-data.yaml")
+    ap.add_argument("--prd", default="docs/prd-data.yaml", help="prd-data.yaml (default: docs/prd-data.yaml)")
+    ap.add_argument("--tdd", default="docs/tdd-data.yaml", help="tdd-data.yaml (default: docs/tdd-data.yaml)")
     ap.add_argument("--repo", help="owner/name; skip gh repo auto-detect")
     ap.add_argument("--json", action="store_true", help="emit the verdict as JSON")
     args = ap.parse_args()

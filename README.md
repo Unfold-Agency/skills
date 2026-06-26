@@ -52,6 +52,7 @@ Standalone `do-` skills -- they perform actions, like the pipeline's `do-work`, 
 | [`do-git-workflow`](./do-git-workflow) | Enforces a branch-first Git workflow -- `type/short-description` branches, Conventional Commits with GitMoji prefixes, and pull requests opened via the `gh` CLI (ready for review by default; draft only mid-work). |
 | [`do-pr-review`](./do-pr-review) | Reviews a GitHub PR diff, posts inline review comments, validates or rejects existing comments in-thread, and submits a verdict. Comment-only -- never edits code. Also runs as the review step inside `do-work`'s drain. |
 | [`do-pr-fix`](./do-pr-fix) | Implements the requested changes on a reviewed PR, replies in-thread explaining each fix, runs tests/build, and pushes the commits -- the back-half of the review loop and companion to `do-pr-review`. Also runs as the fix step inside `do-work`'s drain. |
+| [`do-pr-merge`](./do-pr-merge) | Merges an open PR by dispatching a Haiku sub-agent that runs the merge and (by default) deletes the head branch. Method defaults to the repo's configured strategy (linear-preferred); `--squash`/`--merge`/`--rebase` override, `--no-delete` keeps the branch. Merge-only -- never reviews or edits code, and respects branch protection (no `--admin` bypass). |
 
 Skills load progressively: only the frontmatter `description` sits in context at all times; the `SKILL.md` body loads when the skill is triggered, and supporting files load only when referenced. Keep that in mind when adding to a skill -- bundled reference files are effectively free until used.
 

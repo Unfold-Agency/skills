@@ -44,10 +44,10 @@ The mechanics (the worker brief, the verdict contract, the review/merge gate, wo
 ## Preflight (always, first action)
 
 ```
-python scripts/work_preflight.py --prd prd-data.yaml --tdd tdd-data.yaml
+python scripts/work_preflight.py --prd docs/prd-data.yaml --tdd docs/tdd-data.yaml
 ```
 
-**Both data files must be in the working tree** -- the lock needs both, same as `make-issues` (the TDD is often promoted into the repo while the PRD still lives in a Claude Project; bring a current `prd-data.yaml` in first). The gate checks, in order: `gh auth status`; **gh >= 2.94.0** (`brew upgrade gh` if older); the **version lock** (`prd-data.meta.prd_version` must equal `tdd-data.meta.prd_version` -- if not, the whole backlog is built against a moved PRD; stop and send the user to `/make-tdd` to re-lock, then `/make-issues` to sync); a git work tree with a resolvable `owner/name`; and that a **backlog exists** (no managed issues -> run `/make-issues` first).
+**Both data files must be in `docs/`** -- the lock needs both, same as `make-issues` (the TDD is often promoted into the repo while the PRD still lives in a Claude Project; bring a current `docs/prd-data.yaml` in first). The gate checks, in order: `gh auth status`; **gh >= 2.94.0** (`brew upgrade gh` if older); the **version lock** (`prd-data.meta.prd_version` must equal `tdd-data.meta.prd_version` -- if not, the whole backlog is built against a moved PRD; stop and send the user to `/make-tdd` to re-lock, then `/make-issues` to sync); a git work tree with a resolvable `owner/name`; and that a **backlog exists** (no managed issues -> run `/make-issues` first).
 
 It then prints non-gating **advisories**: open issues carrying `needs-rebase` / `spec-drift` / `orphaned` / `escalated` are **not buildable** until resolved; a possibly-owed `/make-issues` sync; and any missing do-work labels (`status:doing`, `escalated`, and `needs-human-review` -- the last is applied to the follow-up issues `--dangerously` opens) -- create them with `gh label create <name> --color <hex> --description "..." --force` before using them.
 

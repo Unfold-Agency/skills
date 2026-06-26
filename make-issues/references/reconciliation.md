@@ -12,8 +12,8 @@ gh issue list --repo <owner/name> --label make-issues --state all --limit 1000 \
 ```
 
 - **`by_cap[cap_id] -> issue`.** The match key is the meta block's `trace_tdd` (parse the YAML between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`). If the meta block is missing or malformed, **do not try to auto-recover by parsing the body** -- the `## Traceability` table is free prose, not a machine contract. Flag the issue and stop reconciling it; a human reads the capability ID from that table, re-stamps the meta block, and re-runs the sync. One capability may map to more than one issue (it was sliced into several) -- keep them all.
-- **`tdd_caps[cap_id] -> {record, fingerprint}`.** From `item_fingerprint.py <tdd-data.yaml>` plus the records themselves. Skip `superseded`/`deferred` capabilities when deciding what should exist, but keep their IDs so you can recognize an issue that points at one (an orphan, below).
-- **`cap_to_phase` + `phase_title`** (only when the TDD has a plan). From `phase_milestones.py <tdd-data.yaml> --json`. Used by the milestone-alignment pass (§6), independently of the fingerprint axis.
+- **`tdd_caps[cap_id] -> {record, fingerprint}`.** From `item_fingerprint.py docs/tdd-data.yaml` plus the records themselves. Skip `superseded`/`deferred` capabilities when deciding what should exist, but keep their IDs so you can recognize an issue that points at one (an orphan, below).
+- **`cap_to_phase` + `phase_title`** (only when the TDD has a plan). From `phase_milestones.py docs/tdd-data.yaml --json`. Used by the milestone-alignment pass (§6), independently of the fingerprint axis.
 
 ## 2. Detect each issue's state
 
@@ -82,7 +82,7 @@ GitHub dependency edges (`--blocked-by`/`--blocking`) **cannot be read back** th
 
 When the TDD has an implementation plan, each issue belongs to a GitHub milestone -- one per phase, title `Phase <N>: <name>`. This is a **separate axis from the fingerprint decision tree** (§3), and it runs on every sync regardless of fingerprint, exactly like the dependency-edge re-assertion in §5. Phase is sequencing, not contract -- it lives only in the TDD's `implementation_phases`, never on a capability record, so a re-phase never changes a per-capability fingerprint and never trips `needs-rebase`/`spec-drift`.
 
-1. **Ensure the milestones exist:** `phase_milestones.py <tdd-data.yaml> --ensure --repo <owner/name>`. Idempotent; it creates missing milestones and patches a renamed/relabelled one in place (matched on the leading `Phase <N>`), so re-sequencing never orphans a milestone its issues still hang off.
+1. **Ensure the milestones exist:** `phase_milestones.py docs/tdd-data.yaml --ensure --repo <owner/name>`. Idempotent; it creates missing milestones and patches a renamed/relabelled one in place (matched on the leading `Phase <N>`), so re-sequencing never orphans a milestone its issues still hang off.
 2. **For each managed issue**, compute its intended phase from `cap_to_phase` and its `trace_tdd` (the **latest** phase among its capabilities; a phase-spanning issue is filed under the latest and noted as a slicing smell). Compare to the issue's live `milestone` (from the JSON above).
 3. **If they differ, re-assign silently** -- `gh issue edit <N> --repo <owner/name> --milestone "Phase <N>: <name>"` -- and record it in the report. Do **not** add a flag: a moved capability is a re-sequence, not a scope change, whatever the issue's state (not-started, started, or HITL). An issue with no traced capability in the plan keeps whatever milestone it has and is reported.
 4. A TDD with **no plan** skips this pass entirely; existing milestones are left untouched.

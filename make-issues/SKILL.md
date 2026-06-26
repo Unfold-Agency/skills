@@ -31,10 +31,10 @@ This skill has two modes. Decide which one applies before doing anything else:
 Run the gate and stop on any failure before touching GitHub:
 
 ```
-python scripts/gh_preflight.py --prd prd-data.yaml --tdd tdd-data.yaml
+python scripts/gh_preflight.py --prd docs/prd-data.yaml --tdd docs/tdd-data.yaml
 ```
 
-**Both data files must be in the working tree.** The TDD is often promoted into the repo while the PRD still lives in a Claude Project (see make-tdd, *Location & system of record*). If only `tdd-data.yaml` is here, the lock cannot be verified -- you can read the TDD's locked version but not whether the live PRD has moved past it. Bring a current `prd-data.yaml` (the version the TDD is locked to) into the tree first; preflight fails fatally and says so if either file is missing.
+**Both data files must be in `docs/`.** The TDD is often promoted into the repo while the PRD still lives in a Claude Project (see make-tdd, *Location & system of record*). If only `docs/tdd-data.yaml` is here, the lock cannot be verified -- you can read the TDD's locked version but not whether the live PRD has moved past it. Bring a current `docs/prd-data.yaml` (the version the TDD is locked to) into the tree first; preflight fails fatally and says so if either file is missing.
 
 It checks, in order: `gh auth status`; **gh >= 2.94.0** (native dependency/type flags -- below that, stop and tell the user to `brew upgrade gh`); a git work tree with a resolvable `owner/name` (confirm the target before any write); the **version-lock gate** (`prd-data.meta.prd_version` must equal `tdd-data.meta.prd_version` -- if not, the TDD is stale; stop and send the user to `/make-tdd` to re-lock); and the existing managed issues, which pick the mode. It reports any missing static labels; create them with `gh label create <name> --color <hex> --description "..." --force` from `assets/labels.yaml`. That static set is the whole scheme -- there are no per-run dynamic labels. Traceability and source versions both live in the issue body (the `## Traceability` table and the meta block), never as labels.
 
@@ -48,7 +48,7 @@ No managed issues -> **Generate**. Managed issues exist -> **Sync**. Both run th
 
 ## Generate mode workflow
 
-1. **Read both sources.** `tdd-data.yaml` (the capabilities, traceability, binding constraints, and `implementation_phases` if present) and `prd-data.yaml` (objectives, success criteria). Read `references/slicing-and-review.md` now.
+1. **Read both sources.** `docs/tdd-data.yaml` (the capabilities, traceability, binding constraints, and `implementation_phases` if present) and `docs/prd-data.yaml` (objectives, success criteria). Read `references/slicing-and-review.md` now.
 2. **Slice thin.** Cut active capabilities into independently-completable, end-to-end work items; prefer many thin slices to few thick ones; mark each AFK or HITL, preferring AFK.
 3. **Assemble each item.** Goal + success criteria from the PRD; what-to-build + test plan + NFRs from the TDD; `trace_tdd` + `trace_prd`; `source_versions` from the two `meta` blocks; `fingerprint` from `item_fingerprint.py --id <CAP>`. No item without a trace. When the TDD has a plan, also note each item's phase from `phase_milestones.py` (carried by the milestone, not the body).
 4. **Review pass (the human gate).** Present the breakdown -- grouped by phase when the TDD has a plan (per item: title, AFK/HITL, blocked-by, trace IDs) -- plus the coverage check (capabilities, requirements, and phases). Iterate to approval. Create nothing first.

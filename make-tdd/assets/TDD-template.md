@@ -64,6 +64,18 @@ SYSTEM OF RECORD (see Section 1.4)
   copy. The Skill cannot lock the other copy — the last mile is team
   discipline.
 
+FILING & ARCHIVING
+- The canonical home for the TDD pair in a repo is docs/: the master
+  Markdown at docs/TDD-[project].md and the derived docs/tdd-data.yaml.
+  The live files always keep these names -- the version lives in the
+  frontmatter, never the filename. (In a Claude Project before promotion,
+  the pair lives in the Project; docs/ is the repo layout, set at promotion.)
+- On every version bump (amend mode, before applying the diff), snapshot
+  the OUTGOING version into docs/archive/ with its version in the name:
+  docs/archive/TDD-[project]-v<old>.md and docs/archive/tdd-data-v<old>.yaml.
+  The archived prior tdd-data.yaml is exactly what the validator's --prev
+  consumes. Generate mode (v0.1) archives nothing.
+
 ID PREFIXES
   ENT-  Entity (data model)        WF-   Workflow / process flow
   STM-  State machine              INTG- Integration / API contract
@@ -91,12 +103,14 @@ prd_version: ""           # LOCK: the latest PRD version this TDD was derived
                           # the latest is. If the PRD later bumps past this, the
                           # TDD is out of date and /make-tdd must be re-run.
 data_file: ""             # path to derived tdd-data.yaml (generated,
-                          # never hand-edited; version must match)
+                          # never hand-edited; version must match).
+                          # Canonical: docs/tdd-data.yaml
 # --- System of record & location (see Section 1.4) ---
 system_of_record: claude-project   # claude-project | git
 repo:                     # null/blank until the promotion event
   url: ""                 # e.g. git@github.com:org/project.git
-  path: ""                # path to this TDD.md within the repo
+  path: ""                # path to this TDD within the repo,
+                          # e.g. docs/TDD-[project].md
 promoted_at: ""           # YYYY-MM-DD, set at promotion; blank in a Project
 fingerprint: ""           # sha256 over the normalized tdd-data.yaml; mirrors
                           # meta.fingerprint, regenerated on save, used for
@@ -169,7 +183,7 @@ checks, warns, stamps, and fingerprints. The last mile is discipline.
 | Field | Value |
 |---|---|
 | System of record | <!-- claude-project | git --> |
-| Repo (if promoted) | <!-- url + path to TDD.md --> |
+| Repo (if promoted) | <!-- url + path to TDD, e.g. docs/TDD-[project].md --> |
 | Promoted at | <!-- YYYY-MM-DD, blank until promotion --> |
 
 ---

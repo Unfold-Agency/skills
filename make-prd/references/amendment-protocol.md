@@ -6,7 +6,7 @@ How to change a PRD that already exists. The prime directive: **diff, don't rewr
 
 Read, in order:
 1. The existing PRD Markdown (master + shards if sharded)
-2. The existing `prd-data.yaml` (you'll need it for `--prev` validation)
+2. The existing `docs/prd-data.yaml` (you'll need it for `--prev` validation)
 3. The change trigger -- one of:
    - **ESC- escalation record** (an agent or human couldn't satisfy a criterion as written)
    - **UAT issue** (bug or change request from Lane 7)
@@ -42,6 +42,7 @@ When the trigger is an escalation:
 
 ## 4. Applying the diff
 
+- **Snapshot the outgoing version first.** Before editing, copy the live pair into `docs/archive/` stamped with the current (outgoing) version: `cp docs/PRD-<project>.md docs/archive/PRD-<project>-v<old>.md` and `cp docs/prd-data.yaml docs/archive/prd-data-v<old>.yaml`. This freezes the point-in-time record and gives `--prev` (§5) its input. Then amend the live files in place.
 - Edit only the affected sections of the Markdown.
 - **Never delete or renumber an ID.** Items leave service via `status: superseded` (replaced or cut) or `status: deferred` (pushed to a later phase). A superseded FR's replacement gets a NEW id with a note pointing back.
 - Add a Version History row (Section 1.1): version, class, changed IDs, summary, trigger reference.
@@ -50,10 +51,10 @@ When the trigger is an escalation:
 
 ## 5. Re-derive and validate
 
-Regenerate `prd-data.yaml` from the amended Markdown (master + shards). Then:
+Regenerate `docs/prd-data.yaml` from the amended Markdown (master + shards). Then:
 
 ```
-python scripts/validate_prd.py prd-data.yaml --prd-md PRD.md --prev <prior prd-data.yaml>
+python scripts/validate_prd.py docs/prd-data.yaml --prd-md docs/PRD-<project>.md --prev docs/archive/prd-data-v<old>.yaml
 ```
 
 `--prev` is not optional in amend mode -- it enforces V-005 (no ID present in the prior version may vanish).

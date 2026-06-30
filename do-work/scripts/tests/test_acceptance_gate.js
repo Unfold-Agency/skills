@@ -96,10 +96,70 @@ check('clean iff non-empty ledger with zero debt',
     })
   })())
 
-console.log()
-if (failures.length) {
-  console.log(`FAILURES: ${failures.join(', ')}`)
-  process.exit(1)
+// ── applyAcceptanceGate: the orchestrator park/merge/follow-up wiring ─────────
+// The pure decisions above feed applyAcceptanceGate, where the keystone actually
+// lives: a non-clean ledger must PARK in normal mode (never a merge candidate)
+// and, under --dangerously, stay a merge candidate while opening a tracked
+// follow-up. Extract the async gate and run it with stubbed harness globals
+// (agent/log) and stubbed prompt builders so those branches are exercised.
+sandbox.acceptanceFollowupPrompt = () => 'followup-prompt'
+sandbox.acceptanceParkPrompt = () => 'park-prompt'
+sandbox.ESCALATE_SCHEMA = {}
+sandbox.MODEL = { escalate: 'm' }
+sandbox.log = () => {}
+let agentCalls = []
+sandbox.agent = async (_prompt, opts) => { agentCalls.push(opts && opts.label); return { labeled: true, summary: 'fu' } }
+vm.runInContext('async ' + extract('applyAcceptanceGate'), sandbox)
+const applyAcceptanceGate = sandbox.applyAcceptanceGate
+
+const builtPR = (ledger) => ({ issue: 1, status: 'built', pr_url: 'https://x/1', as_built: ledger })
+async function runGate(verdict, dangerous) {
+  sandbox.DANGEROUS = dangerous
+  agentCalls = []
+  return applyAcceptanceGate(verdict)
 }
-console.log('acceptance gate decides as expected')
-process.exit(0)
+
+;(async () => {
+  // normal mode: only an all-met ledger stays a merge candidate; everything else parks.
+  let r = await runGate(builtPR([met('a'), met('b')]), false)
+  check('gate normal all-met -> stays built + acceptance.clean (merge candidate)',
+    r.status === 'built' && r.acceptance.clean === true)
+  r = await runGate(builtPR([met('a'), deferred('b')]), false)
+  check('gate normal one-deferred -> parked review_unresolved (never merged)',
+    r.status === 'review_unresolved' && r.acceptance.clean === false)
+  r = await runGate(builtPR([met('a'), mocked('b')]), false)
+  check('gate normal one-mocked -> parked review_unresolved',
+    r.status === 'review_unresolved')
+  r = await runGate(builtPR([]), false)
+  check('gate normal empty ledger -> parked review_unresolved (no_ledger)',
+    r.status === 'review_unresolved' && r.acceptance.no_ledger === true)
+  r = await runGate(builtPR(undefined), false)
+  check('gate normal missing ledger -> parked review_unresolved',
+    r.status === 'review_unresolved')
+
+  // --dangerously: stays a merge candidate, but every gap opens a tracked follow-up.
+  r = await runGate(builtPR([met('a'), deferred('b'), mocked('c')]), true)
+  check('gate dangerous with debt -> stays built + opens a follow-up',
+    r.status === 'built' && r.acceptance.dangerously_proceed === true
+    && r.followups.length === 1 && agentCalls.length === 1)
+  r = await runGate(builtPR([]), true)
+  check('gate dangerous no-ledger -> stays built + opens a follow-up (the fix)',
+    r.status === 'built' && r.acceptance.no_ledger === true
+    && r.followups.length === 1 && agentCalls.length === 1)
+  r = await runGate(builtPR([met('a')]), true)
+  check('gate dangerous all-met -> clean, no follow-up',
+    r.acceptance.clean === true && agentCalls.length === 0)
+
+  // a non-built verdict (already parked / failed) passes through untouched.
+  r = await runGate({ issue: 2, status: 'review_unresolved', pr_url: 'x' }, false)
+  check('gate passes a non-built verdict through unchanged',
+    r.status === 'review_unresolved')
+
+  console.log()
+  if (failures.length) {
+    console.log(`FAILURES: ${failures.join(', ')}`)
+    process.exit(1)
+  }
+  console.log('acceptance gate decides as expected')
+  process.exit(0)
+})()

@@ -6,7 +6,7 @@ Sections:
   2. C1 keystone -- the fingerprint IN/OUT contract: a `priority` change (OUT)
      still passes un-restamped; a meaning change (IN) fails CLOSED with S-006
   3. one targeted mutation per rule trips EXACTLY that rule (re-stamped so only
-     the intended rule fires, mirroring the make-tdd harness)
+     the intended rule fires -- the per-rule mutation pattern)
   4. the EARS classifier (ears_kind) accepts the five forms and rejects non-EARS
   5. the lean budget (S-012) warns without failing
   6. M2 no-vanishing -- origin/main baseline fails CLOSED on a non-repo, an

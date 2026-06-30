@@ -74,6 +74,13 @@ const FIX_SKILL = A.fixSkillDir || `${ROOT}/do-pr-fix`
 // Absent -> the reviewer shares the builder's gh login and the loop keys off the
 // structured blocking_open count (the same-identity fallback, unchanged).
 const REVIEW_TOKEN = A.reviewToken || (typeof process !== 'undefined' && process.env && process.env.GH_REVIEW_TOKEN) || null
+// When the token arrived as an arg, export it so the review subagent's shell can
+// read $GH_REVIEW_TOKEN -- the bot-identity prompt depends on that env var. Without
+// this, args.reviewToken would silently degrade to the same-identity fallback
+// (and miss the fallback's "don't trust the GitHub review state" safeguard).
+if (A.reviewToken && typeof process !== 'undefined' && process.env) {
+  process.env.GH_REVIEW_TOKEN = A.reviewToken
+}
 const HAS_REVIEW_TOKEN = !!REVIEW_TOKEN
 
 if (!REPO || !SKILL) {
@@ -484,8 +491,17 @@ async function applyAcceptanceGate(v) {
         followups: [...(v.followups || []), ...(fu && fu.summary ? [fu.summary] : [])],
       }
     }
-    // No ledger at all under --dangerously: nothing concrete to follow up, but record it.
-    return { ...v, acceptance: { clean: false, debt: 0, no_ledger: true, dangerously_proceed: true } }
+    // No ledger at all under --dangerously: the worst case (acceptance not
+    // demonstrated at all). Open a single follow-up so it is tracked like any
+    // other acceptance debt, not merged on green CI with only a summary line.
+    const fu = await agent(acceptanceFollowupPrompt(v, [{ status: 'deferred',
+        criterion: '(no as-built ledger)', evidence: 'worker returned no as_built entries; acceptance not demonstrated' }]),
+      { schema: ESCALATE_SCHEMA, phase: 'Review', label: `accept-debt #${v.issue}`, model: MODEL.escalate })
+    return {
+      ...v,   // status stays 'built' -- still a merge candidate under --dangerously
+      acceptance: { clean: false, debt: 0, no_ledger: true, dangerously_proceed: true },
+      followups: [...(v.followups || []), ...(fu && fu.summary ? [fu.summary] : [])],
+    }
   }
   // Normal mode: not acceptance-clean -> park it like an unconverged review.
   const reason = hasLedger

@@ -124,12 +124,12 @@ review  ──▶  fix  ──▶  re-review  ──▶ … (until no Critical/M
    ▼                                         ▼
 park for a human (label `escalated`)     acceptance gate (every criterion met?)
                                               │                         │
-                                  any deferred/mocked              all met
+                       any deferred/mocked, or no ledger         all met
                                               ▼                         ▼
                             park for a human (needs-human-review)   merge (only with --auto-merge)
 ```
 
-- **Review** is `do-pr-review` (posts inline findings, comment-only). **Fix** is `do-pr-fix` (addresses the findings, replies in-thread, pushes). The review is **context-independent** -- the reviewer is a fresh worker that never shares the builder's context. Set **`GH_REVIEW_TOKEN`** and that reviewer authenticates as a bot, so it can post a real `REQUEST_CHANGES` and GitHub's native review state carries the signal -- a genuine independent second set of eyes; without the token it falls back to the structured `blocking_open` gate (same review, shared gh identity).
+- **Review** is `do-pr-review` (posts inline findings; comment-only in the same-identity fallback). **Fix** is `do-pr-fix` (addresses the findings, replies in-thread, pushes). The review is **context-independent** -- the reviewer is a fresh worker that never shares the builder's context. Set **`GH_REVIEW_TOKEN`** and that reviewer authenticates as a bot, so it can post a real `REQUEST_CHANGES` and GitHub's native review state carries the signal -- a genuine independent second set of eyes; without the token it falls back to the structured `blocking_open` gate (same review, shared gh identity).
 - **The acceptance gate (consistency != correctness).** The fingerprint gates prove the specs, issues, and build are mutually *consistent*; they do not prove the code actually *satisfies* the acceptance criteria. So each worker returns an **as-built ledger** -- one entry per acceptance criterion, `met` / `deferred` / `mocked`, with evidence -- and the orchestrator treats an issue as done only when every criterion is `met`. Any `deferred`/`mocked` entry parks the PR for a human (under `--dangerously` it may still merge on green CI, but each gap gets a `needs-human-review` follow-up -- the ledger is the debt record). It **records and gates on** what was met; it does not claim to prove correctness.
 - **Merge stays manual** unless you pass `--auto-merge`; a merge closes the issue and unblocks its dependents, which is what lets a full dependency chain drain in one pass.
 - A PR the loop can't get clean -- or that isn't acceptance-clean -- is **left open and labelled** for a human, never merged.

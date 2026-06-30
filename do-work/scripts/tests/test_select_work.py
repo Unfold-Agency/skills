@@ -231,6 +231,17 @@ exc_seam = {e["number"]: e["reason"] for e in select(seam_issues, ME)["excluded"
 check("seam-flagged issue excluded (stale-against-dependency)",
       "flagged stale-against-dependency" in exc_seam.get(70, ""))
 
+# An acceptance-parked issue (do-work's own needs-human-review flag) must leave
+# the queue -- even when it is still assigned to me with status:doing (the park
+# never clears those), so it must NOT come back as resumable and get rebuilt.
+parked = [issue(72, assignees=("alice",),
+                labels=("make-issues", "afk", "status:doing", "needs-human-review"))]
+res_parked = select(parked, ME)
+exc_parked = {e["number"]: e["reason"] for e in res_parked["excluded"]}
+check("acceptance-parked issue (needs-human-review) excluded, not resumable",
+      not res_parked["actionable"]
+      and "flagged needs-human-review" in exc_parked.get(72, ""))
+
 # A dependent whose blocker has MERGED but is now flagged stale must wait for
 # /make-issues to reconcile, even though the blocker is closed-completed.
 stale_dep = [

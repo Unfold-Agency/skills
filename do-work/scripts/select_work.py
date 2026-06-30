@@ -4,8 +4,9 @@
 An issue is ACTIONABLE when all of these hold:
   - it is OPEN and managed by make-issues;
   - it carries no not-buildable flag (needs-rebase / spec-drift / orphaned /
-    escalated / stale-against-dependency -- a drifted, handed-back, or
-    seam-stale spec is not work until it is resolved);
+    escalated / stale-against-dependency / needs-human-review -- a drifted,
+    handed-back, seam-stale, or acceptance-parked issue is not work until it is
+    resolved);
   - every issue it is blocked by is CLOSED as COMPLETED, and no blocker is itself
     flagged stale (building on a drifting foundation waits for /make-issues to
     reconcile it). Dependencies are read from the issue body's "## Dependencies"
@@ -59,8 +60,13 @@ except ImportError:
 # ones; `escalated` is do-work's own hand-back; `stale-against-dependency` is the
 # SEAM flag -- a dependent whose seen_at_version lags its home feature's live
 # version, which make-issues marks until the dependency is reconciled.
+# `needs-human-review` is do-work's own acceptance-park flag: when a PR comes back
+# review-clean but its as-built ledger is not all-`met`, the issue is parked with
+# this label (PR left open) so it leaves the queue instead of being rebuilt and
+# re-parked every run. (The --dangerously follow-up issues also carry this label,
+# but they are not make-issues-managed, so they are never selected anyway.)
 NOT_BUILDABLE_FLAGS = {"needs-rebase", "spec-drift", "orphaned", "escalated",
-                       "stale-against-dependency"}
+                       "stale-against-dependency", "needs-human-review"}
 # A blocker carrying one of these is itself drifting; building a dependent on top
 # of it (even if the blocker already merged) builds on a shifting foundation, so
 # the dependent waits until make-issues reconciles the blocker.

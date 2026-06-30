@@ -13,7 +13,7 @@ stamps make-spec already wrote.
 Checks, in order of dependency (a gating failure aborts before the next):
   1. auth     -- `gh auth status` succeeds
   2. gh_version -- gh >= 2.94.0 (native dependency/type flags)
-  3. specs    -- docs/specs/ has an overview-data.yaml and >=1 features/*-data.yaml
+  3. specs    -- docs/specs/ has an overview.md and >=1 features/*.md
                  (else run /make-spec, then /make-issues)
   4. repo     -- inside a git work tree AND a resolvable owner/name remote
   5. backlog  -- make-issues-managed issues exist (else run /make-issues first)
@@ -74,15 +74,30 @@ def _run(cmd, timeout=30):
         return 127, "", f"{cmd[0]} not found"
 
 
+# A spec doc is a single .md whose contract lives in YAML frontmatter (make-spec
+# emits one file per document; no separate data file). Dispatch on extension.
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
+
+
 def _load_yaml(path):
-    """Load a YAML mapping. Returns (doc, None) or (None, err)."""
+    """Load a spec doc as a mapping. A .md spec carries its contract in YAML
+    frontmatter; any other file is loaded directly. Returns (doc, None) or
+    (None, err)."""
     try:
         with open(path, encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
-    except (OSError, yaml.YAMLError) as e:
+            text = f.read()
+    except OSError as e:
+        return None, f"cannot read {path}: {e}"
+    try:
+        if path.endswith(".md"):
+            m = FRONTMATTER_RE.match(text)
+            doc = yaml.safe_load(m.group(1)) if m else None
+        else:
+            doc = yaml.safe_load(text)
+    except yaml.YAMLError as e:
         return None, f"cannot read {path}: {e}"
     if not isinstance(doc, dict):
-        return None, f"{path} is not a YAML mapping"
+        return None, f"{path} has no spec content"
     return doc, None
 
 
@@ -108,11 +123,11 @@ def check_gh_version():
 
 
 def check_specs(spec_dir):
-    """Gating: the docs/specs set must be present -- an overview-data.yaml and at
-    least one features/*-data.yaml. A missing/unreadable overview is fatal (exit 2);
-    no features means there is nothing to build issues from. Pure file checks --
-    do-work does NOT recompute fingerprints (it trusts make-issues' gate)."""
-    overview = os.path.join(spec_dir, "overview-data.yaml")
+    """Gating: the docs/specs set must be present -- an overview.md and at least
+    one features/*.md. A missing/unreadable overview is fatal (exit 2); no features
+    means there is nothing to build issues from. Pure file checks -- do-work does
+    NOT recompute fingerprints (it trusts make-issues' gate)."""
+    overview = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview):
         return {"name": "specs", "ok": False, "fatal": True,
                 "detail": f"no {overview} -- run /make-spec to author the spec set "
@@ -121,10 +136,10 @@ def check_specs(spec_dir):
     if err:
         return {"name": "specs", "ok": False, "fatal": True, "detail": err}
     import glob
-    features = glob.glob(os.path.join(spec_dir, "features", "*-data.yaml"))
+    features = glob.glob(os.path.join(spec_dir, "features", "*.md"))
     if not features:
         return {"name": "specs", "ok": False,
-                "detail": f"{overview} present but no features/*-data.yaml -- "
+                "detail": f"{overview} present but no features/*.md -- "
                           "run /make-spec to add features"}
     return {"name": "specs", "ok": True, "feature_count": len(features),
             "detail": f"overview + {len(features)} feature(s) under {spec_dir}"}
@@ -185,7 +200,7 @@ def overview_feature_versions(spec_dir):
     """{slug: feature_version} from the overview feature_index -- the LIVE content
     versions make-spec stamped. do-work reads these (it does not recompute them) to
     tell whether an issue's stamped source_version has fallen behind."""
-    doc, err = _load_yaml(os.path.join(spec_dir, "overview-data.yaml"))
+    doc, err = _load_yaml(os.path.join(spec_dir, "overview.md"))
     if err or not isinstance(doc, dict):
         return {}
     out = {}

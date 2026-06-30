@@ -205,7 +205,11 @@ check("priority orders the queue: #41(p1) < #40(p5) < #42(none)",
       [a["number"] for a in res_prio["actionable"]] == [41, 40, 42])
 check("absent priority falls back to the sentinel",
       [a for a in res_prio["actionable"] if a["number"] == 42][0]["priority"] == DEFAULT_PRIORITY)
-check("no priorities anywhere -> stable by-number order (backward-compatible)",
+# This is the REAL make-issues default: issue bodies carry no `priority` field
+# today (the spec's MoSCoW priority is out-of-contract), so a real queue orders
+# resumable-then-number. The priority cases above exercise the live hook with
+# hand-injected values; this pins the actual current behavior.
+check("no priorities anywhere (the real make-issues default) -> by issue number",
       [a["number"] for a in select([issue(51), issue(50)], ME)["actionable"]] == [50, 51])
 res_res = select([issue(60, priority=1),
                   issue(61, priority=9, assignees=("alice",),

@@ -22,9 +22,12 @@ sorts first so an interrupted build is picked back up before a fresh one starts.
 
 Within the actionable queue the order is: resumable-mine first, then ascending
 `priority` (an integer in the make-issues:meta block; lower builds sooner; absent
-sorts last), then issue number. A freshly-added high-priority story jumps the queue
-with no renumbering -- priority is read live at pick time and is never part of the
-per-capability fingerprint, so re-prioritizing an issue never flags it as drifted.
+sorts last), then issue number. Priority is read live at pick time and is never
+part of the fingerprint, so it can be set/changed without flagging an issue as
+drifted. NOTE: make-issues does not stamp a `priority` field today (the spec's
+MoSCoW priority is advisory and out-of-contract), so absent an explicit priority
+the queue currently orders resumable-then-number -- this is the live hook for
+when priority is promoted into the issue contract.
 
 `--issue=N` targets one specific issue: it ignores the rest and bypasses the
 autonomy/phase queue filters (you picked it explicitly), but still applies the

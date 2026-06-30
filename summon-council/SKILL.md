@@ -101,8 +101,10 @@ seats with the **Task / Agent tool**; each seat is a fresh sub-agent that never 
 
 **Stage 0 -- Intake and premise check.** The Chair (in its own context -- this is orchestration, not
 opinion) restates the decision, names the type, and strips the user's lean. It then spawns **one
-isolated agent, the Oracle**, with the Oracle charter and the neutral question, tasked only with the
-premise: is this the right question, what is being assumed, should the thing exist at all? If the
+isolated agent, the Oracle**, with the Oracle charter and the neutral question, tasked with the
+premise -- is this the right question, what is being assumed, should the thing exist at all? -- **and**
+with returning a position in the Stage-1 schema below, so the Oracle's seat is represented in the
+positions list like every other (its premise verdict rides in the `stance`/`sharpest_point`). If the
 premise is broken, surface it before anything else -- it may end the session, or trigger the single
 clarifying question.
 
@@ -123,15 +125,17 @@ The Oracle's Stage-0 output is its position, so the Chair now holds **eleven pos
 isolated contexts.**
 
 **Stage 2 -- Anonymized cross-examination.** The Chair **strips the seat labels** off all eleven
-positions and spawns **one to two isolated cross-examination agents** over the anonymized set -- one
-of them carrying the Adversary's explicit mandate to hunt consensus and break up any pile-on,
-*including* a pile-on against the proposal. They critique the *arguments*, not the roles, and return:
+positions and **relabels them with neutral identifiers (Position A through K)** so each can be cited
+unambiguously without revealing which seat said it. It then spawns **one to two isolated
+cross-examination agents** over the anonymized set -- one of them carrying the Adversary's explicit
+mandate to hunt consensus and break up any pile-on, *including* a pile-on against the proposal. They
+critique the *arguments*, not the roles, and return:
 
 ```
 surviving:        [points that hold under scrutiny]
 collapsed:        [arguments that do not hold]
 consensus_risks:  [where the room is converging too fast]
-revisions:        [which positions should change, and why]
+revisions:        [which positions (by identifier, e.g. Position C) should change, and why]
 ```
 
 **Stage 3 -- The Chair's synthesis (in-context).** Holding every position and the cross-examination
@@ -140,6 +144,11 @@ converged, the strongest surviving dissent, **the blind spot every voice missed*
 recommendation with a confidence level and one concrete next step. For **path selection**, also
 produce the tradeoff matrix. The disagreement is the gold -- the fault line between two strong seats
 is usually the exact thing the user had not thought hard enough about. Do not sand it smooth.
+
+If the **Witness exercised its veto** (the debate lost sight of who it is for), it binds the
+*process*, not the outcome: the Chair may still recommend proceeding, but a verdict that overrides a
+live veto must **name it explicitly**, **cap confidence at low** until it is resolved, and make
+resolving the user-advocacy blocker the **first step**. It is never dropped silently.
 
 **Stage 4 -- The artifact.** Write the record (below). Always.
 
@@ -190,5 +199,7 @@ longer, the verdict cannot.
   verdict says what the user does not want to hear when that is the honest call.
 - **Decline the obvious.** If it's a coin flip, say "this is obvious" and do not convene.
 - **One clarifying question, maximum**, and only when the question is too vague to deliberate.
+- **A Witness veto is never silently overridden.** It caps confidence at low and forces a first step
+  that resolves it; a go verdict over a live veto must say so and justify it (see Stage 3).
 - **Always leave a record.** Every session writes (or renders) the artifact.
 - **Flavor is skin.** The ceremonial register never dilutes the substance underneath.

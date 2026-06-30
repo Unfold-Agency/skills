@@ -3,13 +3,13 @@
 
 Sections:
   1. the valid fixture passes
-  2. C1 keystone — the fingerprint IN/OUT contract: a `priority` change (OUT)
+  2. C1 keystone -- the fingerprint IN/OUT contract: a `priority` change (OUT)
      still passes un-restamped; a meaning change (IN) fails CLOSED with S-006
   3. one targeted mutation per rule trips EXACTLY that rule (re-stamped so only
      the intended rule fires, mirroring the make-tdd harness)
   4. the EARS classifier (ears_kind) accepts the five forms and rejects non-EARS
   5. the lean budget (S-012) warns without failing
-  6. M2 no-vanishing — origin/main baseline fails CLOSED on a non-repo, an
+  6. M2 no-vanishing -- origin/main baseline fails CLOSED on a non-repo, an
      unresolvable ref, and a shallow clone; passes greenfield; catches a real
      vanished id (uses throwaway local git repos, no network)
 
@@ -27,7 +27,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPTS = os.path.dirname(HERE)
 sys.path.insert(0, SCRIPTS)
 import yaml  # noqa: E402
-from validate_spec import ears_kind  # noqa: E402
+from validate_spec import ears_kind, compute_fingerprint  # noqa: E402
+import validate_spec as _vs  # noqa: E402  -- monkeypatched in the baseline unit tests
 
 VALIDATOR = os.path.join(SCRIPTS, "validate_spec.py")
 STAMP = os.path.join(SCRIPTS, "stamp_fingerprint.py")
@@ -90,7 +91,7 @@ with tempfile.TemporaryDirectory() as tmp:
 # ── 2. C1 keystone: the fingerprint IN/OUT contract ──────────────────
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
-    # priority is OUT — change it and do NOT re-stamp; must still pass.
+    # priority is OUT -- change it and do NOT re-stamp; must still pass.
     edit_yaml(feat(d, "checkout"),
               lambda doc: doc["requirements"][0].__setitem__("priority", "could"))
     rc, out = run_validator(d, "--no-baseline")
@@ -99,7 +100,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
-    # description is IN — change it and do NOT re-stamp; must fail CLOSED.
+    # description is IN -- change it and do NOT re-stamp; must fail CLOSED.
     edit_yaml(feat(d, "checkout"),
               lambda doc: doc["requirements"][0].__setitem__(
                   "description", "A materially different behavior."))
@@ -109,7 +110,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
-    # acceptance_criteria is IN — mutate a criterion (to another valid EARS
+    # acceptance_criteria is IN -- mutate a criterion (to another valid EARS
     # sentence) without re-stamping; must fail CLOSED with only S-006.
     def mut_ac(doc):
         doc["requirements"][0]["acceptance_criteria"][0] = \
@@ -118,6 +119,16 @@ with tempfile.TemporaryDirectory() as tmp:
     rc, out = run_validator(d, "--no-baseline")
     check("C1 IN: an acceptance-criterion change without re-stamping fails S-006",
           rc == 1 and codes(out) == {"S-006"})
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    # A blank (never-stamped) fingerprint must fail CLOSED, not pass -- this is the
+    # un-stamped guard, the more important half of the keystone.
+    edit_yaml(feat(d, "checkout"),
+              lambda doc: doc["meta"].__setitem__("fingerprint", ""))
+    rc, out = run_validator(d, "--no-baseline")
+    check("C1 blank: an un-stamped (blank) fingerprint fails S-006",
+          rc == 1 and codes(out) == {"S-006"} and "blank" in out)
 
 
 # ── 3. one targeted mutation per rule (re-stamped) ───────────────────
@@ -201,8 +212,30 @@ def m_s011_no_unwanted(d):
         "acceptance_criteria",
         [doc["requirements"][0]["acceptance_criteria"][0]]))
 
+def m_s008_meta_slug(d):
+    # meta.slug disagrees with the file slug (dark branch, validate_spec.py:295-296)
+    edit_yaml(feat(d, "checkout"),
+              lambda doc: doc["meta"].__setitem__("slug", "wrongslug"))
 
-# (rule, mutate_fn, restamp?) — restamp so only the intended rule trips
+def m_s008_index_prefix(d):
+    # a feature_index row's prefix disagrees with the feature meta.prefix (407-409)
+    edit_yaml(overview(d), lambda doc: next(
+        r for r in doc["feature_index"] if r["slug"] == "checkout"
+    ).__setitem__("prefix", "ZZ"))
+
+def m_s004_adr_nofile(d):
+    # governed_by names a well-formed ADR with no file under decisions/ (341-343).
+    # Needs a non-empty decisions/ dir, else the existence arm short-circuits.
+    decdir = os.path.join(d, "decisions")
+    os.makedirs(decdir, exist_ok=True)
+    with open(os.path.join(decdir, "ADR-0001-seed.md"), "w") as f:
+        f.write("# ADR-0001\n")
+    edit_yaml(feat(d, "checkout"),
+              lambda doc: doc["requirements"][0].__setitem__("governed_by",
+                                                             ["ADR-0002"]))
+
+
+# (rule, mutate_fn, restamp?) -- restamp so only the intended rule trips
 MUTATIONS = [
     ("S-001", m_s001, True),
     ("S-002", m_s002_req, True),
@@ -211,9 +244,12 @@ MUTATIONS = [
     ("S-003", m_s003_dup_prefix, True),
     ("S-004", m_s004_dangling_dep, True),
     ("S-004", m_s004_bad_adr, True),
+    ("S-004", m_s004_adr_nofile, True),
     ("S-007", m_s007_namespace, True),
     ("S-008", m_s008_version_drift, False),
     ("S-008", m_s008_missing_row, True),
+    ("S-008", m_s008_meta_slug, True),
+    ("S-008", m_s008_index_prefix, True),
     ("S-009", m_s009_unmeasurable, True),
     ("S-010", m_s010_non_ears, True),
     ("S-011", m_s011_no_unwanted, True),
@@ -242,6 +278,12 @@ check("EARS optional", ears_kind("WHERE GPS is fitted, the system shall y.") == 
 check("EARS unwanted", ears_kind("IF x, THEN the system shall y.") == "unwanted")
 check("EARS rejects no-shall", ears_kind("The system encrypts data.") is None)
 check("EARS rejects IF without THEN", ears_kind("IF x the system shall y.") is None)
+check("EARS rejects 'shall' as a substring (marshall / shallow-copies)",
+      ears_kind("Marshall reviews the order.") is None
+      and ears_kind("WHEN it fires, the system shallow-copies state.") is None)
+check("EARS unwanted is not fooled by 'shallow' appearing before THEN",
+      ears_kind("IF the shallow buffer overflows, THEN the system shall reset.")
+      == "unwanted")
 
 
 # ── 5. lean budget warns without failing ─────────────────────────────
@@ -277,7 +319,7 @@ def init_repo(path, with_specs=True):
 
 git_ok = shutil.which("git") is not None
 if not git_ok:
-    print("WARN git not available — skipping S-005 git scenarios")
+    print("WARN git not available -- skipping S-005 git scenarios")
 else:
     # (A) non-repo → fail closed
     with tempfile.TemporaryDirectory() as tmp:
@@ -330,6 +372,92 @@ else:
         rc, out = run_validator(wspecs)  # baseline origin/main, dir absent there
         check("S-005 greenfield against resolvable main passes",
               rc == 0 and not codes(out))
+
+
+# ── 7. compute_fingerprint: OUT keys stripped at EVERY level (C1 unit) ───
+def _load(path):
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    ov = _load(overview(d))
+    ov_base = compute_fingerprint(ov)
+    ov_out = copy.deepcopy(ov)
+    row = next(r for r in ov_out["feature_index"] if r["slug"] == "checkout")
+    row["feature_version"] = "ffffffffffff"
+    row["appetite"] = "1 day"
+    check("fp: OUT keys inside a feature_index row (feature_version, appetite) do "
+          "not flip the overview fingerprint", compute_fingerprint(ov_out) == ov_base)
+    ov_in = copy.deepcopy(ov)
+    next(r for r in ov_in["feature_index"] if r["slug"] == "checkout")["slug"] = "renamed"
+    check("fp: a feature_index identity change (slug) DOES flip the overview fingerprint",
+          compute_fingerprint(ov_in) != ov_base)
+
+    ft = _load(feat(d, "checkout"))
+    ft_base = compute_fingerprint(ft)
+    for outk, val in (("notes", "x"), ("architecture_hints", "y"), ("priority", "could")):
+        m = copy.deepcopy(ft)
+        m["requirements"][0][outk] = val
+        check(f"fp: requirement OUT key '{outk}' does not flip the fingerprint",
+              compute_fingerprint(m) == ft_base)
+    m = copy.deepcopy(ft)
+    m["meta"]["appetite"] = "3 weeks"
+    check("fp: meta.appetite does not flip the feature fingerprint",
+          compute_fingerprint(m) == ft_base)
+    m = copy.deepcopy(ft)
+    m["requirements"][0]["acceptance_criteria"][0] = \
+        "WHEN paid, the system shall ship the order."
+    check("fp: an acceptance_criteria change DOES flip the feature fingerprint",
+          compute_fingerprint(m) != ft_base)
+
+
+# ── 8. baseline_ids fails CLOSED on a degraded git baseline (unit) ───────
+# Monkeypatch _vs._git to drive the rare degraded-repo branches a throwaway repo
+# can't reliably reproduce (corrupt tree / unreadable blob / erroring probe).
+# Probes default to a trusted, resolvable, non-shallow repo; override per case.
+class _FakeProc:
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
+
+def _run_baseline(overrides):
+    def fake(args, cwd):
+        sub = args[0]
+        if sub == "rev-parse" and "--is-inside-work-tree" in args:
+            return overrides.get("inside", _FakeProc(0, "true"))
+        if sub == "rev-parse" and "--is-shallow-repository" in args:
+            return overrides.get("shallow", _FakeProc(0, "false"))
+        if sub == "rev-parse" and "--verify" in args:
+            return overrides.get("resolve", _FakeProc(0, "deadbeef"))
+        if sub == "ls-tree":
+            return overrides.get("ls_tree", _FakeProc(0, ""))
+        if sub == "show":
+            return overrides.get("show", _FakeProc(0, ""))
+        return _FakeProc(0, "")
+    errs = []
+    orig = _vs._git
+    _vs._git = fake
+    try:
+        result = _vs.baseline_ids(".", "origin/main",
+                                  lambda rule, msg: errs.append((rule, msg)))
+    finally:
+        _vs._git = orig
+    return result, [r for r, _ in errs]
+
+res, errs = _run_baseline({"ls_tree": _FakeProc(128, "", "fatal: not a tree object")})
+check("baseline_ids: ls-tree failure fails CLOSED (None + S-005), not empty set",
+      res is None and "S-005" in errs)
+res, errs = _run_baseline({"ls_tree": _FakeProc(0, "overview-data.yaml\n"),
+                           "show": _FakeProc(128, "", "fatal: bad object")})
+check("baseline_ids: an unreadable baseline blob fails CLOSED (None + S-005)",
+      res is None and "S-005" in errs)
+res, errs = _run_baseline({"shallow": _FakeProc(128, "", "fatal")})
+check("baseline_ids: an erroring shallow probe fails CLOSED (None + S-005)",
+      res is None and "S-005" in errs)
+res, errs = _run_baseline({"ls_tree": _FakeProc(0, "overview-data.yaml\n"),
+                           "show": _FakeProc(0, "goals:\n  - id: G-001\n")})
+check("baseline_ids: a clean baseline returns the prior id set (not None)",
+      res == {"G-001"} and not errs)
 
 
 print()

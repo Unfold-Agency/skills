@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validate_spec.py — enforce validator rules S-001..S-012 across docs/specs/
+validate_spec.py -- enforce validator rules S-001..S-012 across docs/specs/
 
 Validates the whole spec set at once (the overview + every feature), because
 the interesting rules are cross-document: the feature index must agree with the
@@ -21,7 +21,7 @@ governed_by link) flips the fingerprint and blocks the run until the Skill
 re-derives and re-stamps; an advisory change (priority, notes) does neither.
 
 NO-VANISHING (S-005) is checked against a named git ref (default origin/main)
-and FAILS CLOSED when the baseline cannot be trusted — no git repo, a shallow
+and FAILS CLOSED when the baseline cannot be trusted -- no git repo, a shallow
 clone, or an unresolvable ref. Pass --no-baseline only for the greenfield
 kickoff, before main carries the docs.
 """
@@ -78,12 +78,16 @@ def compute_fingerprint(doc):
 # ── EARS grammar (S-010/S-011) ───────────────────────────────────────
 # Five templates, enumerated in references/ears-grammar.md. Every acceptance
 # criterion must classify as exactly one; the response verb "shall" is required.
+SHALL_RE = re.compile(r"\bshall\b")  # matched as a WORD, so 'marshall'/'shallow' do not count
+
+
 def ears_kind(text):
     """Return one of event|state|optional|unwanted|ubiquitous, or None if the
     sentence is not valid EARS."""
     t = " ".join(str(text or "").split())
     low = t.lower()
-    if "shall" not in low:
+    m_shall = SHALL_RE.search(low)
+    if not m_shall:
         return None
     if low.startswith("when "):
         return "event"
@@ -93,7 +97,7 @@ def ears_kind(text):
         return "optional"
     if low.startswith("if "):
         m_then = re.search(r"\bthen\b", low)
-        if m_then and m_then.start() < low.index("shall"):
+        if m_then and m_then.start() < m_shall.start():
             return "unwanted"
         return None  # IF without a THEN-before-shall is malformed
     # No leading EARS keyword + a "shall" response = ubiquitous.
@@ -131,7 +135,7 @@ def overview_ids(doc):
 
 
 def ids_from_any(doc):
-    """Union of ID-bearing items in either shape — for the no-vanishing diff."""
+    """Union of ID-bearing items in either shape -- for the no-vanishing diff."""
     if not isinstance(doc, dict):
         return set()
     return set(filter(None, feature_ids(doc))) | set(filter(None, overview_ids(doc)))
@@ -149,35 +153,40 @@ def baseline_ids(spec_dir, ref, fail):
     cwd = os.path.abspath(spec_dir)
     inside = _git(["rev-parse", "--is-inside-work-tree"], cwd)
     if inside.returncode != 0 or inside.stdout.strip() != "true":
-        fail("S-005", "not a git repository — cannot establish a no-vanishing "
+        fail("S-005", "not a git repository -- cannot establish a no-vanishing "
                       "baseline (use --no-baseline only for the greenfield kickoff)")
         return None
     shallow = _git(["rev-parse", "--is-shallow-repository"], cwd)
-    if shallow.stdout.strip() == "true":
-        fail("S-005", "shallow clone — the baseline may be truncated; run "
-                      "'git fetch --unshallow' (refusing to pass on partial history)")
+    if shallow.returncode != 0 or shallow.stdout.strip() == "true":
+        fail("S-005", "shallow or unverifiable repository -- the baseline may be "
+                      "truncated; run 'git fetch --unshallow' (refusing to pass on "
+                      "partial history)")
         return None
     resolved = _git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd)
     if resolved.returncode != 0:
-        fail("S-005", f"cannot resolve baseline ref '{ref}' — fetch it or pass "
+        fail("S-005", f"cannot resolve baseline ref '{ref}' -- fetch it or pass "
                       "--no-baseline for the greenfield kickoff")
         return None
     # List the spec dir's tree at the baseline. Run from spec_dir with pathspec
     # '.' (git pathspecs are cwd-relative); from a subdir, ls-tree prints
     # CWD-relative paths, so `git show` must use the `:./` form (also
     # cwd-relative) to match. If the dir does not exist at the baseline
-    # (greenfield against a resolvable main), the listing is empty — nothing
+    # (greenfield against a resolvable main), the listing is empty -- nothing
     # prior, nothing can vanish.
     listing = _git(["ls-tree", "-r", "--name-only", ref, "--", "."], cwd)
     if listing.returncode != 0:
-        return set()
+        fail("S-005", f"cannot list the spec tree at '{ref}' (git ls-tree failed: "
+                      f"{listing.stderr.strip()}) -- baseline unusable, refusing to pass")
+        return None
     ids = set()
     for path in listing.stdout.splitlines():
         if not path.endswith("-data.yaml"):
             continue
         show = _git(["show", f"{ref}:./{path}"], cwd)
         if show.returncode != 0:
-            continue
+            fail("S-005", f"cannot read '{path}' at '{ref}' (git show failed: "
+                          f"{show.stderr.strip()}) -- baseline incomplete, refusing to pass")
+            return None
         try:
             ids |= ids_from_any(yaml.safe_load(show.stdout) or {})
         except yaml.YAMLError:
@@ -192,7 +201,7 @@ def main():
     ap.add_argument("--baseline-ref", default="origin/main",
                     help="git ref for the no-vanishing baseline (default origin/main)")
     ap.add_argument("--no-baseline", action="store_true",
-                    help="skip S-005 — only for the greenfield kickoff")
+                    help="skip S-005 -- only for the greenfield kickoff")
     ap.add_argument("--budget-reqs", type=int, default=12,
                     help="lean budget: warn above this many reqs per feature")
     ap.add_argument("--budget-words", type=int, default=1200,
@@ -245,7 +254,7 @@ def main():
         if "requirements" not in doc:
             fail("S-001", f"{dpath}: missing 'requirements'")
 
-    # ---- S-006: fingerprint integrity (FAIL CLOSED — the keystone) ------
+    # ---- S-006: fingerprint integrity (FAIL CLOSED -- the keystone) ------
     def check_fingerprint(label, doc):
         m = doc.get("meta") or {}
         stored = str(m.get("fingerprint") or "")
@@ -254,7 +263,7 @@ def main():
             return
         actual = compute_fingerprint(doc)
         if stored != actual:
-            fail("S-006", f"{label}: fingerprint mismatch — the data file drifted "
+            fail("S-006", f"{label}: fingerprint mismatch -- the data file drifted "
                           "from its markdown or was hand-edited (re-derive and re-stamp)")
 
     check_fingerprint("overview-data.yaml", overview)
@@ -354,7 +363,7 @@ def main():
                 kinds.append(k)
             if str(rid).startswith("FR-") and "unwanted" not in kinds:
                 fail("S-011", f"{dpath}: {rid} (functional) has no unwanted-behavior "
-                              "criterion (IF ... THEN the system shall ...) — the "
+                              "criterion (IF ... THEN the system shall ...) -- the "
                               "failure/edge path")
 
     # ---- S-009: goals measurable ---------------------------------------
@@ -422,14 +431,14 @@ def main():
                   if isinstance(r, dict) and r.get("status") in (None, "active")]
         if len(active) > args.budget_reqs:
             warn("S-012", f"feature '{slug}' has {len(active)} active requirements "
-                          f"(> {args.budget_reqs}) — consider splitting it")
+                          f"(> {args.budget_reqs}) -- consider splitting it")
         if os.path.isfile(md_path):
             try:
                 with open(md_path) as f:
                     words = len(f.read().split())
                 if words > args.budget_words:
                     warn("S-012", f"feature '{slug}' markdown is {words} words "
-                                  f"(> {args.budget_words}) — trim for reviewability")
+                                  f"(> {args.budget_words}) -- trim for reviewability")
             except OSError:
                 pass
 
@@ -437,14 +446,14 @@ def main():
     for w in warns:
         print(f"  warn {w}")
     if errors:
-        print(f"\nFAIL — {len(errors)} violation(s) in {spec_dir}\n")
+        print(f"\nFAIL -- {len(errors)} violation(s) in {spec_dir}\n")
         for e in errors:
             print(f"  {e}")
         sys.exit(1)
-    print(f"PASS — {spec_dir} (overview v{o_meta.get('project_version') or '?'}, "
+    print(f"PASS -- {spec_dir} (overview v{o_meta.get('project_version') or '?'}, "
           f"{len(feats)} feature(s), {len(known_ids)} IDs, "
           f"status {o_meta.get('status') or '?'})"
-          + (f" — {len(warns)} budget warning(s)" if warns else ""))
+          + (f" -- {len(warns)} budget warning(s)" if warns else ""))
     sys.exit(0)
 
 

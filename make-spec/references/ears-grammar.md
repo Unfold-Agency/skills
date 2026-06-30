@@ -19,11 +19,11 @@ leading keyword (or none, for ubiquitous).
 
 Worked examples (one per form):
 
-- **Ubiquitous** — `The system shall encrypt cardholder data at rest.`
-- **Event-driven** — `WHEN the user confirms the order, the system shall create a payment intent.`
-- **State-driven** — `WHILE a payment is processing, the system shall disable the submit button.`
-- **Optional-feature** — `WHERE gift wrapping is enabled, the system shall offer a message field.`
-- **Unwanted-behavior** — `IF the payment is declined, THEN the system shall display a recoverable error and retain the cart.`
+- **Ubiquitous** -- `The system shall encrypt cardholder data at rest.`
+- **Event-driven** -- `WHEN the user confirms the order, the system shall create a payment intent.`
+- **State-driven** -- `WHILE a payment is processing, the system shall disable the submit button.`
+- **Optional-feature** -- `WHERE gift wrapping is enabled, the system shall offer a message field.`
+- **Unwanted-behavior** -- `IF the payment is declined, THEN the system shall display a recoverable error and retain the cart.`
 
 ## What the validator requires
 

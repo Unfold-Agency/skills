@@ -7,7 +7,7 @@ disagree. Run after the Skill (re-)derives any data file from its markdown:
 
 It (1) stamps each features/<slug>-data.yaml, (2) writes the matching
 feature_version into the overview feature_index, and (3) stamps the overview.
-feature_version is the first 12 hex of the feature's content fingerprint —
+feature_version is the first 12 hex of the feature's content fingerprint --
 content-derived, no counter to race. The overview fingerprint excludes
 feature_version (it is an OUT field), so syncing the index never invalidates
 the overview's own stamp.

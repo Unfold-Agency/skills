@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-OVERVIEW TEMPLATE — docs/specs/overview.md   (make-spec)
+OVERVIEW TEMPLATE -- docs/specs/overview.md   (make-spec)
 
 The lean PRD layer: the slow-changing project context every feature
 shares. Problem, users, goals + metrics, scope + no-gos, and the
@@ -33,7 +33,7 @@ last_updated: ""          # YYYY-MM-DD
 data_file: overview-data.yaml
 ---
 
-# [Project Name] — Spec Overview
+# [Project Name] -- Spec Overview
 
 ## Problem
 
@@ -92,7 +92,7 @@ across the project. The validator (S-007/S-008) enforces all of this. -->
 
 <!--
 ═══════════════════════════════════════════════════════════════════
-CHECKLIST — strip before publishing
+CHECKLIST -- strip before publishing
 □ Every goal has a measurable metric + a measurement method (S-009)
 □ Every feature file has a Feature Index row; prefixes are unique
 □ Out of scope captures everything raised but cut

@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-CHANGELOG ENTRY TEMPLATE — docs/specs/CHANGELOG.md   (make-spec)
+CHANGELOG ENTRY TEMPLATE -- docs/specs/CHANGELOG.md   (make-spec)
 
 docs/specs/CHANGELOG.md is a Keep a Changelog ledger of every spec
 change. ONE STRUCTURED ENTRY PER CHANGE. The entry IS the delta: which
@@ -23,7 +23,7 @@ Conventional Commit + GitMoji on the commit; the human reason here.
 ═══════════════════════════════════════════════════════════════════
 -->
 
-## [<project_version or date>] — <YYYY-MM-DD> — <class: kickoff | minor | major | trivial>
+## [<project_version or date>] -- <YYYY-MM-DD> -- <class: kickoff | minor | major | trivial>
 
 **Trigger.** <!-- what prompted this: client request, escalation, UAT
 issue, discovery, decision. One line. -->
@@ -31,13 +31,13 @@ issue, discovery, decision. One line. -->
 **Why.** <!-- the reasoning, plainly. One short paragraph. -->
 
 ### Added
-- `FR-CHK-007` — [one line] (feature: checkout)
+- `FR-CHK-007` -- [one line] (feature: checkout)
 
 ### Modified
-- `FR-CHK-002` — [old meaning] -> [new meaning] (feature: checkout)
+- `FR-CHK-002` -- [old meaning] -> [new meaning] (feature: checkout)
 
 ### Removed
-- `FR-CHK-009` — superseded by `FR-CHK-011` (never deleted; status: superseded)
+- `FR-CHK-009` -- superseded by `FR-CHK-011` (never deleted; status: superseded)
 
 **Cross-feature impact.** <!-- features that depend on a changed id via
 depends_on, and any seam (shared requirement) touched. "none" if none. -->

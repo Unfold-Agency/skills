@@ -14,18 +14,18 @@ data_file: features/checkout-data.yaml
 
 **No-gos.** No stored payment methods in this phase.
 
-## FR-CHK-001 — Place order
+## FR-CHK-001 -- Place order
 The system turns a cart into a paid order. Depends on FR-CART-001.
 
 - WHEN the user confirms the order, the system shall create a payment intent.
 - IF the payment is declined, THEN the system shall display a recoverable error and retain the cart.
 
-## IR-CHK-001 — Fulfillment sync
+## IR-CHK-001 -- Fulfillment sync
 Paid orders reach the fulfillment system.
 
 - The system shall record each paid order in the fulfillment system within 5 minutes.
 
-## NFR-CHK-001 — Cardholder data at rest
+## NFR-CHK-001 -- Cardholder data at rest
 Sensitive payment data is protected.
 
 - The system shall encrypt cardholder data at rest.

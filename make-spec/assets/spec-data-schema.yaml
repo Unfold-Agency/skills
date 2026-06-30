@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════
-# spec-data — SCHEMA v1.0
+# spec-data -- SCHEMA v1.0
 # The derived machine companions to the human-authored spec Markdown.
 #
 # GENERATED FILES. The make-spec Skill compiles these from the spec
@@ -9,14 +9,14 @@
 # rules listed at the bottom (S-001 .. S-012) and fails on any violation.
 #
 # Two file SHAPES live under docs/specs/:
-#   overview-data.yaml          — one per project (the lean PRD layer)
-#   features/<slug>-data.yaml    — one per feature (the churn-heavy layer)
+#   overview-data.yaml          -- one per project (the lean PRD layer)
+#   features/<slug>-data.yaml    -- one per feature (the churn-heavy layer)
 # This schema documents both. The CHANGELOG.md is human Markdown only
 # (Keep a Changelog format) and has no derived data file.
 #
 # THE DOCTRINE: a feature spec states WHAT and WHY, never HOW. The
 # governing technical decision lives in an ADR (make-arch) and is
-# referenced by id in `governed_by` — the machine link. The human
+# referenced by id in `governed_by` -- the machine link. The human
 # feature markdown stays WHAT-only. "Use Stripe" is an ADR; "the system
 # shall capture payment" is a feature requirement governed_by that ADR.
 #
@@ -26,12 +26,12 @@
 #   - Empty lists are present, not omitted (consumers don't null-check).
 #   - `meta.fingerprint` is stamped by the Skill and re-checked by the
 #     validator on every run (S-006). It is computed over the CONTRACT
-#     content only — see the IN/OUT contract at the bottom.
+#     content only -- see the IN/OUT contract at the bottom.
 # ═══════════════════════════════════════════════════════════════════
 
 
 # ───────────────────────────────────────────────────────────────────
-# SHAPE 1 — overview-data.yaml  (docs/specs/overview-data.yaml)
+# SHAPE 1 -- overview-data.yaml  (docs/specs/overview-data.yaml)
 # The lean PRD: problem, users, goals/metrics, scope + no-gos, the
 # canonical project version, and the FEATURE INDEX (the registry that
 # every feature must appear in).
@@ -44,11 +44,11 @@ overview_example:
     project_name: ""
     client: ""
     project_version: ""          # human project milestone, e.g. "0.1"
-                                  # — a label, not a lock; per-feature
+                                  # -- a label, not a lock; per-feature
                                   # content versions are the real signal
     mode: full                   # full | lite  (lite skips make-arch)
     status: draft                # draft | review | approved
-    generated_at: ""             # ISO 8601 — OUT of the fingerprint
+    generated_at: ""             # ISO 8601 -- OUT of the fingerprint
     fingerprint: ""              # sha256 over contract content (S-006)
 
   # The problem and who it is for (prose lives in the markdown; these
@@ -71,27 +71,27 @@ overview_example:
 
   scope:
     in_scope: []                 # short feature-area lines (prose)
-    out_of_scope:                # the parking lot — what we are NOT doing
+    out_of_scope:                # the parking lot -- what we are NOT doing
       - item: ""
         reason: ""
         disposition: future-phase  # future-phase | declined | needs-pricing
   non_goals: []                  # outcomes we are explicitly NOT chasing
 
-  # THE FEATURE INDEX — the registry. Every features/<slug>.md MUST have
+  # THE FEATURE INDEX -- the registry. Every features/<slug>.md MUST have
   # a row here, and the recorded feature_version MUST equal the feature
   # data file's actual content version (S-008). Prefixes are unique
   # across the index (S-007).
   feature_index:
     - slug: "checkout"           # kebab-case; the file is features/checkout.md
-      prefix: "CHK"              # ^[A-Z]{2,5}$ — the requirement namespace
+      prefix: "CHK"              # ^[A-Z]{2,5}$ -- the requirement namespace
       title: ""
       feature_version: ""        # first 12 hex of the feature fingerprint
       status: active             # active | superseded | deferred
-      appetite: ""               # Shape Up budget, e.g. "2 weeks" (optional)
+      appetite: ""               # Shape Up budget, e.g. "2 weeks" -- OUT of the fingerprint
 
 
 # ───────────────────────────────────────────────────────────────────
-# SHAPE 2 — features/<slug>-data.yaml  (one per feature)
+# SHAPE 2 -- features/<slug>-data.yaml  (one per feature)
 # The lean, churn-heavy spec: user stories + EARS acceptance criteria +
 # appetite/no-gos. WHAT-only. The governing decision is referenced by
 # `governed_by` (ADR id), never restated here.
@@ -104,7 +104,7 @@ feature_example:
     prefix: "CHK"                # MUST match the index row; req namespace
     title: ""
     status: active               # active | superseded | deferred
-    appetite: ""                 # Shape Up budget (optional)
+    appetite: ""                 # Shape Up budget (optional) -- OUT of the fingerprint
     feature_version: ""          # first 12 hex of fingerprint (S-008 link)
     generated_at: ""             # OUT of the fingerprint
     fingerprint: ""              # sha256 over contract content (S-006)
@@ -112,7 +112,7 @@ feature_example:
   # The narrative spine (prose in markdown; anchors here).
   user_stories:
     - "As a <role>, I want <capability>, so that <benefit>."
-  no_gos: []                     # Shape Up no-gos — explicit out-of-bounds
+  no_gos: []                     # Shape Up no-gos -- explicit out-of-bounds
 
   # The requirements. ID = <kind>-<PREFIX>-<NNN>, e.g. FR-CHK-001.
   #   FR  functional   IR  integration   NFR  non-functional   CR  content
@@ -121,13 +121,13 @@ feature_example:
     - id: "FR-CHK-001"
       name: ""
       kind: functional           # functional | integration | nonfunctional | content
-      description: ""            # WHAT, one behavior — IN the fingerprint
-      acceptance_criteria:       # EARS sentences — IN the fingerprint (S-010)
+      description: ""            # WHAT, one behavior -- IN the fingerprint
+      acceptance_criteria:       # EARS sentences -- IN the fingerprint (S-010)
         - "The system shall <response>."
         - "IF <unwanted condition>, THEN the system shall <response>."  # FR needs >=1 (S-011)
-      governed_by: []            # ADR ids (e.g. ADR-0001) — IN the fingerprint
-      depends_on: []             # other requirement ids — IN the fingerprint
-      interface: ""              # data shape / contract sketch — IN the fingerprint
+      governed_by: []            # ADR ids (e.g. ADR-0001) -- IN the fingerprint
+      depends_on: []             # other requirement ids -- IN the fingerprint
+      interface: ""              # data shape / contract sketch -- IN the fingerprint
       # ── OUT of the fingerprint (advisory; change freely, no re-sync) ──
       priority: must             # must | should | could | wont
       architecture_hints: ""
@@ -137,7 +137,7 @@ feature_example:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# FINGERPRINT IN/OUT CONTRACT (S-006) — the keystone.
+# FINGERPRINT IN/OUT CONTRACT (S-006) -- the keystone.
 #
 # The fingerprint is computed over CONTRACT content only, so that a
 # change of *meaning* flips it (and fails the fail-closed gate until the
@@ -146,9 +146,11 @@ feature_example:
 #   IN  (changing these flips the fingerprint):
 #       description, acceptance_criteria, governed_by, depends_on,
 #       interface, id, name, kind, status  (and, for the overview,
-#       goals/scope/non_goals/feature_index identity + versions)
-#   OUT (changing these does NOT flip the fingerprint):
-#       priority, architecture_hints, related_files, notes,
+#       goals/scope/non_goals/feature_index identity (slug/prefix/title/status))
+#   OUT (changing these does NOT flip the fingerprint), stripped wherever
+#       they appear -- including inside overview feature_index rows, so the
+#       index can be re-synced without invalidating the overview's own stamp:
+#       priority, architecture_hints, related_files, notes, appetite,
 #       meta.fingerprint, meta.feature_version, meta.generated_at,
 #       meta.project_version
 #
@@ -161,7 +163,7 @@ feature_example:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# VALIDATOR RULES — run fails (exit 1) on any violation (S-012 warns).
+# VALIDATOR RULES -- run fails (exit 1) on any violation (S-012 warns).
 # Run: python scripts/validate_spec.py [docs/specs] [--baseline-ref origin/main | --no-baseline]
 #
 # Integrity
@@ -178,10 +180,10 @@ feature_example:
 #   S-005  No requirement/goal id present in the baseline (origin/main)
 #          is missing now (supersede or defer; never delete). FAILS
 #          CLOSED when the baseline ref is unresolvable, the clone is
-#          shallow, or there is no git repo — use --no-baseline only for
+#          shallow, or there is no git repo -- use --no-baseline only for
 #          the greenfield kickoff before main has the docs.
 #   S-006  meta.fingerprint matches a recompute over CONTRACT content
-#          (the IN/OUT contract above). FAILS CLOSED — this is the gate
+#          (the IN/OUT contract above). FAILS CLOSED -- this is the gate
 #          that blocks internal drift between declared versions.
 #   S-007  Every requirement id's middle segment equals its feature's
 #          meta.prefix; prefix matches ^[A-Z]{2,5}$
@@ -196,7 +198,7 @@ feature_example:
 #          (see references/ears-grammar.md)
 #   S-011  Every active functional (FR) requirement has >=1 acceptance
 #          criterion in the EARS unwanted-behavior form (IF ... THEN ...)
-#          — the failure/edge path
+#          -- the failure/edge path
 #
 # Budget (warning, not failure)
 #   S-012  A feature exceeding the lean budget (req count or word count)

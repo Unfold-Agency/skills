@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-FEATURE TEMPLATE — docs/specs/features/<slug>.md   (make-spec)
+FEATURE TEMPLATE -- docs/specs/features/<slug>.md   (make-spec)
 
 The lean, churn-heavy layer: one feature, WHAT-only. User stories +
 EARS acceptance criteria + appetite/no-gos. The governing technical
@@ -45,7 +45,7 @@ so the appetite holds. -->
 
 ---
 
-## FR-<PREFIX>-001 — [short name]
+## FR-<PREFIX>-001 -- [short name]
 
 <!-- One behavior. The description states WHAT, plainly. -->
 [Description.]

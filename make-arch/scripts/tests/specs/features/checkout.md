@@ -1,3 +1,4 @@
+---
 # Minimal make-spec feature data file -- make-arch only reads requirements[].governed_by
 # from here (the no-orphan cross-check, A-004).
 meta:
@@ -14,3 +15,8 @@ requirements:
     governed_by:
       - "ADR-0003"
     status: active
+---
+
+# checkout
+
+Human narrative; the frontmatter above is the signed contract.

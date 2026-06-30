@@ -16,6 +16,7 @@ Exit 0 = every case behaved as expected.
 """
 import copy
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -59,12 +60,28 @@ def codes(out):
             for ln in out.splitlines() if ln.strip().startswith("[A-")}
 
 
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
+
+
 def edit_yaml(path, fn):
+    """Edit a spec doc in place. A .md spec is edited via its YAML frontmatter
+    (the body is preserved); a .yaml file (arch-data.yaml) is edited directly."""
     with open(path) as f:
-        doc = yaml.safe_load(f)
-    fn(doc)
-    with open(path, "w") as f:
-        yaml.safe_dump(doc, f, sort_keys=False, allow_unicode=True)
+        text = f.read()
+    if path.endswith(".md"):
+        m = FRONTMATTER_RE.match(text)
+        fm = m.group(1) if m else ""
+        body = text[m.end():] if m else text
+        doc = yaml.safe_load(fm) or {}
+        fn(doc)
+        dumped = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+        with open(path, "w") as f:
+            f.write("---\n" + dumped + "---\n" + body)
+    else:
+        doc = yaml.safe_load(text)
+        fn(doc)
+        with open(path, "w") as f:
+            yaml.safe_dump(doc, f, sort_keys=False, allow_unicode=True)
 
 
 def arch(spec_dir):
@@ -72,7 +89,7 @@ def arch(spec_dir):
 
 
 def feature(spec_dir):
-    return os.path.join(spec_dir, "features", "checkout-data.yaml")
+    return os.path.join(spec_dir, "features", "checkout.md")
 
 
 def archmd(spec_dir):

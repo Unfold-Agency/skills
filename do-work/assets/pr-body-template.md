@@ -42,14 +42,30 @@ Closes #<N>
 - Source version: `<feature_version this was born from>`
 - Autonomy: `<afk | hitl>`  <!-- hitl PRs are never auto-merged; a human reviews and merges -->
 
-## Assumptions & mocks
+## As-built
 
-<!-- DANGEROUS MODE ONLY (omit this section otherwise). When built under
-     --dangerously, list every best-practice default chosen for an ambiguous spec
-     and every mock/placeholder created for a missing external (each tagged
-     FIXME(dangerously) in the code), with the needs-human-review follow-up issue
-     opened for it. This is the reviewer's debt list -- what shipped on an
-     assumption and must be confirmed. -->
+<!-- The AS-BUILT LEDGER: one row per acceptance criterion this issue carries, with
+     how it was actually built. This is the terminal acceptance gate's record
+     (consistency != correctness): the trace above proves the specs/issue/PR are
+     consistent; this ledger records whether each criterion was actually MET vs
+     deferred or mocked. Be truthful -- "met" has real evidence (a test, a checked
+     behavior); "mocked" is backed by a FIXME(dangerously) stub; "deferred" was not
+     built. The issue is acceptance-clean only when every row is "met"; any
+     deferred/mocked row parks the PR for a human (or, under --dangerously, merges
+     with a needs-human-review follow-up per row -- see below). -->
+
+| Acceptance criterion | Status | Evidence (how met, or why deferred/mocked) |
+|---|---|---|
+| `<criterion 1>` | met | <the test / behavior that proves it> |
+| `<criterion 2>` | deferred / mocked | <why, and the follow-up issue #> |
+
+### Assumptions & mocks
+
+<!-- DANGEROUS MODE subset of the ledger above (omit if nothing was assumed/mocked).
+     The "mocked" rows plus every best-practice default chosen for an ambiguous spec
+     (each tagged FIXME(dangerously) in the code), with the needs-human-review
+     follow-up issue opened for it. This is the reviewer's debt list -- what shipped
+     on an assumption and must be confirmed. -->
 - <what was assumed/mocked, where in the code> -- follow-up: #<M>
 
 ## Notes

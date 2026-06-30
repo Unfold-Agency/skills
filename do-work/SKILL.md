@@ -35,7 +35,7 @@ The mechanics (the worker brief, the verdict contract, the review/merge gate, wo
 ## Files in this skill
 
 - `scripts/work_preflight.py` -- the read-only gate: auth, gh version, the PRD/TDD version lock, the repo, and that a backlog exists; plus advisories (flagged-stale issues, an owed sync, missing labels). Run it first, every run.
-- `scripts/select_work.py` -- computes the actionable queue from the live issues: open, unflagged, unblocked, autonomy-matched, not in flight elsewhere; resumable-by-you first.
+- `scripts/select_work.py` -- computes the actionable queue from the live issues: open, unflagged, unblocked, autonomy-matched, not in flight elsewhere; resumable-by-you first, then ascending `priority` (lower builds sooner; absent sorts last), then issue number.
 - `references/execution-loop.md` -- read before building: the orchestrator/worker split, the worker brief (claim, read, build, verify, PR), the verdict contract, worktrees and parallel rounds, and how a killed run resumes.
 - `references/escalation-and-handback.md` -- read when a build is blocked: when to route to `/make-tdd` (a design gap) vs `/make-prd` (a wrong requirement) vs `/make-issues` (a stale issue), and how to write the hand-back so the upstream skill can act.
 - `assets/pr-body-template.md` -- the PR body the build opens: the closing reference, the trace mirrored from the issue, the acceptance checklist, and how it was verified.
@@ -60,7 +60,7 @@ python scripts/select_work.py --repo <owner/name> --phase 1        # only phase 
 python scripts/select_work.py --repo <owner/name> --issue 42       # just issue #42
 ```
 
-Actionable means: open, no not-buildable flag, **every blocker closed-completed**, autonomy matches the filter (default `afk`), the phase matches when `--phase` is set, and not in flight under someone else's name. An issue already assigned to you is **resumable** and sorts first, so an interrupted build is finished before a fresh one starts. `--issue=N` narrows to that one issue and skips the autonomy/phase filters but keeps the buildable gates (so it reports, rather than builds, a flagged or blocked target). Read `references/execution-loop.md`, then present the queue and the pick. With `--limit=1` or `--issue`, confirm the pick before building; otherwise proceed round by round and report each issue in order.
+Actionable means: open, no not-buildable flag, **every blocker closed-completed**, autonomy matches the filter (default `afk`), the phase matches when `--phase` is set, and not in flight under someone else's name. An issue already assigned to you is **resumable** and sorts first, so an interrupted build is finished before a fresh one starts. Within the rest of the queue, issues build in ascending `priority` order (an integer in the `make-issues:meta` block -- lower builds sooner, absent sorts last), then by issue number; a human can set `priority:` by hand to jump a stuck story, and it is read live at pick time so re-prioritizing never flags the issue as drifted. `--issue=N` narrows to that one issue and skips the autonomy/phase filters but keeps the buildable gates (so it reports, rather than builds, a flagged or blocked target). Read `references/execution-loop.md`, then present the queue and the pick. With `--limit=1` or `--issue`, confirm the pick before building; otherwise proceed round by round and report each issue in order.
 
 ## Build (the orchestrator dispatches a worker)
 

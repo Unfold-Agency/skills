@@ -14,7 +14,7 @@ A worker gets a **pointer** -- the issue number and repo -- not shared context. 
 ## The orchestrator's job
 
 1. **Preflight once** (`work_preflight.py`). Ensure the lifecycle labels exist (`status:doing`, `escalated`). Stop on any gating failure.
-2. **Select** (`select_work.py --autonomy afk`). This is the actionable queue: open, unflagged, unblocked, autonomy-matched, not in flight elsewhere -- resumable-by-you first.
+2. **Select** (`select_work.py --autonomy afk`). This is the actionable queue: open, unflagged, unblocked, autonomy-matched, not in flight elsewhere -- resumable-by-you first, then ascending `priority`, then issue number.
 3. **Dispatch a worker per issue.** Spawn a subagent with the worker brief below (the do-work session does this with its Task/subagent tool; the bundled `workflows/drain-queue.js` does it with `agent()`). Do **not** build in the orchestrator's own context -- not even for a single issue. That is the rule.
 4. **Collect the verdict** (the contract below). Record it; do not absorb the worker's transcript.
 5. **Review and fix each built PR** (every run, not behind a flag). For each `built` verdict run the review -> fix loop (below): a fresh reviewer (`do-pr-review`) posts findings and returns a count of open Critical/Major findings; if any, a fixer (`do-pr-fix`) addresses them and replies in-thread; re-review repeats until clean or `maxReviewRounds` is spent. A PR that can't be cleared is parked for a human (`review_unresolved`), never merged.

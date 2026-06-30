@@ -85,7 +85,7 @@ def issue(number, trace_req, fingerprint, state="OPEN", reason=None,
 def plan_for(reqs_map, issues, adr_status=None, max_refactors=10):
     by_req, blocking_meta = analyze.index_issues(issues)
     return analyze.build_plan(reqs_map, by_req, adr_status or {}, blocking_meta,
-                              max_refactors, issues)
+                              max_refactors)
 
 
 def actions(plan):
@@ -196,6 +196,19 @@ bad_issue["body"] = "## Goal\nNo meta block here at all.\n"
 p = plan_for(reqs, [bad_issue])
 check("malformed meta block -> blocking drift", bool(p["blocking"]))
 
+# a hand-edited string trace_req must FAIL CLOSED (blocking), never iterate its
+# characters into bogus single-letter requirement keys.
+str_meta, str_err = analyze.parse_meta(
+    f"{analyze.META_OPEN}\n```yaml\ntrace_req: FR-CHK-001\n```\n{analyze.META_CLOSE}\n")
+check("string trace_req -> parse_meta blocks (not a list)",
+      str_meta is None and "not a list" in (str_err or ""))
+str_issue = issue(13, ["FR-CHK-001"], fp1)
+str_issue["body"] = str_issue["body"].replace("trace_req: [FR-CHK-001]",
+                                              "trace_req: FR-CHK-001")
+by_req_s, blocking_s = analyze.index_issues([str_issue])
+check("string trace_req -> issue is blocking, not character-iterated into by_req",
+      bool(blocking_s) and not any(len(k) == 1 for k in by_req_s))
+
 # ── fan-out cap: more refactors than the cap -> truncate + tracking + BLOCK ──
 many_reqs = {}
 many_issues = []
@@ -270,6 +283,27 @@ with tempfile.TemporaryDirectory() as tmp:
         raised = type(e).__name__
     check("malformed requirement raises ValueError (-> clean exit 2), not a raw TypeError",
           raised == "ValueError")
+
+# ── a non-dict `meta` block must not crash load_requirements (AttributeError) ──
+with tempfile.TemporaryDirectory() as tmp:
+    fdir = os.path.join(tmp, "features")
+    os.makedirs(fdir)
+    with open(os.path.join(fdir, "checkout-data.yaml"), "w", encoding="utf-8") as f:
+        f.write("meta: not-a-mapping\n"               # a scalar, not a dict
+                "requirements:\n"
+                "  - id: FR-CHK-001\n"
+                "    description: d\n"
+                '    acceptance_criteria: ["WHEN x THE SYSTEM SHALL y."]\n'
+                "    depends_on: []\n"
+                "    governed_by: []\n"
+                "    status: active\n")
+    crashed = None
+    try:
+        out = analyze.load_requirements(tmp)
+    except Exception as e:   # noqa: BLE001
+        crashed = type(e).__name__
+    check("non-dict meta -> no crash; slug falls back to the filename",
+          crashed is None and out.get("FR-CHK-001", {}).get("feature") == "checkout")
 
 print()
 if failures:

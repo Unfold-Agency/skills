@@ -224,8 +224,7 @@ def m_s008_index_prefix(d):
     ).__setitem__("prefix", "ZZ"))
 
 def m_s004_adr_nofile(d):
-    # governed_by names a well-formed ADR with no file under decisions/ (341-343).
-    # Needs a non-empty decisions/ dir, else the existence arm short-circuits.
+    # governed_by names a well-formed ADR with no file under a NON-empty decisions/.
     decdir = os.path.join(d, "decisions")
     os.makedirs(decdir, exist_ok=True)
     with open(os.path.join(decdir, "ADR-0001-seed.md"), "w") as f:
@@ -233,6 +232,15 @@ def m_s004_adr_nofile(d):
     edit_yaml(feat(d, "checkout"),
               lambda doc: doc["requirements"][0].__setitem__("governed_by",
                                                              ["ADR-0002"]))
+
+def m_s004_adr_emptydir(d):
+    # governed_by names an ADR while decisions/ exists but is EMPTY. The existence
+    # check must still fire (has_dec_dir, not the falsy adr_files set) -- the hole
+    # the PR review flagged: an empty dir used to short-circuit the check.
+    os.makedirs(os.path.join(d, "decisions"), exist_ok=True)
+    edit_yaml(feat(d, "checkout"),
+              lambda doc: doc["requirements"][0].__setitem__("governed_by",
+                                                             ["ADR-0001"]))
 
 
 # (rule, mutate_fn, restamp?) -- restamp so only the intended rule trips
@@ -245,6 +253,7 @@ MUTATIONS = [
     ("S-004", m_s004_dangling_dep, True),
     ("S-004", m_s004_bad_adr, True),
     ("S-004", m_s004_adr_nofile, True),
+    ("S-004", m_s004_adr_emptydir, True),
     ("S-007", m_s007_namespace, True),
     ("S-008", m_s008_version_drift, False),
     ("S-008", m_s008_missing_row, True),

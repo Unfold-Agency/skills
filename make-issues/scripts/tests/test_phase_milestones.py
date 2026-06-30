@@ -67,6 +67,15 @@ DOUBLE = {"phasing": [
 f2p, _ = build_maps(DOUBLE)
 check("double-listed feature resolves to the latest phase", f2p["checkout"] == 2)
 
+# a hand-typed single slug (features: checkout, not a list) is one feature, never
+# iterated character-by-character into c/h/e/c/k/o/u/t.
+STR_FEATS = {"phasing": [
+    {"phase": 1, "name": "A", "features": "checkout", "status": "active"},
+]}
+f2p_str, _ = build_maps(STR_FEATS)
+check("string features coerces to one slug, not its characters",
+      f2p_str == {"checkout": 1})
+
 # ── phase_for_feature ──────────────────────────────────────────────────────
 n, _ = phase_for_feature("accounts", feature_to_phase)
 check("known feature -> its phase", n == 1)

@@ -113,9 +113,10 @@ def load_requirements(spec_dir):
             raise ValueError(f"cannot read {fpath}: {e}")
         if not isinstance(doc, dict):
             raise ValueError(f"{fpath} is not a YAML mapping")
-        slug = str(((doc.get("meta") or {}).get("slug"))
+        meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+        slug = str(meta.get("slug")
                    or os.path.basename(fpath).replace("-data.yaml", ""))
-        feature_version = str((doc.get("meta") or {}).get("feature_version") or "")
+        feature_version = str(meta.get("feature_version") or "")
         for req in doc.get("requirements") or []:
             if isinstance(req, dict) and req.get("id"):
                 rid = str(req["id"])
@@ -180,8 +181,11 @@ def parse_meta(body):
         return None, f"meta block is not valid YAML: {e}"
     if not isinstance(meta, dict):
         return None, "meta block is not a YAML mapping"
-    if not meta.get("trace_req"):
-        return None, "meta block has no trace_req (cannot match to a requirement)"
+    trace_req = meta.get("trace_req")
+    if not isinstance(trace_req, list) or not trace_req:
+        # a hand-edited string (trace_req: "FR-CHK-001") would otherwise iterate
+        # character-by-character downstream -- require a real list, fail closed.
+        return None, "meta block's trace_req is missing or not a list"
     return meta, None
 
 
@@ -234,7 +238,7 @@ def idempotency_key(req_id, action, fingerprint, extra=""):
     return f"{action}:{req_id}:{(fingerprint or '')[:12]}{(':' + extra) if extra else ''}"
 
 
-def _refactor_reason(req_id, info, issues, adr_status):
+def _refactor_reason(req_id, info, adr_status):
     """Why this matched, completed requirement is a REFACTOR, or None if it
     isn't. Two triggers: the requirement was superseded/removed but shipped, OR a
     governing ADR is now superseded/deprecated and the issue merged."""
@@ -249,8 +253,7 @@ def _refactor_reason(req_id, info, issues, adr_status):
     return None
 
 
-def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
-               all_issues):
+def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors):
     """Compute the bounded reconcile plan. Returns a dict with `ops`,
     `blocking` (list of human-needed problems), `counts`, and `truncated`."""
     ops = []
@@ -296,7 +299,7 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
             # superseded/deferred requirement -> orphan or refactor
             if not active:
                 if is_merged(issue):
-                    reason = _refactor_reason(rid, info, all_issues, adr_status)
+                    reason = _refactor_reason(rid, info, adr_status)
                     refactor_candidates.append((rid, issue,
                                                 reason or f"{rid} is {info['status']}"))
                 else:
@@ -309,24 +312,19 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
                                        "close not-started/started issue as orphan"})
                 continue
 
-            # active requirement: governing-ADR-supersede on a merged issue is a
-            # refactor even if the requirement text itself didn't change.
+            # active requirement: a governing-ADR supersede on a merged issue is a
+            # refactor of shipped work even when the requirement text is unchanged
+            # (the governing decision flipped). One branch, with the text-unchanged
+            # case noted in the reason.
             adr_super = next((a for a in info["governed_by"]
                               if adr_status.get(a) in ("superseded", "deprecated")),
                              None)
-            if is_merged(issue) and adr_super and stamped != fp:
+            if is_merged(issue) and adr_super:
+                suffix = " (requirement text unchanged)" if stamped == fp else ""
                 refactor_candidates.append(
                     (rid, issue,
                      f"governing {adr_super} is {adr_status[adr_super]}; "
-                     f"{rid}'s issue merged"))
-                continue
-            if is_merged(issue) and adr_super and stamped == fp:
-                # the requirement text is unchanged but its governing decision
-                # flipped -- still a refactor of shipped work.
-                refactor_candidates.append(
-                    (rid, issue,
-                     f"governing {adr_super} is {adr_status[adr_super]}; "
-                     f"{rid}'s issue merged (requirement text unchanged)"))
+                     f"{rid}'s issue merged{suffix}"))
                 continue
 
             if stamped == fp:
@@ -465,7 +463,7 @@ def main():
     adr_status = load_adr_status(args.spec_dir)
     issues_by_req, blocking_meta = index_issues(issues)
     plan = build_plan(reqs, issues_by_req, adr_status, blocking_meta,
-                      args.max_refactors, issues)
+                      args.max_refactors)
 
     # The watermark is read for context (and re-stamped by the executor after a
     # successful sync); analyze surfaces it but does not write it.

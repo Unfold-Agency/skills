@@ -93,7 +93,10 @@ def build_maps(doc):
             "name": name,
             "summary": " ".join(str(ph.get("summary") or "").split()),
         }
-        for feat in ph.get("features") or []:
+        features = ph.get("features") or []
+        if isinstance(features, str):
+            features = [features]   # a single hand-typed slug, not a char sequence
+        for feat in features:
             feat = str(feat)
             if feat not in feature_to_phase or num > feature_to_phase[feat]:
                 feature_to_phase[feat] = num   # latest phase wins on a double-listing

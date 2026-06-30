@@ -77,18 +77,23 @@ def main():
         sys.exit(2)
     me = _me(args.me)
     buckets = classify(issues, me)
-    # Fresh not-started work, split into ready vs dependency-blocked, from the same
-    # selector the build loop uses. Exclude anything already in flight (it shows
-    # under resumable/dangling) so the surface is a clean partition, not a
+    # Fresh not-started work, from the same selector the build loop uses. Select
+    # with autonomy="any" so HITL (and unset-autonomy) items are not dropped, then
+    # split the fresh queue: afk -> ready to build autonomously; everything else ->
+    # needs-you (a human must drive it). Exclude anything already in flight (it
+    # shows under resumable/dangling) so the surface is a clean partition, not a
     # double-count.
-    sel = select(issues, me, autonomy="afk")
+    sel = select(issues, me, autonomy="any")
     inflight = {r["number"] for r in buckets["resumable"] + buckets["dangling"]}
-    ready = [r for r in sel["actionable"] if r["number"] not in inflight]
+    fresh = [r for r in sel["actionable"] if r["number"] not in inflight]
+    ready = [r for r in fresh if r.get("autonomy") == "afk"]
+    needs_you = [r for r in fresh if r.get("autonomy") != "afk"]
     blocked = [e for e in sel["excluded"]
                if str(e.get("reason", "")).startswith("blocked by")]
 
     if args.json:
-        print(json.dumps({**buckets, "ready": ready, "blocked": blocked}, indent=2))
+        print(json.dumps({**buckets, "ready": ready, "needs_you": needs_you,
+                          "blocked": blocked}, indent=2))
         sys.exit(0)
 
     def show(title, rows, fmt):
@@ -109,8 +114,10 @@ def main():
          lambda r: f"#{r['number']} {r['title']}  (by {', '.join(r['assignees']) or '?'})")
     show("Safe to resume (started by you, unmerged)", buckets["resumable"],
          lambda r: f"#{r['number']} {r['title']}")
-    show("Ready to build next (fresh, not started)", ready,
+    show("Ready to build next (fresh, afk, not started)", ready,
          lambda r: f"#{r['number']} {r['title']}")
+    show("Needs you (fresh, not started, not autonomous)", needs_you,
+         lambda r: f"#{r['number']} [{r.get('autonomy') or 'unset'}] {r['title']}")
     show("Blocked (waiting on a dependency)", blocked,
          lambda r: f"#{r['number']}: {r['reason']}")
     show("Won't-do (closed, not planned)", buckets["wont_do"],
@@ -118,7 +125,8 @@ def main():
     print(f"summary: {len(buckets['merged'])} merged, "
           f"{len(buckets['parked'])} parked, {len(buckets['dangling'])} dangling, "
           f"{len(buckets['resumable'])} resumable, {len(ready)} ready, "
-          f"{len(blocked)} blocked, {len(buckets['wont_do'])} won't-do")
+          f"{len(needs_you)} needs-you, {len(blocked)} blocked, "
+          f"{len(buckets['wont_do'])} won't-do")
     sys.exit(0)
 
 

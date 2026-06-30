@@ -324,7 +324,8 @@ def main():
     # ---- decisions dir for governed_by resolution (S-004) --------------
     dec_dir = os.path.join(spec_dir, "decisions")
     adr_files = set()
-    if os.path.isdir(dec_dir):
+    has_dec_dir = os.path.isdir(dec_dir)   # present-but-empty must still enforce
+    if has_dec_dir:
         for name in os.listdir(dec_dir):
             mo = re.match(r"^(ADR-\d{4})", name)
             if mo and name.endswith(".md"):
@@ -347,7 +348,7 @@ def main():
                 if not ADR_ID_RE.match(str(adr)):
                     fail("S-004", f"{dpath}: {rid}.governed_by '{adr}' is not an "
                                   "ADR id (want ^ADR-\\d{4}$)")
-                elif adr_files and adr not in adr_files:
+                elif has_dec_dir and adr not in adr_files:
                     fail("S-004", f"{dpath}: {rid}.governed_by '{adr}' has no file "
                                   "under docs/specs/decisions/")
             acs = r.get("acceptance_criteria") or []

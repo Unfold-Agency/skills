@@ -88,22 +88,30 @@ def issue_b(number, body_text, **kw):
 part = [
     issue_b(10, body(), assignees=("alice",),
             labels=("make-issues", "afk", "status:doing")),   # resumable (mine)
-    issue_b(11, body()),                                       # ready (fresh)
+    issue_b(11, body()),                                       # ready (fresh, afk)
     issue_b(12, body(deps="- #11 prerequisite")),             # blocked by open #11
+    issue_b(13, body(autonomy="hitl"),
+            labels=("make-issues", "hitl")),                  # fresh hitl -> needs-you
 ]
 pb = classify(part, ME)
-psel = select(part, ME, autonomy="afk")
+psel = select(part, ME, autonomy="any")   # main() selects "any", then splits by autonomy
 inflight = {r["number"] for r in pb["resumable"] + pb["dangling"]}
-p_ready = [r for r in psel["actionable"] if r["number"] not in inflight]
+fresh = [r for r in psel["actionable"] if r["number"] not in inflight]
+p_ready = [r for r in fresh if r.get("autonomy") == "afk"]
+p_needs_you = [r for r in fresh if r.get("autonomy") != "afk"]
 p_blocked = [e for e in psel["excluded"]
              if str(e.get("reason", "")).startswith("blocked by")]
 check("resumable #10 is NOT also listed in ready (no double-list)",
       10 in [r["number"] for r in pb["resumable"]]
       and 10 not in [r["number"] for r in p_ready])
-check("ready = {11} only (fresh, not started, not blocked)",
+check("ready = {11} only (fresh, afk, not started, not blocked)",
       [r["number"] for r in p_ready] == [11])
 check("blocked #12 is surfaced (waiting on its dependency)",
       [e["number"] for e in p_blocked] == [12])
+check("fresh hitl #13 is surfaced under needs-you, not silently dropped",
+      [r["number"] for r in p_needs_you] == [13]
+      and 13 not in [r["number"] for r in p_ready]
+      and 13 not in [e["number"] for e in p_blocked])
 
 print()
 if failures:

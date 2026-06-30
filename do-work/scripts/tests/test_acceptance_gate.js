@@ -18,20 +18,36 @@ const vm = require('vm')
 const SRC = path.join(__dirname, '..', '..', 'workflows', 'drain-queue.js')
 const src = fs.readFileSync(SRC, 'utf8')
 
-// Pull the two pure functions out of the source by their declarations, so the
-// test never drifts from the implementation. Both are `function name(verdict){...}`.
+// Pull the named functions out of the source by their declarations, so the test
+// never drifts from the implementation (`async` is prepended at the call site for
+// async fns). Brace-match the body, skipping braces that live inside line/block
+// comments, quoted strings, and template-literal text. A mode stack keeps template
+// `${...}` interpolations counted as code (their braces balance) while a stray
+// brace in a string or comment is ignored -- so the extractor stays correct even
+// if such a brace is introduced later.
 function extract(name) {
   const start = src.indexOf(`function ${name}(`)
   if (start < 0) throw new Error(`could not find function ${name} in ${SRC}`)
-  // Walk braces from the first '{' after the signature to its match.
-  const open = src.indexOf('{', start)
-  let depth = 0
-  let i = open
-  for (; i < src.length; i++) {
-    if (src[i] === '{') depth++
-    else if (src[i] === '}') { depth--; if (depth === 0) { i++; break } }
+  let i = src.indexOf('{', start)
+  const stack = ['brace']               // the function's own opening brace
+  for (i++; i < src.length && stack.length; i++) {
+    const top = stack[stack.length - 1]
+    const c = src[i], d = src[i + 1]
+    if (top === 'tmpl') {               // inside a template literal's text
+      if (c === '\\') i++               // skip an escaped char
+      else if (c === '`') stack.pop()   // end of the template literal
+      else if (c === '$' && d === '{') { stack.push('interp'); i++ }  // back to code
+      continue
+    }
+    // code mode (a 'brace' block/object or a '${}' interpolation)
+    if (c === '/' && d === '/') { const nl = src.indexOf('\n', i); i = nl < 0 ? src.length : nl }
+    else if (c === '/' && d === '*') { i = src.indexOf('*/', i + 2) + 1 }
+    else if (c === "'" || c === '"') { for (i++; i < src.length && src[i] !== c; i++) if (src[i] === '\\') i++ }
+    else if (c === '`') stack.push('tmpl')
+    else if (c === '{') stack.push('brace')
+    else if (c === '}') stack.pop()     // closes a brace block or an interpolation
   }
-  return src.slice(start, i)
+  return src.slice(start, i)            // i is one past the matched closing brace
 }
 
 const sandbox = {}

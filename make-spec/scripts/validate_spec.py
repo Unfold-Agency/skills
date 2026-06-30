@@ -119,7 +119,10 @@ FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOT
 
 
 def split_frontmatter(text):
-    """(frontmatter_text, body) for a leading --- ... --- block, else (None, text)."""
+    """(frontmatter_text, body) for a leading --- ... --- block, else (None, text).
+    A leading UTF-8 BOM is tolerated."""
+    if text.startswith("﻿"):
+        text = text[1:]
     m = FRONTMATTER_RE.match(text)
     if not m:
         return None, text
@@ -127,11 +130,15 @@ def split_frontmatter(text):
 
 
 def parse_frontmatter(text):
-    """The structured doc embedded in a spec file's frontmatter ({} if none)."""
+    """The structured doc embedded in a spec file's frontmatter. Returns {} when
+    there is no frontmatter OR it is not a mapping -- so a malformed spec fails
+    closed through the integrity rules (S-001/S-006) rather than crashing a caller
+    that expects a dict."""
     fm, _ = split_frontmatter(text)
     if fm is None:
         return {}
-    return yaml.safe_load(fm) or {}
+    doc = yaml.safe_load(fm)
+    return doc if isinstance(doc, dict) else {}
 
 
 def load_yaml(path):

@@ -99,6 +99,25 @@ with tempfile.TemporaryDirectory() as tmp:
     check("base fixture passes (exit 0)", rc == 0 and not codes(out))
 
 
+# ── 1b. a malformed top-level frontmatter (a YAML list, not a mapping) must fail
+#       CLOSED via S-001 -- never crash with an uncaught AttributeError ──────────
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    with open(overview(d), "w") as f:
+        f.write("---\n- a\n- b\n---\n\n# bad\n")
+    rc, out = run_validator(d, "--no-baseline")
+    check("non-dict overview frontmatter -> clean S-001, no traceback",
+          rc == 1 and "S-001" in codes(out) and "Traceback" not in out)
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    with open(feat(d, "checkout"), "w") as f:
+        f.write("---\n- not\n- a\n- mapping\n---\n\n# bad\n")
+    rc, out = run_validator(d, "--no-baseline")
+    check("non-dict feature frontmatter -> clean S-001, no traceback",
+          rc == 1 and "S-001" in codes(out) and "Traceback" not in out)
+
+
 # ── 2. C1 keystone: the fingerprint IN/OUT contract ──────────────────
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))

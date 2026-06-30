@@ -117,13 +117,17 @@ FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOT
 
 
 def load_spec_doc(path):
-    """Parse a single-file spec's YAML frontmatter into its doc dict ({} if none)."""
+    """Parse a single-file spec's YAML frontmatter into its doc dict. Returns {}
+    when there is no frontmatter or it is not a mapping. Tolerates a BOM."""
     with open(path, encoding="utf-8") as f:
         text = f.read()
+    if text.startswith("﻿"):
+        text = text[1:]
     m = FRONTMATTER_RE.match(text)
     if not m:
         return {}
-    return yaml.safe_load(m.group(1)) or {}
+    doc = yaml.safe_load(m.group(1))
+    return doc if isinstance(doc, dict) else {}
 
 
 def feature_files(path):

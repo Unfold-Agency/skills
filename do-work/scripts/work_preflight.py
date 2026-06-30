@@ -3,38 +3,38 @@
 writes GitHub state or touches code. The skill reads the verdict and acts
 (ensures labels, selects the next issue, or stops).
 
-do-work is RFEF Lane 6 -- it builds the project from the GitHub issues that
-make-issues (Lane 4) created. So its gate is the make-issues lock chain plus two
-build-lane facts: there must actually be a backlog, and you must not build issues
-make-issues has already flagged stale.
+do-work builds the project from the GitHub issues that make-issues created from
+the docs/specs/ spec set. Its gate is the build-lane facts: the spec set is
+present, a backlog exists, and you must not build issues make-issues has flagged
+stale. do-work TRUSTS make-issues for drift detection -- it does not recompute
+spec fingerprints (that is make-issues' fail-closed gate); it reads the version
+stamps make-spec already wrote.
 
 Checks, in order of dependency (a gating failure aborts before the next):
-  1. auth          -- `gh auth status` succeeds
-  2. gh_version    -- gh >= 2.94.0 (the same native-flag floor make-issues uses;
-                      do-work opens PRs and reads issue dependencies)
-  3. version_lock  -- prd-data.meta.prd_version == tdd-data.meta.prd_version
-                      (pure YAML; if the TDD is stale the whole backlog is built
-                      against a moved PRD -- re-lock via /make-tdd first)
-  4. repo          -- inside a git work tree AND a resolvable owner/name remote
-  5. backlog       -- make-issues-managed issues exist (else run /make-issues first)
+  1. auth     -- `gh auth status` succeeds
+  2. gh_version -- gh >= 2.94.0 (native dependency/type flags)
+  3. specs    -- docs/specs/ has an overview-data.yaml and >=1 features/*-data.yaml
+                 (else run /make-spec, then /make-issues)
+  4. repo     -- inside a git work tree AND a resolvable owner/name remote
+  5. backlog  -- make-issues-managed issues exist (else run /make-issues first)
 
 Then non-gating ADVISORIES (reported, never abort):
-  - drift          -- open managed issues carrying needs-rebase/spec-drift/
-                      orphaned/escalated are NOT buildable; resolve them first
-  - sync_owed      -- the live TDD version is not represented in the open issues'
-                      meta-block source_versions.tdd; a /make-issues sync may be owed
-  - labels         -- the do-work lifecycle labels (status:doing, escalated)
-                      the skill creates if missing
+  - drift     -- open managed issues carrying needs-rebase / spec-drift /
+                 orphaned / escalated / stale-against-dependency are NOT buildable
+  - sync_owed -- an open issue's stamped source_version lags its feature's live
+                 feature_version in the overview index; a /make-issues sync is owed
+  - labels    -- the do-work lifecycle labels (status:doing, escalated,
+                 needs-human-review) the skill creates if missing
 
-  python scripts/work_preflight.py --prd docs/prd-data.yaml --tdd docs/tdd-data.yaml
-  python scripts/work_preflight.py   # --prd/--tdd default to docs/{prd,tdd}-data.yaml
-  python scripts/work_preflight.py --prd ... --tdd ... --repo owner/name --json
+  python scripts/work_preflight.py --spec-dir docs/specs
+  python scripts/work_preflight.py --spec-dir docs/specs --repo owner/name --json
 
-Exit codes: 0 = gate passes, 1 = a gating check failed, 2 = the data files can't
-be read. Advisories never change the exit code.
+Exit codes: 0 = gate passes, 1 = a gating check failed, 2 = the spec set can't be
+read. Advisories never change the exit code.
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -46,17 +46,17 @@ except ImportError:
     sys.exit(2)
 
 MIN_GH = (2, 94, 0)
-# Lifecycle labels do-work owns and creates if missing (mirrors the make-issues
-# pattern of self-ensuring its label scheme). status:doing is the in-progress
-# signal make-issues reconciliation already reads as a "started" marker.
-MAKE_WORK_LABELS = ["status:doing", "escalated"]
-# Labels that make a managed issue NOT buildable. The first three are set by
-# make-issues reconciliation (a drifted spec); `escalated` is set by do-work
-# when it hands an issue back upstream.
-NOT_BUILDABLE_FLAGS = ["needs-rebase", "spec-drift", "orphaned", "escalated"]
-# The make-issues meta block embedded in each managed issue body. Its
-# source_versions.tdd is the authoritative version stamp do-work reads to decide
-# whether a /make-issues sync is owed -- there is no src: label anymore.
+# Lifecycle labels do-work owns and creates if missing. status:doing is the
+# in-progress signal make-issues reconciliation reads as "started";
+# needs-human-review tags the follow-ups --dangerously opens.
+MAKE_WORK_LABELS = ["status:doing", "escalated", "needs-human-review"]
+# Labels that make a managed issue NOT buildable. make-issues sets the spec-drift
+# ones; escalated is do-work's hand-back; stale-against-dependency is the seam flag.
+NOT_BUILDABLE_FLAGS = ["needs-rebase", "spec-drift", "orphaned", "escalated",
+                       "stale-against-dependency"]
+# The make-issues meta block embedded in each managed issue body. do-work reads
+# `feature` + `source_version` from it (the make-spec content version the issue
+# was born from) to decide whether a /make-issues sync is owed.
 _META_RE = re.compile(
     r"<!--\s*make-issues:meta\s*-->(.*?)<!--\s*/make-issues:meta\s*-->", re.DOTALL)
 
@@ -74,9 +74,8 @@ def _run(cmd, timeout=30):
         return 127, "", f"{cmd[0]} not found"
 
 
-def _load_meta(path):
-    """Load a data file's `meta` mapping. Returns (meta_dict, None) on success
-    (an empty dict if the file has no `meta`), or (None, err) if it can't be read."""
+def _load_yaml(path):
+    """Load a YAML mapping. Returns (doc, None) or (None, err)."""
     try:
         with open(path, encoding="utf-8") as f:
             doc = yaml.safe_load(f)
@@ -84,17 +83,7 @@ def _load_meta(path):
         return None, f"cannot read {path}: {e}"
     if not isinstance(doc, dict):
         return None, f"{path} is not a YAML mapping"
-    meta = doc.get("meta")
-    return (meta if isinstance(meta, dict) else {}), None
-
-
-def _meta_field(path, field):
-    """Read one meta field from a data file. Returns ('', None) when the key is
-    absent, (None, err) when the file itself can't be read."""
-    meta, err = _load_meta(path)
-    if err:
-        return None, err
-    return str(meta.get(field) or ""), None
+    return doc, None
 
 
 def check_auth():
@@ -118,27 +107,27 @@ def check_gh_version():
                       else f"gh {have} < {want}; run `brew upgrade gh`"}
 
 
-def check_version_lock(prd_path, tdd_path):
-    """Pure-YAML gate -- the same condition make-issues enforces. Importable and
-    testable without gh/network."""
-    live, err1 = _meta_field(prd_path, "prd_version")
-    locked, err2 = _meta_field(tdd_path, "prd_version")
-    if err1 or err2:
-        return {"name": "version_lock", "ok": False, "fatal": True,
-                "detail": f"{err1 or err2} -- both data files (canonically "
-                          "docs/prd-data.yaml and docs/tdd-data.yaml) "
-                          "must be present to verify the lock"}
-    ok = bool(live) and bool(locked) and live == locked
-    if ok:
-        detail = f"PRD v{live} == TDD lock v{locked}"
-    elif not live or not locked:
-        detail = f"missing prd_version (PRD '{live}', TDD lock '{locked}')"
-    else:
-        detail = (f"TDD is locked to PRD v{locked} but the live PRD is v{live}; "
-                  "the PRD moved on -- re-run /make-tdd to re-derive and re-lock, "
-                  "then /make-issues to sync, before building")
-    return {"name": "version_lock", "ok": ok, "live_prd": live,
-            "locked_prd": locked, "detail": detail}
+def check_specs(spec_dir):
+    """Gating: the docs/specs set must be present -- an overview-data.yaml and at
+    least one features/*-data.yaml. A missing/unreadable overview is fatal (exit 2);
+    no features means there is nothing to build issues from. Pure file checks --
+    do-work does NOT recompute fingerprints (it trusts make-issues' gate)."""
+    overview = os.path.join(spec_dir, "overview-data.yaml")
+    if not os.path.isfile(overview):
+        return {"name": "specs", "ok": False, "fatal": True,
+                "detail": f"no {overview} -- run /make-spec to author the spec set "
+                          "(docs/specs/), then /make-issues"}
+    _, err = _load_yaml(overview)
+    if err:
+        return {"name": "specs", "ok": False, "fatal": True, "detail": err}
+    import glob
+    features = glob.glob(os.path.join(spec_dir, "features", "*-data.yaml"))
+    if not features:
+        return {"name": "specs", "ok": False,
+                "detail": f"{overview} present but no features/*-data.yaml -- "
+                          "run /make-spec to add features"}
+    return {"name": "specs", "ok": True, "feature_count": len(features),
+            "detail": f"overview + {len(features)} feature(s) under {spec_dir}"}
 
 
 def check_repo(repo_override):
@@ -179,9 +168,8 @@ def _label_names(issue):
 
 
 def _issue_meta(body):
-    """Parse the YAML inside an issue body's make-issues:meta markers. Returns {}
-    when the block is missing or malformed. The meta block is the authoritative
-    record for trace + source_versions (see make-issues)."""
+    """Parse the YAML inside an issue body's make-issues:meta markers. {} when the
+    block is missing or malformed."""
     m = _META_RE.search(body or "")
     if not m:
         return {}
@@ -193,10 +181,18 @@ def _issue_meta(body):
     return data if isinstance(data, dict) else {}
 
 
-def _issue_tdd_version(issue):
-    """The source_versions.tdd stamped in the issue's meta block, or '' if absent."""
-    sv = _issue_meta(issue.get("body", "")).get("source_versions") or {}
-    return str(sv.get("tdd") or "").strip() if isinstance(sv, dict) else ""
+def overview_feature_versions(spec_dir):
+    """{slug: feature_version} from the overview feature_index -- the LIVE content
+    versions make-spec stamped. do-work reads these (it does not recompute them) to
+    tell whether an issue's stamped source_version has fallen behind."""
+    doc, err = _load_yaml(os.path.join(spec_dir, "overview-data.yaml"))
+    if err or not isinstance(doc, dict):
+        return {}
+    out = {}
+    for row in doc.get("feature_index") or []:
+        if isinstance(row, dict) and row.get("slug"):
+            out[str(row["slug"])] = str(row.get("feature_version") or "")
+    return out
 
 
 def check_backlog(issues, listed_ok):
@@ -216,11 +212,12 @@ def check_backlog(issues, listed_ok):
             "detail": f"{open_n} open of {total} managed issue(s)"}
 
 
-def scan_advisories(issues, tdd_path, have_labels):
-    """Non-gating advisories: drifted (not-buildable) open issues, a possibly-owed
-    sync, and missing do-work labels."""
-    flagged = []
-    tdd_versions_seen = set()
+def scan_advisories(issues, spec_dir, have_labels):
+    """Non-gating advisories: drifted (not-buildable) open issues; a possibly-owed
+    sync (an open issue's stamped source_version != its feature's live
+    feature_version); and missing do-work labels."""
+    live = overview_feature_versions(spec_dir)
+    flagged, stale_syncs = [], []
     for i in issues:
         if i.get("state") != "OPEN":
             continue
@@ -228,17 +225,16 @@ def scan_advisories(issues, tdd_path, have_labels):
         hit = sorted(names & set(NOT_BUILDABLE_FLAGS))
         if hit:
             flagged.append({"number": i.get("number"), "flags": hit})
-        tdd_v = _issue_tdd_version(i)
-        if tdd_v:
-            tdd_versions_seen.add(tdd_v)
-
-    live_tdd, _ = _meta_field(tdd_path, "tdd_version")
-    sync_owed = (bool(live_tdd) and bool(tdd_versions_seen)
-                 and live_tdd not in tdd_versions_seen)
+        meta = _issue_meta(i.get("body", ""))
+        feature = str(meta.get("feature") or "")
+        stamped = str(meta.get("source_version") or "")
+        current = live.get(feature)
+        if feature and stamped and current and stamped != current:
+            stale_syncs.append({"number": i.get("number"), "feature": feature,
+                                "stamped": stamped, "live": current})
     missing_labels = [n for n in MAKE_WORK_LABELS if n not in (have_labels or set())]
-    return {"flagged": flagged, "live_tdd": live_tdd or None,
-            "tdd_versions_seen": sorted(tdd_versions_seen), "sync_owed": sync_owed,
-            "missing_labels": missing_labels}
+    return {"flagged": flagged, "stale_syncs": stale_syncs,
+            "sync_owed": bool(stale_syncs), "missing_labels": missing_labels}
 
 
 def _have_labels(repo):
@@ -254,8 +250,8 @@ def _have_labels(repo):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--prd", default="docs/prd-data.yaml", help="prd-data.yaml (default: docs/prd-data.yaml)")
-    ap.add_argument("--tdd", default="docs/tdd-data.yaml", help="tdd-data.yaml (default: docs/tdd-data.yaml)")
+    ap.add_argument("--spec-dir", default="docs/specs",
+                    help="the spec directory (default: docs/specs)")
     ap.add_argument("--repo", help="owner/name; skip gh repo auto-detect")
     ap.add_argument("--json", action="store_true", help="emit the verdict as JSON")
     args = ap.parse_args()
@@ -264,9 +260,9 @@ def main():
     auth = check_auth()
     checks.append(auth)
     checks.append(check_gh_version())
-    lock = check_version_lock(args.prd, args.tdd)
-    checks.append(lock)
-    if lock.get("fatal"):                 # the data files themselves are unreadable
+    specs = check_specs(args.spec_dir)
+    checks.append(specs)
+    if specs.get("fatal"):                # the spec set itself is missing/unreadable
         _report(checks, None, None, args.json)
         sys.exit(2)
 
@@ -279,7 +275,7 @@ def main():
             repo = repo_chk["repo"]
             issues, listed_ok = _list_managed_issues(repo)
             checks.append(check_backlog(issues, listed_ok))
-            advisories = scan_advisories(issues, args.tdd, _have_labels(repo))
+            advisories = scan_advisories(issues, args.spec_dir, _have_labels(repo))
 
     ok = all(c["ok"] for c in checks)
     _report(checks, repo, advisories, args.json)
@@ -300,9 +296,10 @@ def _report(checks, repo, advisories, as_json):
         if flagged:
             ids = ", ".join(f"#{f['number']} ({'/'.join(f['flags'])})" for f in flagged)
             print(f"  warn   not buildable (resolve first): {ids}")
-        if advisories["sync_owed"]:
-            print(f"  warn   sync may be owed: live TDD v{advisories['live_tdd']} "
-                  f"not in issue stamps {advisories['tdd_versions_seen']}; run /make-issues")
+        for s in advisories["stale_syncs"]:
+            print(f"  warn   sync may be owed: #{s['number']} stamped "
+                  f"{s['feature']} v{s['stamped']} but live is v{s['live']}; "
+                  "run /make-issues")
         if advisories["missing_labels"]:
             print("  note   missing do-work labels (skill must create): "
                   + ", ".join(advisories["missing_labels"]))

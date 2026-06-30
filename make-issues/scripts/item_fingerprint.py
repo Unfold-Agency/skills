@@ -1,25 +1,46 @@
 #!/usr/bin/env python3
-"""Per-capability fingerprint for a TDD data file.
+"""Per-requirement fingerprint for the docs/specs feature data files.
 
-make-issues stamps each GitHub issue with a hash of the TDD capability it was
-generated from. On a later sync, a changed hash means the design moved and the
+make-issues stamps each GitHub issue with a hash of the feature REQUIREMENT it
+was generated from. On a later sync, a changed hash means the spec moved and the
 issue may be stale; an unchanged hash means a no-op. The hash is taken over a
-PROJECTION of each record -- only the contract-bearing fields -- so rewording a
-name/purpose/note churns nothing, but a changed attribute type, transition,
-endpoint, NFR requirement, or satisfied-requirement set does.
+PROJECTION of each requirement -- only the CONTRACT-bearing (IN) fields -- so
+rewording an advisory note, retitling, or re-prioritising churns nothing, but a
+changed acceptance criterion, description, interface, governing ADR, or
+dependency does.
 
-Normalization mirrors make-tdd's compute_fingerprint exactly (deep structure ->
-yaml.safe_dump(sort_keys=True) -> sha256), applied to one record's projection.
+This is the C1 keystone. The IN/OUT split MUST match the make-spec/make-arch
+`compute_fingerprint` discipline exactly:
 
-  python scripts/item_fingerprint.py docs/tdd-data.yaml            # all capabilities
-  python scripts/item_fingerprint.py docs/tdd-data.yaml --json     # {id: hash}
-  python scripts/item_fingerprint.py docs/tdd-data.yaml --id WF-003 # one capability
+  IN  (hashed): id, kind, description, acceptance_criteria (order PRESERVED),
+                governed_by (sorted set), depends_on (sorted set), interface.
+  OUT (never):  priority, architecture_hints, related_files, notes -- plus the
+                meta-level OUT keys (fingerprint, feature_version, generated_at,
+                project_version, appetite) which do not live on a requirement.
+  Also excluded from the per-item hash: name (cosmetic) and status (a lifecycle
+  flag the reconciler handles via the orphan/stale path, not a content change --
+  mirroring the old skill's choice to omit status from the item hash).
 
-Exit codes: 0 = ok, 1 = --id not found / not a capability, 2 = file/parse error.
+Normalization mirrors make-spec's compute_fingerprint exactly: build the IN
+projection dict -> yaml.safe_dump(sort_keys=True) -> sha256.
+
+The unit is now a feature requirement (one record kind), read from EVERY
+features/<slug>-data.yaml under the spec dir.
+
+  python scripts/item_fingerprint.py docs/specs                 # all requirements
+  python scripts/item_fingerprint.py docs/specs --json          # {req_id: hash}
+  python scripts/item_fingerprint.py docs/specs --id FR-CHK-001 # one requirement
+
+The path may be the spec dir (docs/specs), its features/ subdir, or a single
+feature data file.
+
+Exit codes: 0 = ok, 1 = --id not found, 2 = file/parse error.
 """
 import argparse
+import glob
 import hashlib
 import json
+import os
 import sys
 
 try:
@@ -29,61 +50,19 @@ except ImportError:
     sys.exit(2)
 
 
-# Capability collections that become work items, mapped to their ID prefix.
-# Order is the create/report order; ENT/WF/STM/INTG/TNF/ADR are the capability
-# family (the same set make-tdd's traceability allows as satisfied_by).
-CAPABILITY_COLLECTIONS = [
-    ("entities", "ENT"),
-    ("state_machines", "STM"),
-    ("workflows", "WF"),
-    ("integrations", "INTG"),
-    ("nfrs", "TNF"),
-    ("decisions", "ADR"),
-]
+# ── The C1 contract: the IN fields, and how each normalizes ──────────────────
+# scalars -- free-text/enum fields; whitespace-collapsed.
+# sets    -- order-INSENSITIVE lists of ids; sorted before hashing.
+# seqs    -- order-SENSITIVE lists; order preserved (it is meaning).
+IN_SCALARS = ["id", "kind", "description", "interface"]
+IN_SEQS = ["acceptance_criteria"]            # EARS strings; order is contract
+IN_SETS = ["governed_by", "depends_on"]      # ADR ids / requirement ids
 
-# What to hash, per capability kind. Fields not listed are deliberately omitted
-# as cosmetic/volatile (name, purpose, notes, rationale, alternatives, backing,
-# needs_diagram, open_items). `status` is ALSO omitted: a flip to
-# superseded/deferred is a lifecycle event the reconciler handles via the orphan
-# path, not a content change.
-#   scalars  -- free-text/enum fields; whitespace-collapsed
-#   sets     -- order-INSENSITIVE lists of scalars; sorted before hashing
-#   seqs     -- order-SENSITIVE lists of scalars; order preserved (it is meaning)
-#   records  -- list-of-dict fields; keep only `keys`, sort unless `ordered`
-PROJECTIONS = {
-    "ENT": {
-        "sets": ["satisfies"],
-        "records": {
-            "attributes": {"keys": ["name", "type", "required", "identifier"]},
-            "relationships": {"keys": ["to", "cardinality"]},
-        },
-    },
-    "STM": {
-        "scalars": ["entity"],
-        "sets": ["states", "satisfies"],
-        # transitions are a SET of edges; reordering the same edges is cosmetic,
-        # so sort them (not `ordered`). Steps below are the order-significant case.
-        "records": {"transitions": {"keys": ["from", "to", "event"]}},
-    },
-    "WF": {
-        "scalars": ["trigger"],
-        "seqs": ["steps"],
-        "sets": ["satisfies"],
-    },
-    "INTG": {
-        "scalars": ["system", "direction", "auth_model", "data_exchanged",
-                    "limits", "error_behavior"],
-        "sets": ["endpoints", "satisfies", "bounded_by"],
-    },
-    "TNF": {
-        "scalars": ["category", "requirement", "testing_method"],
-        "sets": ["derived_from"],
-    },
-    "ADR": {
-        "scalars": ["decision_status", "decision"],
-        "sets": ["bounded_by", "derived_from"],
-    },
-}
+# Explicitly OUT -- listed only for documentation; the projection is allow-list,
+# so anything not named above is already excluded. priority/architecture_hints/
+# related_files/notes are advisory; name is cosmetic; status is lifecycle.
+OUT_FIELDS = ["priority", "architecture_hints", "related_files", "notes",
+              "name", "status"]
 
 
 def _norm_text(value):
@@ -94,89 +73,110 @@ def _norm_text(value):
     return value
 
 
-def _project(record, spec):
+def project_in_fields(req):
+    """The IN projection of one requirement -- the ONLY thing the item hash sees.
+
+    This is the C1 keystone. Returns a dict containing exactly the contract
+    (IN) fields, normalized. Every OUT field (priority, architecture_hints,
+    related_files, notes) plus name and status is excluded by construction --
+    this is an allow-list, so an unlisted key cannot leak in.
+    """
     out = {}
-    for f in spec.get("scalars", []):
-        if record.get(f) not in (None, ""):
-            out[f] = _norm_text(record[f])
-    for f in spec.get("sets", []):
-        if record.get(f):
-            out[f] = sorted(_norm_text(x) for x in record[f] if x is not None)
-    for f in spec.get("seqs", []):
-        if record.get(f):
-            out[f] = [_norm_text(x) for x in record[f] if x is not None]
-    for f, rspec in spec.get("records", {}).items():
-        if not record.get(f):
-            continue
-        items = []
-        for d in record[f]:
-            if isinstance(d, dict):
-                items.append({k: _norm_text(d[k]) for k in rspec["keys"] if k in d})
-            else:
-                items.append(_norm_text(d))
-        if not rspec.get("ordered"):
-            items.sort(key=lambda x: yaml.safe_dump(x, sort_keys=True))
-        out[f] = items
+    for f in IN_SCALARS:
+        if req.get(f) not in (None, ""):
+            out[f] = _norm_text(req[f])
+    for f in IN_SEQS:
+        if req.get(f):
+            # order PRESERVED -- a reordered acceptance-criteria list is a
+            # different contract (the EARS sequence is meaning).
+            out[f] = [_norm_text(x) for x in req[f] if x is not None]
+    for f in IN_SETS:
+        if req.get(f):
+            # order-INSENSITIVE -- sort so reordering governed_by/depends_on is
+            # cosmetic, but adding/removing an id flips the hash.
+            out[f] = sorted(_norm_text(x) for x in req[f] if x is not None)
     return out
 
 
-def compute_item_fingerprint(record, kind):
-    """sha256 over the contract-bearing projection of one TDD capability record.
-    Same normalization as make-tdd's compute_fingerprint, scoped to one item."""
-    proj = _project(record, PROJECTIONS[kind])
-    proj["id"] = record.get("id", "")
-    proj["_kind"] = kind
+def compute_item_fingerprint(req):
+    """sha256 over the IN projection of one feature requirement.
+    Same normalization as make-spec's compute_fingerprint, scoped to one item."""
+    proj = project_in_fields(req)
     normalized = yaml.safe_dump(proj, sort_keys=True, default_flow_style=False,
                                 allow_unicode=True)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def collect_capabilities(doc):
-    """Return {id: (record, kind)} for every capability record with an id."""
-    caps = {}
-    for collection, kind in CAPABILITY_COLLECTIONS:
-        for record in doc.get(collection) or []:
-            if isinstance(record, dict) and record.get("id"):
-                caps[str(record["id"])] = (record, kind)
-    return caps
+# ── Loading the feature requirements out of docs/specs ───────────────────────
+def feature_files(path):
+    """Resolve a path to the list of feature data files it covers.
+
+    Accepts the spec dir (docs/specs -> docs/specs/features/*-data.yaml), the
+    features/ subdir itself, or a single feature data file.
+    """
+    if os.path.isfile(path):
+        return [path]
+    if os.path.isdir(path):
+        feats = os.path.join(path, "features")
+        search_dir = feats if os.path.isdir(feats) else path
+        return sorted(glob.glob(os.path.join(search_dir, "*-data.yaml")))
+    return []
+
+
+def collect_requirements(path):
+    """Return {req_id: req_record} across every feature data file under `path`.
+
+    Raises ValueError on a read/parse error so the caller can exit 2.
+    """
+    reqs = {}
+    files = feature_files(path)
+    if not files:
+        raise ValueError(f"no feature data files found at {path} "
+                         "(expected <spec_dir>/features/*-data.yaml)")
+    for fpath in files:
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                doc = yaml.safe_load(f)
+        except (OSError, yaml.YAMLError) as e:
+            raise ValueError(f"cannot read {fpath}: {e}")
+        if not isinstance(doc, dict):
+            raise ValueError(f"{fpath} is not a YAML mapping")
+        for req in doc.get("requirements") or []:
+            if isinstance(req, dict) and req.get("id"):
+                reqs[str(req["id"])] = req
+    return reqs
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("data_file", help="path to tdd-data.yaml (e.g. docs/tdd-data.yaml)")
-    ap.add_argument("--id", help="print only this capability's fingerprint")
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("spec_dir",
+                    help="docs/specs (or its features/ dir, or one feature file)")
+    ap.add_argument("--id", help="print only this requirement's fingerprint")
     ap.add_argument("--json", action="store_true", help="emit a JSON {id: hash} map")
     args = ap.parse_args()
 
     try:
-        with open(args.data_file, encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
-    except (OSError, yaml.YAMLError) as e:
-        print(f"ERROR: cannot read {args.data_file}: {e}", file=sys.stderr)
+        reqs = collect_requirements(args.spec_dir)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(2)
-    if not isinstance(doc, dict):
-        print(f"ERROR: {args.data_file} is not a YAML mapping", file=sys.stderr)
-        sys.exit(2)
-
-    caps = collect_capabilities(doc)
 
     if args.id:
-        if args.id not in caps:
-            print(f"ERROR: {args.id} is not a capability in {args.data_file}",
+        if args.id not in reqs:
+            print(f"ERROR: {args.id} is not a requirement under {args.spec_dir}",
                   file=sys.stderr)
             sys.exit(1)
-        record, kind = caps[args.id]
-        fp = compute_item_fingerprint(record, kind)
+        fp = compute_item_fingerprint(reqs[args.id])
         print(json.dumps({args.id: fp}) if args.json else fp)
         sys.exit(0)
 
-    fingerprints = {cid: compute_item_fingerprint(rec, kind)
-                    for cid, (rec, kind) in caps.items()}
+    fingerprints = {rid: compute_item_fingerprint(rec) for rid, rec in reqs.items()}
     if args.json:
         print(json.dumps(fingerprints, indent=2, sort_keys=True))
     else:
-        for cid in sorted(fingerprints):
-            print(f"{cid}  {fingerprints[cid]}")
+        for rid in sorted(fingerprints):
+            print(f"{rid}  {fingerprints[rid]}")
     sys.exit(0)
 
 

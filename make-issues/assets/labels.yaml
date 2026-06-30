@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════
-# labels.yaml — the make-issues label scheme + meta-block contract
+# labels.yaml -- the make-issues label scheme + meta-block contract
 #
 # Labels carry ONLY what a human filters and scans by -- provenance,
 # autonomy, and the reconciliation flags. The meta block embedded in each
@@ -11,24 +11,26 @@
 # scheme is the small static set below -- there are no per-run dynamic
 # labels.
 #
-# Two things deliberately do NOT get labels, because labels are a scarce,
+# Three things deliberately do NOT get labels, because labels are a scarce,
 # human-facing, repo-global namespace and these are neither scarce nor for
 # humans:
 #   - Traceability. Per-ID `trace:<ID>` labels flooded the namespace (one
-#     per PRD requirement and TDD capability, all sharing one description)
-#     and drowned the actionable labels on every card. The human-readable
-#     copy lives in the issue body's `## Traceability` table; the machine
-#     copy is the meta block's trace_tdd / trace_prd.
-#   - Source versions. `src:prd-<v>` / `src:tdd-<v>` stamps live in the meta
-#     block's source_versions. do-work reads source_versions.tdd from there
-#     (not a label) to decide when a /make-issues sync is owed.
-#   - Implementation phase. The phase an issue belongs to is carried by a
-#     GitHub MILESTONE ("Phase <N>: <name>"), one per phase from the TDD's
-#     implementation_phases (see scripts/phase_milestones.py) -- native,
-#     filterable, and shown on the card. It is NOT a label and NOT in the meta
-#     block: phase is sequencing, not contract, so it stays out of the
-#     fingerprint-keyed regions and is re-asserted on the milestone each sync.
-#     do-work --phase=N reads it from the milestone.
+#     per requirement and ADR, all sharing one description) and drowned the
+#     actionable labels on every card. The human-readable copy lives in the
+#     issue body's `## Traceability` table; the machine copy is the meta
+#     block's trace_req / trace_adr.
+#   - Source version. A `src:<v>` stamp lives in the meta block's
+#     source_version (the feature_version the issue was born from). do-work
+#     reads it from there (not a label) to decide when a /make-issues sync is
+#     owed.
+#   - Implementation phase. When the overview authors an OPTIONAL `phasing`
+#     plan, the phase an issue belongs to is carried by a GitHub MILESTONE
+#     ("Phase <N>: <name>"), one per phase (see scripts/phase_milestones.py)
+#     -- native, filterable, and shown on the card. It is NOT a label and NOT
+#     in the meta block: phase is sequencing, not contract, so it stays out of
+#     the fingerprint-keyed regions and is re-asserted on the milestone each
+#     sync. do-work --phase=N reads it from the milestone. A project with no
+#     phasing plan has no milestones at all.
 #
 # GitHub label names may contain `:` and `.`, so the prefixed forms below
 # are valid label names as written.
@@ -36,13 +38,13 @@
 
 # ── Static labels (always ensured) ──────────────────────────────────
 static:
-  # Provenance — the discriminator for "is this a make-issues issue?".
+  # Provenance -- the discriminator for "is this a make-issues issue?".
   # Mode selection and every reconciliation query filters on this.
   - name: make-issues
     color: "ededed"              # grey
     description: "Managed by the make-issues skill. Do not hand-edit managed regions."
 
-  # Autonomy — the signal the overnight loop reads to decide what it can
+  # Autonomy -- the signal the overnight loop reads to decide what it can
   # do unattended. Exactly one per issue.
   - name: afk
     color: "0e8a16"              # green
@@ -51,37 +53,50 @@ static:
     color: "fbca04"              # amber
     description: "Human-in-the-loop: needs a human decision or review."
 
-  # Reconciliation flags — applied by Sync, cleared by humans.
+  # Reconciliation flags -- applied by Sync, cleared by humans.
   - name: needs-rebase
     color: "d93f0b"              # red-orange
-    description: "The TDD changed while this issue was being worked. Re-check the spec."
+    description: "The spec changed while this issue was being worked. Re-check the requirement."
   - name: spec-drift
     color: "d93f0b"
-    description: "The TDD changed and a human must reconcile this in-flight/HITL item."
+    description: "The spec changed and a human must reconcile this in-flight/HITL item."
   - name: orphaned
     color: "5319e7"              # deep purple
-    description: "The TDD capability behind this issue was removed or superseded."
+    description: "The requirement behind this issue was removed or superseded in the specs."
+
+  # Refactor -- opened when a MODIFIED/REMOVED requirement (or a superseded
+  # governing ADR) lands on already-shipped work. A refactor backs out or
+  # reworks merged code, so it is always HITL.
+  - name: refactor
+    color: "b60205"              # deep red
+    description: "Reworks shipped work after a spec/ADR change to a completed requirement. HITL."
+  - name: refactor-tracking
+    color: "c5def5"              # pale blue
+    description: "Overflow tracker: refactors deferred past the --max-refactors fan-out cap; a human triages."
 
 # ═══════════════════════════════════════════════════════════════════
 # META-BLOCK CONTRACT
 # The YAML between <!-- make-issues:meta --> and <!-- /make-issues:meta -->
 # in every managed issue body. This is what an automation or the overnight
-# loop parses; the reconciler reads `fingerprint` and `trace_tdd`, and do-work
-# reads `source_versions.tdd` (the version stamp that used to be a src: label).
+# loop parses; the reconciler reads `fingerprint` and `trace_req`, and do-work
+# reads `source_version` (the version stamp that used to be a src: label).
 #
-#   trace_tdd:        [<capability IDs>]   # ENT/WF/STM/INTG/TNF/ADR; >=1, required
-#   trace_prd:        [<PRD requirement IDs>]   # what the capability links to (its
-#                                               # satisfies / PRD-side derived_from); may be empty
-#   source_versions:  { prd: "<v>", tdd: "<v>" }   # the locked versions at birth
-#   autonomy:         afk | hitl
-#   fingerprint:      "<sha256>"           # from scripts/item_fingerprint.py
+#   trace_req:       [<requirement ids>]   # ^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$; >=1, required
+#   trace_adr:       [<ADR ids>]           # governing ADRs, from the requirement's
+#                                          # governed_by; may be empty
+#   feature:         <slug>                # the feature this requirement lives in
+#   source_version:  "<feature_version>"   # the feature_version at birth
+#   autonomy:        afk | hitl
+#   fingerprint:     "<sha256>"            # per-requirement hash from item_fingerprint.py
 #
 # Rules:
-#   - Every managed issue has a meta block with all five keys.
-#   - trace_tdd is the primary match key (issue <-> TDD capability). A malformed
+#   - Every managed issue has a meta block with all six keys.
+#   - trace_req is the primary match key (issue <-> requirement). A malformed
 #     block is NOT auto-recovered (the reconciler does not parse the prose body);
-#     it is flagged for a human, who reads the capability ID from the body's
-#     `## Traceability` table and re-stamps the block.
-#   - fingerprint is compared against the live per-capability hash to
-#     detect drift; on change, reconciliation acts by issue state.
+#     scripts/analyze.py treats it as BLOCKING drift and the gate fails -- a human
+#     reads the requirement id from the body's `## Traceability` table and
+#     re-stamps the block, then re-runs.
+#   - fingerprint is compared against the live per-requirement hash to
+#     detect drift; on change, reconciliation acts by issue state (see analyze.py
+#     and references/reconciliation.md).
 # ═══════════════════════════════════════════════════════════════════

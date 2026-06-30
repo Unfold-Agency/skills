@@ -24,15 +24,17 @@ This is the C1 keystone. The IN/OUT split MUST match the make-spec/make-arch
 Normalization mirrors make-spec's compute_fingerprint exactly: build the IN
 projection dict -> yaml.safe_dump(sort_keys=True) -> sha256.
 
-The unit is now a feature requirement (one record kind), read from EVERY
-features/<slug>-data.yaml under the spec dir.
+The unit is a feature requirement (one record kind), read from EVERY single-file
+spec features/<slug>.md under the spec dir -- its requirements live in the YAML
+frontmatter (make-spec emits one file per feature; there is no separate data
+file).
 
   python scripts/item_fingerprint.py docs/specs                 # all requirements
   python scripts/item_fingerprint.py docs/specs --json          # {req_id: hash}
   python scripts/item_fingerprint.py docs/specs --id FR-CHK-001 # one requirement
 
 The path may be the spec dir (docs/specs), its features/ subdir, or a single
-feature data file.
+feature .md file.
 
 Exit codes: 0 = ok, 1 = --id not found, 2 = file/parse error.
 """
@@ -41,6 +43,7 @@ import glob
 import hashlib
 import json
 import os
+import re
 import sys
 
 try:
@@ -108,39 +111,53 @@ def compute_item_fingerprint(req):
 
 
 # ── Loading the feature requirements out of docs/specs ───────────────────────
-def feature_files(path):
-    """Resolve a path to the list of feature data files it covers.
+# Specs are single .md files; the contract (requirements) lives in the YAML
+# frontmatter, parsed deterministically (no separately-derived data file).
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 
-    Accepts the spec dir (docs/specs -> docs/specs/features/*-data.yaml), the
-    features/ subdir itself, or a single feature data file.
+
+def load_spec_doc(path):
+    """Parse a single-file spec's YAML frontmatter into its doc dict ({} if none)."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return {}
+    return yaml.safe_load(m.group(1)) or {}
+
+
+def feature_files(path):
+    """Resolve a path to the list of feature spec files it covers.
+
+    Accepts the spec dir (docs/specs -> docs/specs/features/*.md), the features/
+    subdir itself, or a single feature .md file.
     """
     if os.path.isfile(path):
         return [path]
     if os.path.isdir(path):
         feats = os.path.join(path, "features")
         search_dir = feats if os.path.isdir(feats) else path
-        return sorted(glob.glob(os.path.join(search_dir, "*-data.yaml")))
+        return sorted(glob.glob(os.path.join(search_dir, "*.md")))
     return []
 
 
 def collect_requirements(path):
-    """Return {req_id: req_record} across every feature data file under `path`.
+    """Return {req_id: req_record} across every feature spec under `path`.
 
     Raises ValueError on a read/parse error so the caller can exit 2.
     """
     reqs = {}
     files = feature_files(path)
     if not files:
-        raise ValueError(f"no feature data files found at {path} "
-                         "(expected <spec_dir>/features/*-data.yaml)")
+        raise ValueError(f"no feature specs found at {path} "
+                         "(expected <spec_dir>/features/*.md)")
     for fpath in files:
         try:
-            with open(fpath, encoding="utf-8") as f:
-                doc = yaml.safe_load(f)
+            doc = load_spec_doc(fpath)
         except (OSError, yaml.YAMLError) as e:
             raise ValueError(f"cannot read {fpath}: {e}")
         if not isinstance(doc, dict):
-            raise ValueError(f"{fpath} is not a YAML mapping")
+            raise ValueError(f"{fpath} has no spec frontmatter")
         for req in doc.get("requirements") or []:
             if isinstance(req, dict) and req.get("id"):
                 reqs[str(req["id"])] = req

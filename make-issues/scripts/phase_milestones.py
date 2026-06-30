@@ -3,9 +3,9 @@
 
 The new docs/specs overview does NOT author phasing by default (the old TDD's
 implementation_phases is gone). Phase milestones are therefore OPTIONAL: if
-`overview-data.yaml` carries a top-level `phasing` list, this maps feature ->
-phase -> milestone and supports it; if it is absent, milestones are skipped
-entirely (no error -- the project simply has no phases).
+`overview.md`'s frontmatter carries a top-level `phasing` list, this maps
+feature -> phase -> milestone and supports it; if it is absent, milestones are
+skipped entirely (no error -- the project simply has no phases).
 
 A phasing entry looks like:
     phasing:
@@ -26,10 +26,10 @@ dependency edge: derived from the overview and re-asserted on every sync. The
 leading "Phase <number>" of the title is the stable key both this skill and
 do-work match on; the name is a human label that may change.
 
-  python scripts/phase_milestones.py docs/specs/overview-data.yaml          # human-readable maps
-  python scripts/phase_milestones.py docs/specs/overview-data.yaml --json    # {feature_to_phase, phase_title, ...}
-  python scripts/phase_milestones.py docs/specs/overview-data.yaml --feature checkout
-  python scripts/phase_milestones.py docs/specs/overview-data.yaml --ensure --repo owner/name
+  python scripts/phase_milestones.py docs/specs/overview.md          # human-readable maps
+  python scripts/phase_milestones.py docs/specs/overview.md --json    # {feature_to_phase, phase_title, ...}
+  python scripts/phase_milestones.py docs/specs/overview.md --feature checkout
+  python scripts/phase_milestones.py docs/specs/overview.md --ensure --repo owner/name
 
 The path may be the overview file or the spec dir (docs/specs).
 
@@ -50,6 +50,18 @@ except ImportError:
     sys.exit(2)
 
 PHASE_TITLE_RE = re.compile(r"^Phase\s+(\d+)\b")
+# The overview is a single .md; its phasing lives in the YAML frontmatter.
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
+
+
+def load_overview(path):
+    """Parse the overview doc: frontmatter for a .md, direct YAML otherwise."""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    if path.endswith(".md"):
+        m = FRONTMATTER_RE.match(text)
+        return yaml.safe_load(m.group(1)) if m else None
+    return yaml.safe_load(text)
 
 
 def milestone_title(number, name):
@@ -185,14 +197,14 @@ def ensure_milestones(repo, phase_meta):
 def _resolve_overview(path):
     """Accept the overview file or the spec dir; return the overview path."""
     if os.path.isdir(path):
-        return os.path.join(path, "overview-data.yaml")
+        return os.path.join(path, "overview.md")
     return path
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("overview", help="docs/specs/overview-data.yaml (or docs/specs)")
+    ap.add_argument("overview", help="docs/specs/overview.md (or docs/specs)")
     ap.add_argument("--json", action="store_true", help="emit the maps as JSON")
     ap.add_argument("--feature", help="a feature slug; print that feature's phase")
     ap.add_argument("--ensure", action="store_true",
@@ -202,13 +214,12 @@ def main():
 
     overview_path = _resolve_overview(args.overview)
     try:
-        with open(overview_path, encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
+        doc = load_overview(overview_path)
     except (OSError, yaml.YAMLError) as e:
         print(f"ERROR: cannot read {overview_path}: {e}", file=sys.stderr)
         sys.exit(2)
     if not isinstance(doc, dict):
-        print(f"ERROR: {overview_path} is not a YAML mapping", file=sys.stderr)
+        print(f"ERROR: {overview_path} has no overview content", file=sys.stderr)
         sys.exit(2)
 
     feature_to_phase, phase_meta = build_maps(doc)

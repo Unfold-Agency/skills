@@ -72,7 +72,8 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from item_fingerprint import compute_item_fingerprint, feature_files  # noqa: E402
+from item_fingerprint import (  # noqa: E402
+    compute_item_fingerprint, feature_files, load_spec_doc)
 
 WATERMARK_FILE = ".make-issues-sync.json"
 
@@ -101,21 +102,22 @@ def load_yaml(path):
 
 def load_requirements(spec_dir):
     """{req_id: {record, feature_slug, fingerprint, status, governed_by}} across
-    every features/*-data.yaml. Raises ValueError on a read error."""
+    every features/*.md (requirements live in the frontmatter). Raises ValueError
+    on a read error."""
     reqs = {}
     files = feature_files(spec_dir)
     if not files:
-        raise ValueError(f"no feature data files under {spec_dir}/features/")
+        raise ValueError(f"no feature specs under {spec_dir}/features/")
     for fpath in files:
         try:
-            doc = load_yaml(fpath)
+            doc = load_spec_doc(fpath)
         except (OSError, yaml.YAMLError) as e:
             raise ValueError(f"cannot read {fpath}: {e}")
         if not isinstance(doc, dict):
-            raise ValueError(f"{fpath} is not a YAML mapping")
+            raise ValueError(f"{fpath} has no spec frontmatter")
         meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
         slug = str(meta.get("slug")
-                   or os.path.basename(fpath).replace("-data.yaml", ""))
+                   or os.path.basename(fpath).replace(".md", ""))
         feature_version = str(meta.get("feature_version") or "")
         for req in doc.get("requirements") or []:
             if isinstance(req, dict) and req.get("id"):

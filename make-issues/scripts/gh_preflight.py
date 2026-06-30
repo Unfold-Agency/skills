@@ -7,13 +7,14 @@ Checks, in order of dependency:
   1. auth          -- `gh auth status` succeeds
   2. gh_version    -- gh >= 2.94.0 (native dependency/type flags; below that the
                       blocked-by/blocking/type/parent features do not exist)
-  3. spec_integrity -- the FAIL-CLOSED fingerprint gate. Every spec data file's
-                      stored meta.fingerprint must equal a recompute over its
-                      CONTRACT content (overview, every features/*-data.yaml, and
-                      arch if present). A single mismatch means the specs are
-                      mid-edit -- issues built now would be wrong -- so the gate
-                      FAILS and the skill must not proceed. Pure YAML; importable
-                      and testable without gh/network.
+  3. spec_integrity -- the FAIL-CLOSED fingerprint gate. Every spec's stored
+                      meta.fingerprint must equal a recompute over its CONTRACT
+                      content (overview.md, every features/*.md -- read from the
+                      frontmatter -- and arch-data.yaml if present). A single
+                      mismatch means the specs are mid-edit -- issues built now
+                      would be wrong -- so the gate FAILS and the skill must not
+                      proceed. Pure parsing; importable and testable without
+                      gh/network.
   4. repo          -- inside a git work tree AND a resolvable owner/name remote
   5. mode + labels -- existing make-issues-labelled issues -> generate|sync, and
                       which static labels are missing (the skill creates them)
@@ -51,7 +52,7 @@ STATIC_LABELS = ["make-issues", "afk", "hitl", "needs-rebase", "spec-drift",
 # A spec file's stored meta.fingerprint is computed over its CONTRACT content.
 # This gate RE-COMPUTES it and must produce a hash BYTE-IDENTICAL to the upstream
 # validator that stamped the file, or it would reject legitimately-stamped specs:
-#   - overview-data.yaml / features/*-data.yaml -> make-spec/scripts/validate_spec.py
+#   - overview.md / features/*.md (frontmatter) -> make-spec/scripts/validate_spec.py
 #   - arch-data.yaml                            -> make-arch/scripts/validate_arch.py
 # To stay identical we copy their exact discipline: drop the OUT keys FLAT
 # (wherever they appear -- they live in `meta` AND, for the overview, in
@@ -70,6 +71,10 @@ SPEC_OUT_KEYS = {"priority", "architecture_hints", "related_files", "notes",
                  "fingerprint", "feature_version", "generated_at",
                  "project_version", "appetite"}      # == make-spec OUT_KEYS
 ARCH_OUT_KEYS = {"fingerprint", "generated_at", "arch_version", "notes"}  # == make-arch OUT_KEYS
+
+# Spec docs are single .md files; their contract lives in YAML frontmatter. The
+# arch file (arch-data.yaml) is a plain YAML file -- dispatch on the extension.
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 
 
 def _run(cmd, timeout=30):
@@ -111,25 +116,36 @@ def compute_fingerprint(doc, out_keys=SPEC_OUT_KEYS):
 
 
 def _load_doc(path):
-    """Load a YAML mapping. Returns (doc, None) or (None, err)."""
+    """Load a spec doc as a mapping. A .md spec carries its contract in YAML
+    frontmatter; a .yaml file (arch-data.yaml) is loaded directly -- dispatch on
+    extension. Returns (doc, None) or (None, err)."""
     try:
         with open(path, encoding="utf-8") as f:
-            doc = yaml.safe_load(f)
-    except (OSError, yaml.YAMLError) as e:
+            text = f.read()
+    except OSError as e:
+        return None, f"cannot read {path}: {e}"
+    try:
+        if path.endswith(".md"):
+            m = FRONTMATTER_RE.match(text)
+            doc = yaml.safe_load(m.group(1)) if m else None
+        else:
+            doc = yaml.safe_load(text)
+    except yaml.YAMLError as e:
         return None, f"cannot read {path}: {e}"
     if not isinstance(doc, dict):
-        return None, f"{path} is not a YAML mapping"
+        return None, f"{path} has no spec content"
     return doc, None
 
 
 def spec_files(spec_dir):
-    """The spec data files to integrity-check: overview, every feature, and arch
-    if present. Returns a list of (label, path). overview is required; arch is
-    optional."""
+    """The spec docs to integrity-check: overview, every feature, and arch if
+    present. Returns a list of (label, path). overview is required; arch is
+    optional. Specs are single .md files (contract in frontmatter); arch-data.yaml
+    is plain YAML."""
     files = []
-    overview = os.path.join(spec_dir, "overview-data.yaml")
+    overview = os.path.join(spec_dir, "overview.md")
     files.append(("overview", overview))
-    for fpath in sorted(glob.glob(os.path.join(spec_dir, "features", "*-data.yaml"))):
+    for fpath in sorted(glob.glob(os.path.join(spec_dir, "features", "*.md"))):
         files.append((f"feature:{os.path.basename(fpath)}", fpath))
     arch = os.path.join(spec_dir, "arch-data.yaml")
     if os.path.isfile(arch):
@@ -149,12 +165,12 @@ def check_spec_integrity(spec_dir):
     files = spec_files(spec_dir)
     results = []
     fatal = False
-    overview_path = os.path.join(spec_dir, "overview-data.yaml")
+    overview_path = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview_path):
         return {"name": "spec_integrity", "ok": False, "fatal": True,
                 "files": [], "detail":
-                f"no overview-data.yaml under {spec_dir} -- specs must be in "
-                "docs/specs/ (overview-data.yaml, features/*-data.yaml, "
+                f"no overview.md under {spec_dir} -- specs must be in "
+                "docs/specs/ (overview.md, features/*.md, "
                 "arch-data.yaml)"}
     feature_count = 0
     for label, path in files:
@@ -182,7 +198,7 @@ def check_spec_integrity(spec_dir):
                                       "re-stamping (mid-edit)"})
     if feature_count == 0:
         results.append({"file": "features/", "ok": False,
-                        "detail": "no features/*-data.yaml found -- nothing to "
+                        "detail": "no features/*.md found -- nothing to "
                                   "turn into issues"})
     ok = all(r["ok"] for r in results) and not fatal
     if ok:
@@ -226,9 +242,9 @@ def check_approval(spec_dir):
     The fingerprint gate can pass while the overview is still draft; issues built
     on a draft churn when it lands. This mirrors make-spec's warn-don't-block
     posture -- it never fails the gate; the skill surfaces it and asks the user
-    to confirm. Reads overview-data.meta.status (and notes any feature whose
+    to confirm. Reads overview.md meta.status (and notes any feature whose
     status is not active)."""
-    overview, _ = _load_doc(os.path.join(spec_dir, "overview-data.yaml"))
+    overview, _ = _load_doc(os.path.join(spec_dir, "overview.md"))
     status = str(((overview or {}).get("meta") or {}).get("status") or "unknown")
     approved = status == "approved"
     if approved:

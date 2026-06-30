@@ -265,15 +265,17 @@ check("load_requirements computes a non-empty fingerprint per requirement",
 with tempfile.TemporaryDirectory() as tmp:
     fdir = os.path.join(tmp, "features")
     os.makedirs(fdir)
-    with open(os.path.join(fdir, "x-data.yaml"), "w", encoding="utf-8") as f:
-        f.write('meta: {slug: x, feature_version: "1.0"}\n'
+    with open(os.path.join(fdir, "x.md"), "w", encoding="utf-8") as f:
+        f.write("---\n"
+                'meta: {slug: x, feature_version: "1.0"}\n'
                 "requirements:\n"
                 "  - id: FR-X-001\n"
                 "    description: d\n"
                 '    acceptance_criteria: ["WHEN x THE SYSTEM SHALL y."]\n'
                 '    depends_on: ["FR-A-001", 5]\n'   # mixed str/int -> sorted() TypeError
                 "    governed_by: []\n"
-                "    status: active\n")
+                "    status: active\n"
+                "---\n\n# x\n")
     raised = None
     try:
         analyze.load_requirements(tmp)
@@ -288,15 +290,17 @@ with tempfile.TemporaryDirectory() as tmp:
 with tempfile.TemporaryDirectory() as tmp:
     fdir = os.path.join(tmp, "features")
     os.makedirs(fdir)
-    with open(os.path.join(fdir, "checkout-data.yaml"), "w", encoding="utf-8") as f:
-        f.write("meta: not-a-mapping\n"               # a scalar, not a dict
+    with open(os.path.join(fdir, "checkout.md"), "w", encoding="utf-8") as f:
+        f.write("---\n"
+                "meta: not-a-mapping\n"               # a scalar, not a dict
                 "requirements:\n"
                 "  - id: FR-CHK-001\n"
                 "    description: d\n"
                 '    acceptance_criteria: ["WHEN x THE SYSTEM SHALL y."]\n'
                 "    depends_on: []\n"
                 "    governed_by: []\n"
-                "    status: active\n")
+                "    status: active\n"
+                "---\n\n# checkout\n")
     crashed = None
     try:
         out = analyze.load_requirements(tmp)

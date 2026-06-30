@@ -1,3 +1,4 @@
+---
 meta:
   doc_type: spec-feature
   schema_version: '1.0'
@@ -43,3 +44,8 @@ requirements:
   related_files: []
   notes: ''
   status: active
+---
+
+# cart
+
+Human narrative; the frontmatter above is the signed contract.

@@ -74,16 +74,17 @@ Spawn **one sub-agent on the Haiku model** (via the Task tool) with the brief be
 > **Never touch these (protected):** `<BASE>`, the current branch `<CURRENT>`, and the open-PR heads
 > `<open-pr-heads>`. If any of these appears in your candidate list, drop it.
 >
-> 1. **Candidates:** `git branch --format='%(refname:short)'` minus the protected set.
-> 2. **Classify each candidate:**
->    - In `git branch --merged <BASE>`? -> **ancestor-merged**, delete with `git branch -d <b>`.
->    - Otherwise check `gh pr list --state merged --limit 300 --json number,headRefName --jq '.[] | select(.headRefName=="<b>") | .number'`. A match -> **content-merged** (squash/rebase), delete with `git branch -D <b>`; record the PR number.
->    - No match -> **skip**, reason `"no merge evidence"`.
+> 1. **Gather once (no per-branch network calls):** the candidate list `git branch --format='%(refname:short)'` minus the protected set; the ancestor set `git branch --merged <BASE>`; and the merged-PR map `gh pr list --state merged --limit 300 --json number,headRefName`. Fetch the merged-PR map **once** and filter it locally for each candidate -- never call `gh pr list` inside the per-branch loop.
+> 2. **Classify each candidate** (all lookups hit the sets gathered in step 1, no network):
+>    - In the ancestor set? -> **ancestor-merged**, delete with `git branch -d <b>`.
+>    - Otherwise, is `<b>` a `headRefName` in the merged-PR map? -> **content-merged** (squash/rebase), delete with `git branch -D <b>`; record the PR number.
+>    - Neither -> **skip**, reason `"no merge evidence"`.
 > 3. **If `--dry-run`:** do not delete anything; just return the classification.
 > 4. **Delete** each merged branch with the method above. `git branch -d` failing is a signal the
 >    branch is NOT actually merged -- do **not** escalate it to `-D` unless a merged PR confirmed it.
-> 5. **If `--remote`:** for each branch you deleted that had a confirmed merged PR and still exists on
->    origin (`git ls-remote --exit-code --heads origin <b>`), run `git push origin --delete <b>`.
+> 5. **If `--remote`:** for each branch you deleted that had a confirmed merged PR and still has a
+>    remote-tracking ref (`git show-ref --verify --quiet refs/remotes/origin/<b>` -- offline, since
+>    Step 0 already ran `git fetch --prune`), run `git push origin --delete <b>`.
 > 6. **Return** a compact verdict: `deleted` (list of `{branch, method, pr}`), `skipped` (list of
 >    `{branch, reason}`), `remote_deleted` (list, if `--remote`), and counts.
 

@@ -19,8 +19,9 @@ export const meta = {
 // fixSkillDir:     absolute path to do-pr-fix/    (default: sibling of do-work)
 // autoMerge:       merge each clean green PR, unblocking dependents, then continue (default false)
 // dangerously:     FULL AUTONOMY -- build AND merge every buildable issue (afk + hitl),
-//                  resolve blockers with best-practice defaults / mocks instead of
-//                  escalating, merge on green CI even with unresolved review findings,
+//                  resolve implementation ambiguity with best-practice defaults / mocks
+//                  (an unsatisfiable criterion still escalates), merge on green CI even
+//                  with unresolved review findings,
 //                  open a needs-human-review follow-up issue for anything decided, and
 //                  never stop for a human. Forces autonomy=any + autoMerge. Still skips
 //                  make-issues stale/escalated issues. Red CI is never merged.
@@ -40,8 +41,9 @@ const A = (typeof args === 'object' && args) || {}
 const REPO = A.repo
 const SKILL = A.skillDir
 // DANGEROUS is the full-autonomy master switch: build AND merge EVERY buildable
-// issue (afk + hitl), resolve blockers with best-practice defaults and mocks
-// instead of escalating, merge on green CI even with unresolved review findings,
+// issue (afk + hitl), resolve implementation ambiguity with best-practice defaults and
+// mocks (an unsatisfiable criterion -- a spec defect -- still escalates), merge on green
+// CI even with unresolved review findings,
 // and never stop for a human -- flag anything it decided as a needs-human-review
 // follow-up issue and keep moving. It forces autonomy=any and autoMerge=on. It
 // still skips make-issues stale/escalated issues (the spec is known out of date).
@@ -123,7 +125,8 @@ const QUEUE_SCHEMA = {
           title: { type: 'string' },
           autonomy: { type: 'string' },
           resumable: { type: 'boolean' },
-          trace_tdd: { type: 'array', items: { type: 'string' } },
+          trace_req: { type: 'array', items: { type: 'string' } },
+          feature: { type: 'string' },
         },
         required: ['number'],
       },
@@ -227,7 +230,7 @@ const MERGE_SCHEMA = {
 // ── prompts ─────────────────────────────────────────────────────────────
 const preflightPrompt = () =>
   `Run the do-work preflight gate for ${REPO} and report the verdict.\n` +
-  `Execute: python ${SKILL}/scripts/work_preflight.py --prd docs/prd-data.yaml --tdd docs/tdd-data.yaml --repo ${REPO} --json\n` +
+  `Execute: python ${SKILL}/scripts/work_preflight.py --spec-dir docs/specs --repo ${REPO} --json\n` +
   `Ensure the do-work lifecycle labels exist (create any the advisory lists as missing): ` +
   `gh label create status:doing --color 1d76db --force; gh label create escalated --color d93f0b --force; ` +
   `gh label create needs-human-review --color fbca04 --force.\n` +
@@ -245,22 +248,22 @@ const selectPrompt = () =>
 const workerPrompt = (item, dangerous) =>
   `You are a do-work build worker. Build EXACTLY ONE GitHub issue to a pull request, then return a verdict. Do not touch any other issue.\n\n` +
   `Repo: ${REPO}\nIssue: #${item.number} -- ${item.title || ''}\n` +
-  `TDD trace: ${(item.trace_tdd || []).join(', ') || '(read it from the issue meta block)'}\n\n` +
+  `Requirement: ${(item.trace_req || []).join(', ') || '(read it from the issue meta block)'}\n\n` +
   (dangerous
-    ? `MODE: --dangerously. Full autonomy: do NOT stop for a human and do NOT escalate. Build this issue (it may be hitl -- build it anyway).\n\n`
+    ? `MODE: --dangerously. Full autonomy: do NOT stop for a human and do NOT escalate -- EXCEPT an unsatisfiable acceptance criterion (a spec defect), which still escalates and stops this issue. Build this issue (it may be hitl -- build it anyway).\n\n`
     : ``) +
   `Follow the do-work execution loop -- full detail in ${SKILL}/references/execution-loop.md:\n` +
   `1. Claim: gh issue edit ${item.number} --repo ${REPO} --add-assignee @me --add-label status:doing\n` +
-  `2. Read: gh issue view ${item.number} --repo ${REPO} (Goal, What to build, Acceptance criteria, Test plan, and the make-issues:meta block). Read the traced TDD capability by ID in docs/tdd-data.yaml (and the TDD markdown alongside it in docs/), and the trace_prd requirement for the why. Respect any binding constraints (BC-).\n` +
+  `2. Read: gh issue view ${item.number} --repo ${REPO} (Goal, What to build, Acceptance criteria, Test plan, and the make-issues:meta block). The issue is self-contained -- the requirement, its EARS acceptance criteria, and a governing-ADR snippet are embedded. Read the full ADR in docs/specs/decisions/ by its trace_adr only if you need the rationale; do NOT re-derive or edit the spec.\n` +
   `3. Build ONLY this slice on a new branch <type>/issue-${item.number}-<slug> off the default branch. Conventional Commits + GitMoji, one logical change per commit.\n` +
   `4. Verify: detect and run the repo's build gate (typecheck / lint / tests -- check package.json, Makefile, pyproject.toml, CI config, CLAUDE.md) AND the issue's Test plan. Do NOT open a PR on a red gate.\n` +
   `5. git push -u origin <branch>, then open a PR using ${SKILL}/assets/pr-body-template.md: include "Closes #${item.number}", the trace mirrored from the issue meta, and the acceptance checklist. Open it ready-for-review (not draft).\n` +
   `6. NEVER edit the make-issues managed regions of the issue body; track acceptance in the PR.\n\n` +
   (dangerous
-    ? `RESOLVE, DON'T ESCALATE. If you would normally escalate (a design gap, an ambiguous or unsatisfiable acceptance criterion) -- instead pick the best-practice resolution and build it. If the slice needs a missing external (an API, seed data, a credential, an upstream service), create a CLEARLY-MARKED mock/placeholder (a fixture, a stub module, env defaults) tagged with a "FIXME(dangerously)" comment so the gate passes against the mock. Never edit the PRD/TDD or the issue's managed scope -- you resolve IMPLEMENTATION ambiguity and mock MISSING EXTERNALS, you do not rewrite requirements.\n` +
+    ? `RESOLVE IMPLEMENTATION AMBIGUITY; ESCALATE A SPEC DEFECT. If the gap is implementation ambiguity (a wiring choice, a default the spec leaves open) or a design gap you can reasonably resolve -- pick the best-practice resolution and build it. If the slice needs a missing external (an API, seed data, a credential, an upstream service), create a CLEARLY-MARKED mock/placeholder (a fixture, a stub module, env defaults) tagged with a "FIXME(dangerously)" comment so the gate passes against the mock. BUT if an acceptance criterion is genuinely UNSATISFIABLE as written -- a contradiction in the WHAT, not an implementation choice -- that is a spec defect: comment the reason, run gh issue edit ${item.number} --repo ${REPO} --add-label escalated, open no PR, and return status "escalated", even in this mode. Never edit the specs or the issue's managed scope -- you resolve IMPLEMENTATION ambiguity and mock MISSING EXTERNALS, you do not rewrite or paper over requirements.\n` +
       `FLAG EACH DECISION. For every best-practice default you chose and every mock/placeholder you created, open a follow-up issue: gh issue create --repo ${REPO} --label needs-human-review --title "Follow-up: <what> on #${item.number}" --body "<what you assumed/mocked, where in the code, and why>". Add a PR comment linking each follow-up. List each assumption/mock in an "Assumptions & mocks" section of the PR body.\n` +
-      `Only if NO green build is possible even with mocks: open a needs-human-review follow-up describing the blocker, then return status "failed" (do NOT add the escalated label, do NOT stop the run). Never return "escalated" in this mode.\n` +
-      `Return ONLY the verdict: issue, status (built|failed), branch, pr_url (when built), gate, assumptions (count of defaults/mocks), followups (the follow-up issue URLs), summary (one line).`
+      `Return status "escalated" ONLY for an unsatisfiable spec defect (above). Otherwise, if NO green build is possible even with mocks, open a needs-human-review follow-up describing the blocker and return status "failed" (do NOT add the escalated label, do NOT stop the run).\n` +
+      `Return ONLY the verdict: issue, status (built|escalated|failed), branch, pr_url (when built), gate, assumptions (count of defaults/mocks), followups (the follow-up issue URLs), summary (one line).`
     : `If you CANNOT satisfy the issue as written (a design gap, a wrong or unsatisfiable acceptance criterion, or the issue is flagged stale), STOP: comment the reason on the issue, run gh issue edit ${item.number} --repo ${REPO} --add-label escalated, do NOT open a PR, and return status "escalated". See ${SKILL}/references/escalation-and-handback.md.\n` +
       `If the build gate stays red for reasons you cannot fix and it is not an escalation, return status "failed" with the reason in summary.\n\n` +
       `Return ONLY the verdict: issue, status (built|escalated|failed), branch, pr_url (when built), gate (e.g. "tests+lint pass"), summary (one line).`)
@@ -384,6 +387,10 @@ if (!pf || !pf.ok) {
 
 const attempted = new Set()   // every issue touched this run -- never re-process it
 const built = [], escalated = [], failed = [], merged = [], reviewUnresolved = []
+// --dangerously merges HITL work (visual/brand, security, data-migration, money)
+// with no human before the merge. The manifest is the typed record of which HITL
+// issues this run will build+merge unattended, surfaced up front and in the summary.
+const hitlManifest = []
 let rounds = 0
 
 while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
@@ -398,6 +405,16 @@ while (attempted.size < LIMIT && rounds < MAX_ROUNDS) {
   if (!batch.length) break
   batch.forEach(i => attempted.add(i.number))
   log(`Round ${rounds}: building ${batch.map(i => '#' + i.number).join(', ')}`)
+  if (DANGEROUS) {
+    // Typed HITL auto-merge manifest: name the human-in-the-loop work this run
+    // will merge with no human before the merge, so the operator sees the blast
+    // radius. (autonomy='any' under --dangerously, so HITL items reach the batch.)
+    const hitl = batch.filter(i => i.autonomy === 'hitl')
+    for (const i of hitl) {
+      hitlManifest.push({ issue: i.number, title: i.title || '', feature: i.feature || '' })
+      log(`  ⚠️  HITL auto-merge: #${i.number} ${i.title || ''}${i.feature ? ` [${i.feature}]` : ''}`)
+    }
+  }
 
   // Build, then ALWAYS review+fix, per issue and independently (pipeline -- no barrier
   // between build and review, so issue B can build while issue A is in review).
@@ -465,5 +482,5 @@ return {
   })),
   escalated: escalated.map(v => ({ issue: v.issue, summary: v.summary })),
   failed: failed.map(v => ({ issue: v.issue, summary: v.summary })),
-  ...(DANGEROUS ? { followups } : {}),
+  ...(DANGEROUS ? { followups, hitlAutoMergeManifest: hitlManifest } : {}),
 }

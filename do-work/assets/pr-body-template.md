@@ -1,7 +1,7 @@
 <!--
   PR BODY TEMPLATE -- do-work
   The pull request that ships one issue's slice. It carries the same trace the
-  issue does, so the thread (PRD -> TDD -> issue -> PR) stays intact.
+  issue does, so the thread (requirement -> ADR -> issue -> PR) stays intact.
 
   Fill the angle-bracket placeholders, strip these authoring comments, then open
   the PR. Title follows do-git-workflow: "<emoji> <type>(scope): <summary>".
@@ -37,9 +37,9 @@ Closes #<N>
 
 <!-- Copied from the issue's make-issues:meta block, so the PR carries the trace.
      Do not invent IDs here; mirror what the issue stamps. -->
-- TDD: `<trace_tdd, e.g. INTG-001>`
-- PRD: `<trace_prd, e.g. FR-002>`
-- Source versions: PRD v`<x>` / TDD v`<y>`
+- Requirement: `<trace_req, e.g. FR-CHK-001>` (feature: `<slug>`)
+- Governing decision: `<trace_adr, e.g. ADR-0001>`
+- Source version: `<feature_version this was born from>`
 - Autonomy: `<afk | hitl>`  <!-- hitl PRs are never auto-merged; a human reviews and merges -->
 
 ## Assumptions & mocks

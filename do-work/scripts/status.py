@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""do-work --status: the morning-after surface. Read-only: it CHECKS and REPORTS;
+it never writes anything. After an overnight or --dangerously run, it answers the
+three questions a human wakes up to: what merged, what is still dangling, and what
+is safe to resume.
+
+It reads the make-issues-managed issues and partitions the OPEN ones, reusing
+select_work's pure parsers so the classification matches what the build loop sees.
+
+  python scripts/status.py --repo owner/name
+  python scripts/status.py --repo owner/name --me <login> --json
+
+Exit codes: 0 = reported (any state), 2 = could not query GitHub.
+"""
+import argparse
+import json
+import sys
+
+from select_work import (  # sibling module; pure parsers shared with selection
+    _list_issues, _me, issue_state, label_names, parse_meta, select,
+    NOT_BUILDABLE_FLAGS)
+
+
+def _closing_prs(issue):
+    return [p.get("number") for p in issue.get("closedByPullRequestsReferences") or []]
+
+
+def classify(issues, me):
+    """Partition issues into the morning-after buckets. An OPEN issue can appear in
+    at most one of {parked, in_flight, resumable, ready/blocked}; CLOSED ones are
+    merged or won't-do."""
+    merged, wont_do, parked, in_flight, dangling = [], [], [], [], []
+    for i in issues:
+        num = i.get("number")
+        st = issue_state(i)
+        names = label_names(i)
+        row = {"number": num, "title": i.get("title", ""), "url": i.get("url", "")}
+        if st == "completed":
+            row["closing_prs"] = _closing_prs(i)
+            merged.append(row)
+            continue
+        if st == "won't-do":
+            wont_do.append(row)
+            continue
+        # OPEN from here
+        flags = sorted(names & set(NOT_BUILDABLE_FLAGS))
+        if flags:
+            row["flags"] = flags
+            parked.append(row)               # needs a human / upstream reconcile
+            continue
+        assignees = {a.get("login", "") for a in i.get("assignees") or []}
+        if st == "started":
+            row["mine"] = bool(me and me in assignees)
+            row["assignees"] = sorted(a for a in assignees if a)
+            row["closing_prs"] = _closing_prs(i)
+            in_flight.append(row)            # a PR/branch exists but it has not merged
+    # "Safe to resume" = started-by-me, not parked; "dangling" = started by someone
+    # else or nobody (a branch/PR left open).
+    resumable = [r for r in in_flight if r.get("mine")]
+    dangling = [r for r in in_flight if not r.get("mine")]
+    return {"merged": merged, "wont_do": wont_do, "parked": parked,
+            "resumable": resumable, "dangling": dangling}
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--repo", required=True, help="owner/name")
+    ap.add_argument("--me", help="my gh login (default: gh api user)")
+    ap.add_argument("--limit", type=int, default=1000)
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    issues = _list_issues(args.repo, args.limit)
+    if issues is None:
+        sys.exit(2)
+    me = _me(args.me)
+    buckets = classify(issues, me)
+    # the still-actionable AFK front, for "what's safe to pick up next"
+    ready = select(issues, me, autonomy="afk")["actionable"]
+
+    if args.json:
+        print(json.dumps({**buckets, "ready": ready}, indent=2))
+        sys.exit(0)
+
+    def show(title, rows, fmt):
+        print(f"{title} ({len(rows)}):")
+        for r in rows:
+            print("  " + fmt(r))
+        if not rows:
+            print("  (none)")
+        print()
+
+    print(f"do-work status -- {args.repo}\n")
+    show("Merged (shipped)", buckets["merged"],
+         lambda r: f"#{r['number']} {r['title']}"
+                   + (f"  closed by PR {r['closing_prs']}" if r.get("closing_prs") else ""))
+    show("Parked for a human (flagged -- resolve upstream)", buckets["parked"],
+         lambda r: f"#{r['number']} [{'/'.join(r['flags'])}] {r['title']}")
+    show("Dangling (a branch/PR is open, not yours, unmerged)", buckets["dangling"],
+         lambda r: f"#{r['number']} {r['title']}  (by {', '.join(r['assignees']) or '?'})")
+    show("Safe to resume (started by you, unmerged)", buckets["resumable"],
+         lambda r: f"#{r['number']} {r['title']}")
+    show("Ready to build next (actionable AFK front)", ready,
+         lambda r: f"#{r['number']} {r['title']}")
+    print(f"summary: {len(buckets['merged'])} merged, "
+          f"{len(buckets['parked'])} parked, {len(buckets['dangling'])} dangling, "
+          f"{len(buckets['resumable'])} resumable, {len(ready)} ready"
+          + (f", {len(buckets['wont_do'])} won't-do" if buckets["wont_do"] else ""))
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

@@ -25,16 +25,17 @@ def check(name, cond):
         failures.append(name)
 
 
-def body(autonomy="afk", deps="None", trace="WF-001", priority=None):
+def body(autonomy="afk", deps="None", trace="FR-CHK-001", priority=None):
     prio_line = f"priority: {priority}\n" if priority is not None else ""
     return (
         f"## What to build\nstuff per {trace}\n\n"
         f"## Dependencies\n\n{deps}\n\n"
         "<!-- make-issues:meta -->\n"
         "```yaml\n"
-        f"trace_tdd: [{trace}]\n"
-        "trace_prd: [FR-002]\n"
-        'source_versions: { prd: "1.0", tdd: "1.1" }\n'
+        f"trace_req: [{trace}]\n"
+        "trace_adr: [ADR-0001]\n"
+        "feature: checkout\n"
+        'source_version: "abc123def456"\n'
         f"autonomy: {autonomy}\n"
         f"{prio_line}"
         'fingerprint: "abc123"\n'
@@ -67,9 +68,10 @@ def issue(number, state="OPEN", labels=("make-issues", "afk"), assignees=(),
 
 
 # ── parsers ─────────────────────────────────────────────────────────────
-meta = parse_meta(body(autonomy="hitl", trace="INTG-002"))
+meta = parse_meta(body(autonomy="hitl", trace="IR-CHK-002"))
 check("parse_meta reads autonomy", meta.get("autonomy") == "hitl")
-check("parse_meta reads trace_tdd", meta.get("trace_tdd") == ["INTG-002"])
+check("parse_meta reads trace_req", meta.get("trace_req") == ["IR-CHK-002"])
+check("parse_meta reads feature", meta.get("feature") == "checkout")
 check("parse_meta on junk -> {}", parse_meta("no markers here") == {})
 
 check("deps None -> []", parse_dependencies(body(deps="None")) == [])
@@ -207,6 +209,33 @@ res_res = select([issue(60, priority=1),
                         labels=("make-issues", "afk", "status:doing"))], ME)
 check("resumable (mine) still sorts before a higher-priority fresh issue",
       [a["number"] for a in res_res["actionable"]] == [61, 60])
+
+# ── seam / stale-blocker exclusion ─────────────────────────────────────────
+# An issue carrying the seam flag is not buildable at all.
+seam_issues = [issue(70, labels=("make-issues", "afk", "stale-against-dependency"))]
+exc_seam = {e["number"]: e["reason"] for e in select(seam_issues, ME)["excluded"]}
+check("seam-flagged issue excluded (stale-against-dependency)",
+      "flagged stale-against-dependency" in exc_seam.get(70, ""))
+
+# A dependent whose blocker has MERGED but is now flagged stale must wait for
+# /make-issues to reconcile, even though the blocker is closed-completed.
+stale_dep = [
+    issue(80, deps="- #81 the foundation"),                       # depends on #81
+    issue(81, state="CLOSED", reason="COMPLETED",
+          labels=("make-issues", "afk", "spec-drift")),           # merged but drifting
+]
+res_sd = select(stale_dep, ME)
+exc_sd = {e["number"]: e["reason"] for e in res_sd["excluded"]}
+check("dependent on a merged-but-stale blocker is excluded",
+      not res_sd["actionable"] and "blocked by stale #81" in exc_sd.get(80, ""))
+
+# A clean merged blocker still unblocks normally (no regression).
+ok_dep = [
+    issue(90, deps="- #91 the foundation"),
+    issue(91, state="CLOSED", reason="COMPLETED"),
+]
+check("dependent on a clean merged blocker is actionable",
+      [a["number"] for a in select(ok_dep, ME)["actionable"]] == [90])
 
 print()
 if failures:

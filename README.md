@@ -32,6 +32,8 @@ The test is output vs. action: if the skill hands back an artifact, it is `make-
 
 If you know the output or the action, you know the command.
 
+**One documented exception:** `summon-council` is a deliberation engine -- it neither hands back a build artifact nor changes the codebase, so it fits neither prefix. Its verb-noun name (invoked `/summon-council`) is intentional; the convention holds for every other skill.
+
 ### The pipeline skills
 
 These four chain end to end -- see [How these skills chain](#how-these-skills-chain).
@@ -45,14 +47,16 @@ These four chain end to end -- see [How these skills chain](#how-these-skills-ch
 
 ### Utility skills
 
-Standalone `do-` skills -- they perform actions, like the pipeline's `do-work`, but run on their own rather than as a lane in the planning-and-build chain:
+Standalone skills that run on their own rather than as a lane in the planning-and-build chain. Most are `do-` skills that perform actions, like the pipeline's `do-work`; `summon-council` is the deliberation exception noted above:
 
 | Skill | What it does |
 |---|---|
 | [`do-git-workflow`](./do-git-workflow) | Enforces a branch-first Git workflow -- `type/short-description` branches, Conventional Commits with GitMoji prefixes, and pull requests opened via the `gh` CLI (ready for review by default; draft only mid-work). |
+| [`do-git-prune`](./do-git-prune) | Deletes local branches fully merged into the default branch -- ancestor-merged (`-d`) and squash/rebase content-merged via a merged PR (`-D`) -- by dispatching a Haiku sub-agent. Never touches the default branch, the current branch, or open-PR heads. `--dry-run` previews, `--remote` also deletes merged remote branches. |
 | [`do-pr-review`](./do-pr-review) | Reviews a GitHub PR diff, posts inline review comments, validates or rejects existing comments in-thread, and submits a verdict. Comment-only -- never edits code. Also runs as the review step inside `do-work`'s drain. |
 | [`do-pr-fix`](./do-pr-fix) | Implements the requested changes on a reviewed PR, replies in-thread explaining each fix, runs tests/build, and pushes the commits -- the back-half of the review loop and companion to `do-pr-review`. Also runs as the fix step inside `do-work`'s drain. |
 | [`do-pr-merge`](./do-pr-merge) | Merges an open PR by dispatching a Haiku sub-agent that runs the merge and (by default) deletes the head branch. Method defaults to the repo's configured strategy (linear-preferred); `--squash`/`--merge`/`--rebase` override, `--no-delete` keeps the branch. Merge-only -- never reviews or edits code, and respects branch protection (no `--admin` bypass). |
+| [`summon-council`](./summon-council) | Convenes an eleven-seat council of opposing voices to pressure-test a high-stakes decision (path selection, go/no-go, artifact review, security review). The Chair dispatches **each seat as an isolated sub-agent** so positions are collected blind, then runs an anonymized cross-examination and synthesizes a verdict, leaving an ADR-compatible record. Neither `make-` nor `do-` (above). |
 
 Skills load progressively: only the frontmatter `description` sits in context at all times; the `SKILL.md` body loads when the skill is triggered, and supporting files load only when referenced. Keep that in mind when adding to a skill -- bundled reference files are effectively free until used.
 

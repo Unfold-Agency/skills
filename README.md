@@ -87,9 +87,9 @@ discovery ──/make-spec──▶  overview + per-feature specs  ──/make-a
 
 ```
 docs/specs/
-├─ overview.md          +  overview-data.yaml   # problem, users, goals, scope, feature_index
+├─ overview.md                                   # problem, users, goals, scope, feature_index
 ├─ features/
-│  ├─ <slug>.md         +  <slug>-data.yaml      # one WHAT-only spec per feature (EARS, pinned IDs)
+│  ├─ <slug>.md                                  # one WHAT-only spec per feature (EARS, pinned IDs)
 │  └─ ...
 ├─ architecture.md      +  arch-data.yaml        # the HOW (C4 / arc42-lite + mermaid)
 ├─ decisions/
@@ -98,7 +98,7 @@ docs/specs/
 └─ CHANGELOG.md                                  # the running delta across versions
 ```
 
-The Markdown is what people read and sign; the derived `*-data.yaml` is the never-hand-edited file the downstream skills consume. `make-issues` and `do-work` read `docs/specs/` by default. A version bump is a commit, not a snapshot folder -- to see a prior version, read the spec at that commit.
+The spec docs (`overview.md`, `features/<slug>.md`) are **single Markdown files**: the YAML **frontmatter** is the machine-readable contract the downstream skills consume and the fingerprint signs, and the body is human narrative -- the bytes a human reviews and signs are the bytes the pipeline builds from (no separately-derived data file). The architecture layer keeps its derived `arch-data.yaml`. `make-issues` and `do-work` read `docs/specs/` by default. A version bump is a commit, not a snapshot folder -- to see a prior version, read the spec at that commit.
 
 **One thread, end to end:**
 

@@ -21,14 +21,14 @@ Each top-level directory is one skill. A skill is a folder with a `SKILL.md` at 
 
 Name a skill after what it does, with a prefix that signals its kind:
 
-- **`make-<thing>`** -- the skill **produces an output**: a document or artifact you read, review, and sign, not code. `<thing>` is the deliverable. Examples: `make-prd`, `make-tdd`, `make-issues`.
+- **`make-<thing>`** -- the skill **produces an output**: a document or artifact you read, review, and sign, not code. `<thing>` is the deliverable. Examples: `make-spec`, `make-arch`, `make-issues`.
 - **`do-<thing>`** -- the skill **performs an action**: writing code, manipulating files, driving a process that changes the repo or the world. `<thing>` is the work. Example: `do-work`.
 
-The test is output vs. action: if the skill hands back an artifact, it is `make-`; if it changes the codebase, it is `do-`. The folder name, the `name` field in `SKILL.md`, and the slash command all share the name, so `make-prd/` is invoked as `/make-prd` and `do-work/` as `/do-work`.
+The test is output vs. action: if the skill hands back an artifact, it is `make-`; if it changes the codebase, it is `do-`. The folder name, the `name` field in `SKILL.md`, and the slash command all share the name, so `make-spec/` is invoked as `/make-spec` and `do-work/` as `/do-work`.
 
 - Lowercase letters, numbers, and hyphens only (the same characters the `name` field allows).
-- Keep `<thing>` short and concrete -- the artifact for `make-` (`make-prd`, `make-tdd`), the work for `do-` (`do-work`) -- not a vague activity (`prd-author`) or a bare verb (`generate`).
-- The `# Heading` inside a `SKILL.md` is a readable form of the same imperative -- `# Make a PRD`, `# Do work`. Only the machine `name`/folder must match the prefix form exactly.
+- Keep `<thing>` short and concrete -- the artifact for `make-` (`make-spec`, `make-arch`), the work for `do-` (`do-work`) -- not a vague activity (`spec-author`) or a bare verb (`generate`).
+- The `# Heading` inside a `SKILL.md` is a readable form of the same imperative -- `# Make a spec`, `# Do work`. Only the machine `name`/folder must match the prefix form exactly.
 
 If you know the output or the action, you know the command.
 
@@ -38,10 +38,10 @@ These four chain end to end -- see [How these skills chain](#how-these-skills-ch
 
 | Skill | What it does |
 |---|---|
-| [`make-prd`](./make-prd) | Generates and amends Product Requirements Documents from discovery material, with citation discipline, a derived machine-readable data file, and a validator. |
-| [`make-tdd`](./make-tdd) | Generates and amends Technical Design Documents from an approved PRD -- recommend-then-refine architecture, full PRD-to-design traceability, a derived data file, and a validator. |
-| [`make-issues`](./make-issues) | Turns an approved, version-locked PRD and TDD into traceable GitHub Issues and keeps them in sync as the TDD changes -- thin work items, AFK/HITL autonomy flags, a version-lock gate, and a stale-resistant reconciliation engine. |
-| [`do-work`](./do-work) | Builds the project from those GitHub Issues, drains the actionable backlog by default (cap with `--limit=<N>`, scope to one implementation phase with `--phase=<N>`, target one ticket with `--issue=<N>`, or go fully autonomous with `--dangerously`), implements each issue on a branch, runs the build gate, opens a PR that closes it, and then **reviews and fixes that PR** (via `do-pr-review` / `do-pr-fix`) before optionally merging (`--auto-merge`). Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
+| [`make-spec`](./make-spec) | Turns discovery material into a layered spec set under `docs/specs/`: a lean `overview` (problem, users, goals `G-NNN`, scope, a `feature_index`) plus one WHAT-only `features/<slug>` file per feature, each with EARS acceptance criteria and pinned requirement IDs (`FR`/`IR`/`NFR`/`CR`). A fail-closed fingerprint gate detects and blocks internal drift, and an `origin/main` no-vanishing check stops accidental deletions. |
+| [`make-arch`](./make-arch) | Derives the architecture from the spec set: an `architecture.md` (C4 / arc42-lite with mermaid) plus an append-only ADR log under `docs/specs/decisions/`. Recommend-then-refine, with each decision typed by confidence (`known` vs `assumption`). |
+| [`make-issues`](./make-issues) | Projects the spec set (overview + features + ADRs) into traceable GitHub Issues and keeps them in sync as the specs change -- per-requirement item fingerprints, a fail-closed spec-integrity preflight, a bounded reconcile engine, and issue meta stamping `trace_req` / `trace_adr` / `feature` / `source_version`. |
+| [`do-work`](./do-work) | Builds the project from those GitHub Issues, drains the actionable backlog by default (cap with `--limit=<N>`, scope to one implementation phase with `--phase=<N>`, target one ticket with `--issue=<N>`, get a morning-after status with `--status`, or go fully autonomous with `--dangerously`), implements each issue on a branch, runs the build gate, opens a PR that closes it, then **reviews and fixes that PR** (via `do-pr-review` / `do-pr-fix`) and applies a **terminal acceptance gate** before optionally merging (`--auto-merge`). Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
 
 ### Utility skills
 
@@ -58,70 +58,81 @@ Skills load progressively: only the frontmatter `description` sits in context at
 
 ### How these skills chain
 
-These four skills form a pipeline -- three `make-` lanes that produce the planning artifacts, then `do-work` to build from them. Each consumes what the lane upstream produced, and a **version lock** at every hop keeps them honest.
+These four skills form a pipeline -- three `make-` lanes that produce the planning artifacts, then `do-work` to build from them. Each consumes what the lane upstream produced, and a **fail-closed fingerprint gate** at every hop keeps them honest.
 
 ```
-discovery ──/make-prd──▶  PRD  ──/make-tdd──▶  TDD  ──/make-issues──▶  GitHub Issues
-            (WHAT / WHY)         (HOW)                (work items)            │
-                                                                       /do-work
-                                                                             ▼
-                                                                 merged PRs (shipped code)
+discovery ──/make-spec──▶  overview + per-feature specs  ──/make-arch──▶  architecture + ADRs
+            (WHAT, per feature)                                          (HOW, as decisions)
+                                                                              │
+                                                                       /make-issues
+                                                                              ▼
+                                                              GitHub Issues  ──/do-work──▶  merged PRs
+                                                              (work items)                 (shipped code)
 ```
 
-- **`/make-prd`** turns discovery material into a PRD and stamps `prd-data.meta.prd_version`.
-- **`/make-tdd`** derives the TDD and **locks** it to the PRD version it was built from (`tdd-data.meta.prd_version`). Its validator refuses a TDD whose lock lags the live PRD (rule V-017).
-- **`/make-issues`** refuses to run unless `prd-data.meta.prd_version == tdd-data.meta.prd_version`, then projects the TDD's capabilities into issues stamped with both versions and a per-capability fingerprint.
-- **`/do-work`** refuses to build a backlog whose TDD has moved past the PRD, then claims each actionable issue, builds the slice, and opens a PR that closes it -- respecting the issue's AFK/HITL flag and its dependency order.
+- **`/make-spec`** turns discovery material into the spec set under `docs/specs/`: a lean `overview` (problem, users, goals `G-NNN`, scope, a `feature_index`) and one WHAT-only `features/<slug>` file per feature, each with EARS acceptance criteria and pinned requirement IDs (`FR`/`IR`/`NFR`/`CR`). Every spec carries a stored fingerprint.
+- **`/make-arch`** derives the HOW from the spec set: an `architecture.md` plus an append-only ADR log in `docs/specs/decisions/`, each decision typed `known` or `assumption`.
+- **`/make-issues`** projects requirements and ADRs into issues, each stamped with its `trace_req`, `trace_adr`, `feature`, and `source_version` plus a per-requirement fingerprint. A fail-closed spec-integrity preflight blocks the run if any spec's stored fingerprint disagrees with its recompute.
+- **`/do-work`** claims each actionable issue, builds the slice, opens a PR that closes it, reviews and fixes the PR, and applies the terminal acceptance gate -- respecting the issue's AFK/HITL flag and its dependency order. It trusts `make-issues` for drift (it does not recompute fingerprints) and refuses any issue `make-issues` has flagged stale.
 
-**Loop-back.** Change flows forward only. Amend the PRD → re-run `/make-tdd` to re-derive and re-lock → re-run `/make-issues` to reconcile → `/do-work` resumes building. You never edit scope inside an issue or skip a lane: each skill diffs rather than rewrites, preserves IDs, and reports what downstream work the change owes. When a build hits a wall, `/do-work` escalates *back* up the same chain -- a design gap to `/make-tdd`, a wrong requirement to `/make-prd` -- rather than coding around it.
+**Loop-back.** Change flows forward only. Amend a feature with `/make-spec` → re-run `/make-arch` if a decision is affected → re-run `/make-issues` to reconcile → `/do-work` resumes building. You never edit scope inside an issue or skip a lane: each skill diffs rather than rewrites, preserves IDs, and reports what downstream work the change owes. When a build hits a wall, `/do-work` escalates *back* up the same chain -- a design gap to `/make-arch` (add or supersede an ADR), a wrong or unsatisfiable requirement to `/make-spec` (amend the feature) -- rather than coding around it.
 
-**Where the artifacts live.** In a project repo the planning artifacts have one canonical home -- `docs/`:
+**The integrity gate (enforced, not assumed).** The pipeline does not claim drift is impossible -- it claims drift is **detected and blocked**. Each spec stores a fingerprint of its own content; `make-issues`' preflight recomputes every fingerprint and **fails closed** if any stored value disagrees with its recompute (a hand-edited spec, a stale derived file). A separate `origin/main` **no-vanishing check** blocks a run that would silently drop a previously-shipped requirement or feature. The gate detects and blocks internal drift; it does not pretend the specs can never move.
+
+**Where the artifacts live.** In a project repo the planning artifacts have one canonical home -- `docs/specs/`. **Git history is the archive** -- there is no separate archive folder; each prior version is simply the commit that wrote it.
 
 ```
-docs/
-├─ PRD-<project>.md  +  prd-data.yaml     # what / why  (make-prd)
-├─ TDD-<project>.md  +  tdd-data.yaml     # how         (make-tdd)
-└─ archive/                               # prior versions, stamped with their version
-   ├─ PRD-<project>-v1.0.md  +  prd-data-v1.0.yaml
-   └─ TDD-<project>-v0.2.md  +  tdd-data-v0.2.yaml
+docs/specs/
+├─ overview.md          +  overview-data.yaml   # problem, users, goals, scope, feature_index
+├─ features/
+│  ├─ <slug>.md         +  <slug>-data.yaml      # one WHAT-only spec per feature (EARS, pinned IDs)
+│  └─ ...
+├─ architecture.md      +  arch-data.yaml        # the HOW (C4 / arc42-lite + mermaid)
+├─ decisions/
+│  ├─ ADR-0001-<slug>.md                         # append-only ADR log
+│  └─ ...
+└─ CHANGELOG.md                                  # the running delta across versions
 ```
 
-The Markdown is the document people read and sign; the derived `*-data.yaml` is the never-hand-edited file the downstream skills consume. The live files keep their canonical names -- the version lives in the frontmatter. On every version bump the amending skill snapshots the outgoing pair into `docs/archive/` before applying the diff, so each prior version is frozen with its version in the filename (and the archived `*-data.yaml` is exactly what the validator's `--prev` reads). `make-issues` and `do-work` read `docs/prd-data.yaml` and `docs/tdd-data.yaml` by default.
-
-> **Migrating an existing repo:** move `prd-data.yaml` / `tdd-data.yaml` and the PRD/TDD Markdown into `docs/`, update the frontmatter `data_file` (and the TDD's `repo.path`) to the new paths, and seed `docs/archive/` from prior versions if you have them. After that the default `docs/` paths just work.
+The Markdown is what people read and sign; the derived `*-data.yaml` is the never-hand-edited file the downstream skills consume. `make-issues` and `do-work` read `docs/specs/` by default. A version bump is a commit, not a snapshot folder -- to see a prior version, read the spec at that commit.
 
 **One thread, end to end:**
 
 | Lane | Artifact | IDs |
 |---|---|---|
-| PRD | "Customers can check out" -- a user objective and the functional requirement under it | `UO-001`, `FR-002` |
-| TDD | A Shopify checkout integration whose `satisfies: [FR-002]` | `INTG-001` |
-| Issues | "Build the Shopify order-create call (per `INTG-001`)" -- meta block stamps `trace_tdd: [INTG-001]`, `trace_prd: [FR-002]`, `source_versions: {prd: 1.0, tdd: 0.1}`; labels stay human-facing (`make-issues`, `afk`/`hitl`) | issue #N |
+| Spec | "Customers can check out" -- a feature spec with an EARS functional requirement under it | `G-001`, `FR-CHK-001` |
+| Arch | The ADR that governs how checkout is built (the Shopify order-create integration) | `ADR-0001` |
+| Issues | "Build the Shopify order-create call" -- meta block stamps `trace_req: [FR-CHK-001]`, `trace_adr: [ADR-0001]`, `feature: checkout`, `source_version: <feature_version>` | issue #N |
 | Build | A branch + PR implementing issue #N that `Closes #N`; the merge closes it COMPLETED and unblocks its dependents | PR, branch `feat/issue-N-order-create` |
 
-Change `INTG-001`'s contract in the TDD and re-run `/make-issues`: the per-capability fingerprint changes, so issue #N is updated (if unstarted) or flagged (if in flight) -- and the engineer's notes in the issue's human region are never touched.
+Change `FR-CHK-001`'s acceptance criteria with `/make-spec` and re-run `/make-issues`: the per-requirement fingerprint changes, so issue #N is updated (if unstarted) or flagged (if in flight) -- and the engineer's notes in the issue's human region are never touched.
 
-### The build loop: build → review → fix → merge
+### The build loop: build → review → fix → acceptance gate → merge
 
-`do-work` doesn't just open a PR and stop. It **drains the backlog by default** (no flag = work every actionable issue; `--limit=<N>` caps the run, `--limit=1` does a single issue), and every PR it opens runs through an automatic **review → fix loop** before the run is done with it:
+`do-work` doesn't just open a PR and stop. It **drains the backlog by default** (no flag = work every actionable issue; `--limit=<N>` caps the run, `--limit=1` does a single issue), and every PR it opens runs through an automatic **review → fix loop** and then a **terminal acceptance gate** before the run is done with it:
 
 ```
 select next issue
    │
    ▼
-build  ──▶  PR opened
+build  ──▶  PR opened (+ an as-built ledger: met / deferred / mocked per criterion)
    │
    ▼
 review  ──▶  fix  ──▶  re-review  ──▶ … (until no Critical/Major findings, max ~2 rounds)
    │                                         │
-   │ can't converge after N rounds           │ clean
+   │ can't converge after N rounds           │ review-clean
    ▼                                         ▼
-park for a human (label `escalated`)     ready-for-review  ──▶  merge (only with --auto-merge)
+park for a human (label `escalated`)     acceptance gate (every criterion met?)
+                                              │                         │
+                                  any deferred/mocked              all met
+                                              ▼                         ▼
+                            park for a human (needs-human-review)   merge (only with --auto-merge)
 ```
 
-- **Review** is `do-pr-review` (posts inline findings, comment-only). **Fix** is `do-pr-fix` (addresses the findings, replies in-thread, pushes). They run as **independent workers** -- the reviewer never shares the builder's context, so it's genuinely a second set of eyes.
+- **Review** is `do-pr-review` (posts inline findings, comment-only). **Fix** is `do-pr-fix` (addresses the findings, replies in-thread, pushes). The review is **context-independent** -- the reviewer is a fresh worker that never shares the builder's context. Set **`GH_REVIEW_TOKEN`** and that reviewer authenticates as a bot, so it can post a real `REQUEST_CHANGES` and GitHub's native review state carries the signal -- a genuine independent second set of eyes; without the token it falls back to the structured `blocking_open` gate (same review, shared gh identity).
+- **The acceptance gate (consistency != correctness).** The fingerprint gates prove the specs, issues, and build are mutually *consistent*; they do not prove the code actually *satisfies* the acceptance criteria. So each worker returns an **as-built ledger** -- one entry per acceptance criterion, `met` / `deferred` / `mocked`, with evidence -- and the orchestrator treats an issue as done only when every criterion is `met`. Any `deferred`/`mocked` entry parks the PR for a human (under `--dangerously` it may still merge on green CI, but each gap gets a `needs-human-review` follow-up -- the ledger is the debt record). It **records and gates on** what was met; it does not claim to prove correctness.
 - **Merge stays manual** unless you pass `--auto-merge`; a merge closes the issue and unblocks its dependents, which is what lets a full dependency chain drain in one pass.
-- A PR the loop can't get clean is **left open and labelled** for a human, never merged.
+- A PR the loop can't get clean -- or that isn't acceptance-clean -- is **left open and labelled** for a human, never merged.
 
 Each lane of the loop runs on the **model that fits the task** -- build and review get the strongest model (build quality is upstream of everything; bug-finding is where the top model earns its cost), fix is bounded so it runs mid-tier, and the mechanical steps run on the cheapest tier. Every default is overridable per run.
 
@@ -138,10 +149,11 @@ This whole loop is encoded deterministically in `do-work/workflows/drain-queue.j
 Workflow({ scriptPath: "<do-work>/workflows/drain-queue.js",
            args: { repo: "owner/name", skillDir: "<do-work>",
                    autoMerge: true, limit: 0, parallel: 2,
+                   reviewToken: process.env.GH_REVIEW_TOKEN,  // bot review identity (optional)
                    modelBuild: "opus", modelFix: "sonnet", effortReview: "high" } })
 ```
 
-The script locates `do-pr-review` and `do-pr-fix` as siblings of `skillDir` automatically. For the full mechanics -- the worker brief, the review/merge gate, the same-identity handling, and resuming a killed run -- see [`do-work/SKILL.md`](./do-work/SKILL.md) and [`do-work/references/execution-loop.md`](./do-work/references/execution-loop.md).
+The script locates `do-pr-review` and `do-pr-fix` as siblings of `skillDir` automatically, and honors `reviewToken` (or env `GH_REVIEW_TOKEN`) for the bot review identity. For the full mechanics -- the worker brief, the review / acceptance / merge gate, the bot-review-identity path and its fallback, and resuming a killed run -- see [`do-work/SKILL.md`](./do-work/SKILL.md) and [`do-work/references/execution-loop.md`](./do-work/references/execution-loop.md).
 
 ### Driving do-work: flags and modes
 
@@ -149,23 +161,24 @@ Invoke `do-work` as `/do-work [flags]` (or headless: `claude -p "/do-work [flags
 
 | Flag | What it does |
 |---|---|
-| *(none)* | Drain every actionable **AFK** issue: build → review → fix each PR, then re-select until the queue is dry or only HITL / blocked work remains. Clean PRs are left **ready-for-review**; a human merges. |
+| *(none)* | Drain every actionable **AFK** issue: build → review → fix each PR, apply the acceptance gate, then re-select until the queue is dry or only HITL / blocked work remains. Clean PRs are left **ready-for-review**; a human merges. |
 | `--limit=<N>` | Cap the run at N issues (`--limit=1` builds a single issue then stops; `0` or omitted = unlimited). |
-| `--phase=<N>` | Drain only issues in **implementation phase N** -- the GitHub milestone `Phase N: …` that `make-issues` creates from the TDD's implementation plan. Composes with `--limit`. |
+| `--phase=<N>` | Drain only issues in **implementation phase N** -- the GitHub milestone `Phase N: …` that `make-issues` creates from the overview's optional `phasing` block. Composes with `--limit`. |
 | `--issue=<N>` | Build exactly issue **#N**, then stop. Bypasses the phase/autonomy filters (you picked it explicitly), but still skips a flagged, blocked, or in-flight target. Takes precedence over `--phase`. |
-| `--auto-merge` | After a PR's review loop is clean and CI is green, merge it -- closing the issue and unblocking its dependents -- then continue. The full overnight loop. |
+| `--auto-merge` | After a PR's review loop is clean, it is acceptance-clean, and CI is green, merge it -- closing the issue and unblocking its dependents -- then continue. The full overnight loop. |
+| `--status` | Report and exit; build nothing. Prints the **morning-after surface** -- what merged, what is parked for a human, what is dangling (a branch/PR left open, not yours), what is safe to resume, and what is ready to build next. Run it first thing after an overnight or `--dangerously` run. |
 | `--dangerously` | **Full autonomy, accept the risk.** Build **and merge every** issue (AFK **and** HITL) with no human prompts. See below. |
 
-**`--phase` and the implementation plan.** A TDD authored with `/make-tdd` can carry a phased **Implementation Plan** (e.g. *Phase 1: Foundation*, *Phase 2: Checkout*). `/make-issues` turns each phase into a GitHub **milestone** and files every issue under its phase. `/do-work --phase=1` then builds only that phase's issues -- so you can ship the foundation, review it, and only then drain phase 2. The dependency gate still applies: a phase-2 issue blocked by an unmerged phase-1 issue waits, so a clean phase-by-phase drive usually pairs `--phase` with `--auto-merge`.
+**`--phase` and the implementation plan.** A project's `overview` (from `/make-spec`) can carry a `phasing` block (e.g. *Phase 1: Foundation*, *Phase 2: Checkout*). `/make-issues` turns each phase into a GitHub **milestone** and files every issue under its phase. `/do-work --phase=1` then builds only that phase's issues -- so you can ship the foundation, review it, and only then drain phase 2. The dependency gate still applies: a phase-2 issue blocked by an unmerged phase-1 issue waits, so a clean phase-by-phase drive usually pairs `--phase` with `--auto-merge`.
 
 **`--dangerously` -- maximum throughput, you own the risk.** It iterates over **every** buildable issue, AFK and HITL alike, and never stops for input:
 
 - It **builds and merges HITL** issues like any other (the one mode where the HITL gate is lifted).
-- Instead of escalating a gap, it **resolves** it with a best-practice default and **mocks** any missing external (an API, seed data, a credential) so work keeps moving.
-- It **merges on green CI even with unresolved review findings** -- a red CI is never merged; it is flagged and left open.
-- Everything it decided on its own is opened as a **`needs-human-review` follow-up issue** for a human to triage afterward.
+- For an **implementation** gap it **resolves** with a best-practice default and **mocks** any missing external (an API, seed data, a credential) so work keeps moving -- **but an unsatisfiable acceptance criterion is a spec defect, not an implementation choice, and it ALWAYS escalates and stops that issue**, even here.
+- It **merges on green CI even with unresolved review findings, or with deferred/mocked acceptance criteria** -- a red CI is never merged; it is flagged and left open.
+- Everything it decided on its own -- assumptions, mocks, unmet acceptance criteria, unconverged findings -- is opened as a **`needs-human-review` follow-up issue** for a human to triage afterward.
 
-It still **skips** issues `make-issues` flagged stale (the spec is known out of date), and it never edits the PRD/TDD or an issue's scope -- it resolves *implementation* ambiguity and mocks *missing externals* only. Use it solely when a human will work the follow-up queue after the run.
+It still **skips** issues `make-issues` flagged stale (the spec is known out of date), and it never edits the specs or an issue's scope -- it resolves *implementation* ambiguity and mocks *missing externals* only. Use it solely when a human will work the follow-up queue after the run.
 
 **Examples**
 
@@ -174,7 +187,8 @@ It still **skips** issues `make-issues` flagged stale (the spec is known out of 
 /do-work --limit=1                # build just the next issue
 /do-work --phase=1 --auto-merge   # ship implementation phase 1 end to end
 /do-work --issue=42               # build one specific issue
-/do-work --auto-merge             # overnight loop: build, review, fix, merge
+/do-work --auto-merge             # overnight loop: build, review, fix, gate, merge
+/do-work --status                 # morning-after surface: what merged / parked / resumable
 /do-work --dangerously            # full autonomy over the whole backlog
 ```
 
@@ -201,22 +215,22 @@ cd skills
 mkdir -p ~/.claude/skills
 
 # Personal, available everywhere -- copy into the skills directory:
-cp -R make-prd ~/.claude/skills/
+cp -R make-spec ~/.claude/skills/
 
 # ...or symlink, so repo edits are picked up live (use an absolute path):
-ln -s "$(pwd)/make-prd" ~/.claude/skills/
+ln -s "$(pwd)/make-spec" ~/.claude/skills/
 ```
 
 To make a skill available only inside a specific project, copy it into that project's `.claude/skills/` instead:
 
 ```bash
 mkdir -p /path/to/your-project/.claude/skills
-cp -R make-prd /path/to/your-project/.claude/skills/
+cp -R make-spec /path/to/your-project/.claude/skills/
 ```
 
 ### Invoke
 
-- **Directly:** type `/<skill-name>` (for example `/make-prd`).
+- **Directly:** type `/<skill-name>` (for example `/make-spec`).
 - **Automatically:** Claude triggers a skill on its own when your request matches the skill's `description`.
 
 ### Update
@@ -227,7 +241,7 @@ git pull
 ```
 
 - **Symlinked** skills are updated by the `git pull` alone.
-- **Copied** skills need to be re-copied after pulling: `cp -R make-prd ~/.claude/skills/`.
+- **Copied** skills need to be re-copied after pulling: `cp -R make-spec ~/.claude/skills/`.
 
 For sharing across a team or distributing many skills at once, skills can also be packaged and installed as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) instead of copied by hand.
 
@@ -241,10 +255,10 @@ The Claude desktop app and claude.ai use the same custom-skill feature. Skills a
 
 1. From this repo's root, zip the skill's folder (the zip must contain the folder with its `SKILL.md`):
    ```bash
-   zip -r make-prd.zip make-prd
+   zip -r make-spec.zip make-spec
    ```
 2. In the Claude app, open **Settings → Features**.
-3. Under **Skills**, upload `make-prd.zip`.
+3. Under **Skills**, upload `make-spec.zip`.
 
 Claude uses the skill automatically when a request matches its description. The upload takes effect in new conversations.
 
@@ -260,11 +274,11 @@ Every skill needs a `SKILL.md` whose YAML frontmatter declares, at minimum, `nam
 
 ```yaml
 ---
-name: make-prd
-description: Generate and amend PRDs from discovery material. Use when the user wants to create a requirements document, formalize requirements, or amend an existing PRD.
+name: make-spec
+description: Turn discovery material into a layered spec set. Use when the user wants to capture requirements, write the per-feature specs, or amend an existing spec.
 ---
 
-# Make a PRD
+# Make a spec
 
 Instructions for Claude go here...
 ```

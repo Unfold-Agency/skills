@@ -1,0 +1,224 @@
+#!/usr/bin/env python3
+"""No-network unit test for the bounded reconcile planner + hard drift gate.
+
+Asserts the planned actions for each branch of the decision tree:
+  new req                      -> CREATE
+  unchanged                    -> SKIP   (and idempotency: re-run = all-SKIP)
+  changed + not-started        -> UPDATE
+  changed + started            -> COMMENT-AND-FLAG
+  changed + completed/merged   -> REFACTOR
+  removed/superseded req       -> STALE/CLOSE (orphan, not merged)
+  ADR-supersede on merged issue-> REFACTOR
+  fan-out over the cap         -> truncates + tracking op + gate BLOCKS (exit 1)
+  malformed meta block         -> blocking drift (gate BLOCKS, exit 1)
+
+  python scripts/tests/test_analyze.py
+Exit 0 = every branch plans as expected.
+"""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+from item_fingerprint import compute_item_fingerprint  # noqa: E402
+import analyze  # noqa: E402
+
+failures = []
+
+
+def check(name, cond):
+    print(f"{'ok  ' if cond else 'FAIL'} {name}")
+    if not cond:
+        failures.append(name)
+
+
+def make_req(rid, status="active", governed_by=None, ac=None, desc="do a thing"):
+    return {
+        "id": rid, "name": f"req {rid}", "kind": "functional",
+        "description": desc,
+        "acceptance_criteria": ac or [f"WHEN x THE SYSTEM SHALL {rid}."],
+        "governed_by": governed_by or [], "depends_on": [],
+        "interface": f"{rid}()", "priority": "must", "status": status,
+    }
+
+
+def req_info(rec, feature="checkout"):
+    return {
+        "record": rec, "feature": feature, "feature_version": "1.0",
+        "fingerprint": compute_item_fingerprint(rec),
+        "status": str(rec.get("status") or "active"),
+        "governed_by": [str(a) for a in (rec.get("governed_by") or [])],
+    }
+
+
+def issue_body(trace_req, fingerprint, autonomy="afk"):
+    """A minimal but well-formed managed issue body (just the meta block)."""
+    reqs = "[" + ", ".join(trace_req) + "]"
+    return (
+        "## Goal\nSomething.\n\n"
+        f"{analyze.META_OPEN}\n```yaml\n"
+        f"trace_req: {reqs}\n"
+        "trace_adr: []\n"
+        "feature: checkout\n"
+        'source_version: "1.0"\n'
+        f"autonomy: {autonomy}\n"
+        f'fingerprint: "{fingerprint}"\n'
+        f"```\n{analyze.META_CLOSE}\n"
+    )
+
+
+def issue(number, trace_req, fingerprint, state="OPEN", reason=None,
+          assignees=None, prs=None, autonomy="afk"):
+    return {
+        "number": number, "title": f"issue {number}", "state": state,
+        "stateReason": reason, "labels": [],
+        "assignees": assignees or [], "closedByPullRequestsReferences": prs or [],
+        "milestone": None, "updatedAt": "2026-06-01T00:00:00Z",
+        "url": f"https://example/{number}",
+        "body": issue_body(trace_req, fingerprint, autonomy),
+    }
+
+
+def plan_for(reqs_map, issues, adr_status=None, max_refactors=10):
+    by_req, blocking_meta = analyze.index_issues(issues)
+    return analyze.build_plan(reqs_map, by_req, adr_status or {}, blocking_meta,
+                              max_refactors, issues)
+
+
+def actions(plan):
+    return [op["action"] for op in plan["ops"]]
+
+
+def op_for(plan, req):
+    return next((op for op in plan["ops"] if op.get("req") == req), None)
+
+
+# ── CREATE: a new requirement with no issue ─────────────────────────────────
+r1 = make_req("FR-CHK-001")
+reqs = {"FR-CHK-001": req_info(r1)}
+p = plan_for(reqs, [])
+check("new req -> CREATE", op_for(p, "FR-CHK-001")["action"] == analyze.CREATE)
+check("CREATE plan is not blocking", not p["blocking"])
+
+# ── SKIP: unchanged (stamped fingerprint == current) ────────────────────────
+fp1 = compute_item_fingerprint(r1)
+iss = [issue(1, ["FR-CHK-001"], fp1)]
+p = plan_for(reqs, iss)
+check("unchanged req -> SKIP", op_for(p, "FR-CHK-001")["action"] == analyze.SKIP)
+
+# Idempotency: re-running the same all-synced set yields all-SKIP, no CREATE.
+p2 = plan_for(reqs, iss)
+check("idempotent: re-run is all-SKIP", set(actions(p2)) == {analyze.SKIP})
+check("idempotency keys are stable across runs",
+      [o["key"] for o in p["ops"]] == [o["key"] for o in p2["ops"]])
+
+# ── UPDATE: changed fingerprint, not-started ────────────────────────────────
+iss = [issue(2, ["FR-CHK-001"], "STALEHASH")]   # stamped != current
+p = plan_for(reqs, iss)
+check("changed + not-started -> UPDATE",
+      op_for(p, "FR-CHK-001")["action"] == analyze.UPDATE)
+
+# ── COMMENT-AND-FLAG: changed, started (has an assignee) ────────────────────
+iss = [issue(3, ["FR-CHK-001"], "STALEHASH", assignees=[{"login": "dev"}])]
+p = plan_for(reqs, iss)
+op = op_for(p, "FR-CHK-001")
+check("changed + started -> COMMENT-AND-FLAG", op["action"] == analyze.COMMENT_AND_FLAG)
+check("afk started -> needs-rebase flag", op["flag"] == "needs-rebase")
+
+iss = [issue(4, ["FR-CHK-001"], "STALEHASH", assignees=[{"login": "dev"}],
+             autonomy="hitl")]
+p = plan_for(reqs, iss)
+check("changed + started + hitl -> spec-drift flag",
+      op_for(p, "FR-CHK-001")["flag"] == "spec-drift")
+
+# ── REFACTOR: changed fingerprint, issue completed/merged ───────────────────
+iss = [issue(5, ["FR-CHK-001"], "STALEHASH", state="CLOSED", reason="COMPLETED")]
+p = plan_for(reqs, iss)
+op = op_for(p, "FR-CHK-001")
+check("changed + completed -> REFACTOR", op["action"] == analyze.REFACTOR)
+check("REFACTOR is HITL", op["autonomy"] == "hitl")
+
+# merged via a closing PR (issue still open) also refactors
+iss = [issue(6, ["FR-CHK-001"], "STALEHASH",
+             prs=[{"state": "MERGED"}])]
+p = plan_for(reqs, iss)
+check("changed + merged-PR -> REFACTOR",
+      op_for(p, "FR-CHK-001")["action"] == analyze.REFACTOR)
+
+# ── STALE/CLOSE: requirement superseded, issue not merged ───────────────────
+r_sup = make_req("FR-CHK-001", status="superseded")
+reqs_sup = {"FR-CHK-001": req_info(r_sup)}
+iss = [issue(7, ["FR-CHK-001"], compute_item_fingerprint(r_sup))]
+p = plan_for(reqs_sup, iss)
+check("superseded req + not-started issue -> STALE/CLOSE",
+      op_for(p, "FR-CHK-001")["action"] == analyze.STALE_CLOSE)
+
+# superseded requirement whose issue is merged -> REFACTOR (back out shipped)
+iss = [issue(8, ["FR-CHK-001"], compute_item_fingerprint(r_sup),
+             state="CLOSED", reason="COMPLETED")]
+p = plan_for(reqs_sup, iss)
+check("superseded req + merged issue -> REFACTOR",
+      op_for(p, "FR-CHK-001")["action"] == analyze.REFACTOR)
+
+# requirement REMOVED entirely from specs, issue not merged -> STALE/CLOSE
+iss = [issue(9, ["FR-GONE-001"], "WHATEVER")]
+p = plan_for(reqs, iss)         # reqs has no FR-GONE-001
+op = next((o for o in p["ops"] if o.get("req") == "FR-GONE-001"), None)
+check("removed req + open issue -> STALE/CLOSE", op["action"] == analyze.STALE_CLOSE)
+
+# requirement REMOVED entirely, issue merged -> REFACTOR
+iss = [issue(10, ["FR-GONE-001"], "WHATEVER", state="CLOSED", reason="COMPLETED")]
+p = plan_for(reqs, iss)
+op = next((o for o in p["ops"] if o.get("req") == "FR-GONE-001"), None)
+check("removed req + merged issue -> REFACTOR", op["action"] == analyze.REFACTOR)
+
+# ── ADR supersede touching a merged issue -> REFACTOR ───────────────────────
+r_adr = make_req("FR-CHK-002", governed_by=["ADR-0001"])
+reqs_adr = {"FR-CHK-002": req_info(r_adr)}
+fp_adr = compute_item_fingerprint(r_adr)
+# requirement text UNCHANGED (stamped == current) but ADR superseded + merged
+iss = [issue(11, ["FR-CHK-002"], fp_adr, state="CLOSED", reason="COMPLETED")]
+p = plan_for(reqs_adr, iss, adr_status={"ADR-0001": "superseded"})
+check("ADR superseded + merged issue (text unchanged) -> REFACTOR",
+      op_for(p, "FR-CHK-002")["action"] == analyze.REFACTOR)
+
+# control: same setup but ADR still accepted -> SKIP (no refactor)
+p = plan_for(reqs_adr, iss, adr_status={"ADR-0001": "accepted"})
+check("ADR accepted + merged + unchanged -> SKIP",
+      op_for(p, "FR-CHK-002")["action"] == analyze.SKIP)
+
+# ── malformed meta block -> blocking drift, gate BLOCKS ─────────────────────
+bad_issue = issue(12, ["FR-CHK-001"], fp1)
+bad_issue["body"] = "## Goal\nNo meta block here at all.\n"
+p = plan_for(reqs, [bad_issue])
+check("malformed meta block -> blocking drift", bool(p["blocking"]))
+
+# ── fan-out cap: more refactors than the cap -> truncate + tracking + BLOCK ──
+many_reqs = {}
+many_issues = []
+for i in range(1, 6):                       # 5 changed+merged requirements
+    rid = f"FR-CHK-{i:03d}"
+    rec = make_req(rid)
+    many_reqs[rid] = req_info(rec)
+    many_issues.append(issue(100 + i, [rid], "STALEHASH",
+                             state="CLOSED", reason="COMPLETED"))
+p = plan_for(many_reqs, many_issues, max_refactors=2)
+refactors = [o for o in p["ops"] if o["action"] == analyze.REFACTOR]
+tracking = [o for o in p["ops"] if o["action"] == analyze.REFACTOR_TRACKING]
+check("cap=2 -> exactly 2 REFACTOR ops", len(refactors) == 2)
+check("cap overflow -> exactly 1 tracking op", len(tracking) == 1)
+check("tracking op records the deferred count", tracking[0]["count"] == 3)
+check("cap overflow -> gate BLOCKS", bool(p["blocking"]))
+
+# under the cap -> no tracking, not blocking
+p = plan_for(many_reqs, many_issues, max_refactors=10)
+check("cap=10 over 5 refactors -> no tracking op",
+      not any(o["action"] == analyze.REFACTOR_TRACKING for o in p["ops"]))
+check("under cap -> not blocking", not p["blocking"])
+
+print()
+if failures:
+    print(f"FAILURES: {failures}")
+    sys.exit(1)
+print("bounded reconcile planner behaves as expected")
+sys.exit(0)

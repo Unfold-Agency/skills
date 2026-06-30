@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
-"""Asserts the per-capability fingerprint is STABLE under cosmetic edits and
-CHANGES under contract edits -- the property that keeps issues from churning on
-rewording while still catching real design drift.
+"""The C1 keystone test. The per-requirement fingerprint must be STABLE under
+advisory/cosmetic edits and CHANGE under every contract (IN) edit -- the property
+that keeps issues from churning on rewording/re-prioritising while still catching
+real spec drift.
+
+IN  (must flip the hash):  id, kind, description, acceptance_criteria (and its
+                           ORDER), governed_by, depends_on, interface.
+OUT (must NOT flip):       priority, architecture_hints, related_files, notes,
+                           name, status.
 
   python scripts/tests/test_item_fingerprint.py
 Exit 0 = all properties held.
@@ -12,7 +18,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
-from item_fingerprint import compute_item_fingerprint  # noqa: E402
+from item_fingerprint import compute_item_fingerprint, project_in_fields  # noqa: E402
 
 failures = []
 
@@ -23,85 +29,95 @@ def check(name, cond):
         failures.append(name)
 
 
-ENT = {
-    "id": "ENT-001", "name": "Order", "purpose": "An order placed by a customer.",
-    "attributes": [
-        {"name": "id", "type": "uuid", "required": True, "identifier": True, "note": "pk"},
-        {"name": "total", "type": "money", "required": True, "identifier": False, "note": "x"},
+REQ = {
+    "id": "FR-CHK-001",
+    "name": "Validate the cart before checkout",
+    "kind": "functional",
+    "description": "The system validates every cart line item against live "
+                   "inventory before allowing checkout to proceed.",
+    "acceptance_criteria": [
+        "WHEN a line item is out of stock THE SYSTEM SHALL block checkout.",
+        "WHEN all items are in stock THE SYSTEM SHALL proceed to payment.",
     ],
-    "relationships": [{"to": "ENT-002", "cardinality": "1:N", "note": "has lines"}],
-    "satisfies": ["FR-002", "FR-001"], "needs_diagram": True,
-    "open_items": [], "status": "active",
-}
-WF = {
-    "id": "WF-001", "name": "Checkout", "trigger": "user submits cart",
-    "steps": ["validate cart", "charge card", "create order"],
-    "satisfies": ["FR-001"], "needs_diagram": True, "status": "active",
-}
-STM = {
-    "id": "STM-001", "name": "Order lifecycle", "entity": "ENT-001",
-    "states": ["new", "paid", "shipped"],
-    "transitions": [
-        {"from": "new", "to": "paid", "event": "pay"},
-        {"from": "paid", "to": "shipped", "event": "ship"},
-    ],
-    "satisfies": ["FR-001"], "needs_diagram": True, "status": "active",
+    "governed_by": ["ADR-0002", "ADR-0001"],
+    "depends_on": ["FR-CART-001", "FR-CART-002"],
+    "interface": "validateCart(cartId): { ok: bool, blocked: LineItem[] }",
+    # OUT fields below -- none of these may affect the hash:
+    "priority": "must",
+    "architecture_hints": "Reuse the inventory client from the cart module.",
+    "related_files": ["src/checkout/validate.ts"],
+    "notes": "Discussed with platform team 2026-06-01.",
+    "status": "active",
 }
 
 
-def fp(rec, kind):
-    return compute_item_fingerprint(copy.deepcopy(rec), kind)
+def fp(rec):
+    return compute_item_fingerprint(copy.deepcopy(rec))
 
 
-base_ent = fp(ENT, "ENT")
+base = fp(REQ)
 
-# --- cosmetic edits: hash must NOT change ---
-m = copy.deepcopy(ENT); m["name"] = "Sales Order"
-check("ENT reword name -> stable", fp(m, "ENT") == base_ent)
-m = copy.deepcopy(ENT); m["purpose"] = "Totally different prose."
-check("ENT reword purpose -> stable", fp(m, "ENT") == base_ent)
-m = copy.deepcopy(ENT); m["attributes"][0]["note"] = "changed note"
-check("ENT change attribute note -> stable", fp(m, "ENT") == base_ent)
-m = copy.deepcopy(ENT); m["needs_diagram"] = False
-check("ENT toggle needs_diagram -> stable", fp(m, "ENT") == base_ent)
-m = copy.deepcopy(ENT); m["status"] = "deferred"
-check("ENT change status -> stable (lifecycle, not content)", fp(m, "ENT") == base_ent)
-m = copy.deepcopy(ENT); m["attributes"].reverse()
-check("ENT reorder attributes -> stable (order-insensitive)", fp(m, "ENT") == base_ent)
-m = copy.deepcopy(ENT); m["satisfies"] = ["FR-001", "FR-002"]
-check("ENT reorder satisfies -> stable (set)", fp(m, "ENT") == base_ent)
+# ── OUT fields: the hash must NOT change ─────────────────────────────────────
+m = copy.deepcopy(REQ); m["priority"] = "could"
+check("change priority -> stable (OUT)", fp(m) == base)
+m = copy.deepcopy(REQ); m["architecture_hints"] = "Totally different approach."
+check("change architecture_hints -> stable (OUT)", fp(m) == base)
+m = copy.deepcopy(REQ); m["related_files"] = ["src/x.ts", "src/y.ts"]
+check("change related_files -> stable (OUT)", fp(m) == base)
+m = copy.deepcopy(REQ); m["notes"] = "New note entirely."
+check("change notes -> stable (OUT)", fp(m) == base)
+m = copy.deepcopy(REQ); m["name"] = "A completely reworded name"
+check("change name -> stable (cosmetic)", fp(m) == base)
+m = copy.deepcopy(REQ); m["status"] = "deferred"
+check("change status -> stable (lifecycle, not content)", fp(m) == base)
+m = copy.deepcopy(REQ); m["governed_by"] = ["ADR-0001", "ADR-0002"]
+check("reorder governed_by -> stable (set)", fp(m) == base)
+m = copy.deepcopy(REQ); m["depends_on"] = ["FR-CART-002", "FR-CART-001"]
+check("reorder depends_on -> stable (set)", fp(m) == base)
+m = copy.deepcopy(REQ)
+m["description"] = "  The   system validates every cart line item against " \
+                   "live inventory before allowing checkout to proceed.  "
+check("re-whitespace description -> stable (normalized)", fp(m) == base)
 
-# --- contract edits: hash MUST change ---
-m = copy.deepcopy(ENT); m["attributes"][1]["type"] = "decimal"
-check("ENT change attribute type -> changes", fp(m, "ENT") != base_ent)
-m = copy.deepcopy(ENT); m["attributes"][1]["required"] = False
-check("ENT change attribute required -> changes", fp(m, "ENT") != base_ent)
-m = copy.deepcopy(ENT); m["satisfies"] = ["FR-001"]
-check("ENT drop a satisfied requirement -> changes", fp(m, "ENT") != base_ent)
-m = copy.deepcopy(ENT); m["relationships"][0]["cardinality"] = "1:1"
-check("ENT change relationship cardinality -> changes", fp(m, "ENT") != base_ent)
+# ── IN fields: the hash MUST change ──────────────────────────────────────────
+m = copy.deepcopy(REQ); m["id"] = "FR-CHK-099"
+check("change id -> changes (IN)", fp(m) != base)
+m = copy.deepcopy(REQ); m["kind"] = "integration"
+check("change kind -> changes (IN)", fp(m) != base)
+m = copy.deepcopy(REQ); m["description"] = "A materially different requirement."
+check("change description -> changes (IN)", fp(m) != base)
+m = copy.deepcopy(REQ)
+m["acceptance_criteria"] = m["acceptance_criteria"] + \
+    ["WHEN inventory is unknown THE SYSTEM SHALL fail closed."]
+check("add an acceptance criterion -> changes (IN)", fp(m) != base)
+m = copy.deepcopy(REQ)
+m["acceptance_criteria"][0] = "WHEN a line item is out of stock THE SYSTEM " \
+                              "SHALL warn but allow checkout."
+check("edit an acceptance criterion -> changes (IN)", fp(m) != base)
+m = copy.deepcopy(REQ)
+m["acceptance_criteria"] = list(reversed(REQ["acceptance_criteria"]))
+check("REORDER acceptance_criteria -> changes (order is contract)", fp(m) != base)
+m = copy.deepcopy(REQ); m["governed_by"] = ["ADR-0001"]
+check("drop a governing ADR -> changes (IN)", fp(m) != base)
+m = copy.deepcopy(REQ); m["governed_by"] = REQ["governed_by"] + ["ADR-0009"]
+check("add a governing ADR -> changes (IN)", fp(m) != base)
+m = copy.deepcopy(REQ); m["depends_on"] = ["FR-CART-001"]
+check("drop a dependency -> changes (IN)", fp(m) != base)
+m = copy.deepcopy(REQ); m["interface"] = "validateCart(cartId): boolean"
+check("change interface -> changes (IN)", fp(m) != base)
 
-# --- WF: steps are ORDER-SENSITIVE ---
-base_wf = fp(WF, "WF")
-m = copy.deepcopy(WF); m["name"] = "Purchase"
-check("WF reword name -> stable", fp(m, "WF") == base_wf)
-m = copy.deepcopy(WF); m["steps"] = ["charge card", "validate cart", "create order"]
-check("WF reorder steps -> changes (order is meaning)", fp(m, "WF") != base_wf)
-m = copy.deepcopy(WF); m["trigger"] = "user clicks pay"
-check("WF change trigger -> changes", fp(m, "WF") != base_wf)
-
-# --- STM: transitions are ORDER-INSENSITIVE (a set of edges) ---
-base_stm = fp(STM, "STM")
-m = copy.deepcopy(STM); m["transitions"].reverse()
-check("STM reorder transitions -> stable (edge set)", fp(m, "STM") == base_stm)
-m = copy.deepcopy(STM); m["transitions"][0]["event"] = "capture"
-check("STM change a transition event -> changes", fp(m, "STM") != base_stm)
-m = copy.deepcopy(STM); m["states"] = ["new", "paid"]
-check("STM drop a state -> changes", fp(m, "STM") != base_stm)
+# ── projection allow-list: OUT keys are not even present in the projection ───
+proj = project_in_fields(REQ)
+for out_key in ("priority", "architecture_hints", "related_files", "notes",
+                "name", "status"):
+    check(f"projection excludes {out_key}", out_key not in proj)
+for in_key in ("id", "kind", "description", "acceptance_criteria",
+               "governed_by", "depends_on", "interface"):
+    check(f"projection includes {in_key}", in_key in proj)
 
 print()
 if failures:
     print(f"FAILURES: {failures}")
     sys.exit(1)
-print("all fingerprint properties held")
+print("all C1 fingerprint properties held")
 sys.exit(0)

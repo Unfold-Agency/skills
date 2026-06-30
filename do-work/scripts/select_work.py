@@ -145,13 +145,19 @@ def autonomy_of(issue, meta):
 
 
 def priority_of(meta):
-    """Pick-time priority (lower = sooner) from the make-issues:meta block. Absent
-    or malformed -> DEFAULT_PRIORITY, so unprioritized issues sort after prioritized
-    ones and keep their by-number order. Priority is deliberately NOT part of the
-    per-capability fingerprint, so re-prioritizing an issue never flags it as
-    drifted -- it is read live here at selection time."""
+    """Pick-time priority (lower = sooner) from the make-issues:meta block. Absent,
+    boolean, or otherwise malformed -> DEFAULT_PRIORITY, so unprioritized issues
+    sort after prioritized ones and keep their by-number order. Priority is
+    deliberately NOT part of the per-capability fingerprint, so re-prioritizing an
+    issue never flags it as drifted -- it is read live here at selection time."""
+    val = (meta or {}).get("priority")
+    # bool is an int subclass, so int(True)==1 / int(False)==0 would silently read a
+    # YAML true/false/yes/no (the tokens a human reaches for) as a real priority and
+    # jump the queue -- `priority: no` would sort to the FRONT. Treat bool as malformed.
+    if isinstance(val, bool):
+        return DEFAULT_PRIORITY
     try:
-        return int((meta or {}).get("priority"))
+        return int(val)
     except (TypeError, ValueError):
         return DEFAULT_PRIORITY
 

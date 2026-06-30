@@ -1,30 +1,44 @@
 #!/usr/bin/env python3
-"""Map TDD implementation phases to GitHub milestones for make-issues.
+"""Map an OPTIONAL phasing plan to GitHub milestones for make-issues.
 
-A TDD's `implementation_phases` (authored in make-tdd) groups the active
-capabilities into ordered, shippable phases. make-issues turns each phase into
-ONE GitHub milestone -- title "Phase <number>: <name>" -- and assigns every
-issue to the milestone for the phase its capability belongs to. do-work
---phase=<N> then drains a single phase.
+The new docs/specs overview does NOT author phasing by default (the old TDD's
+implementation_phases is gone). Phase milestones are therefore OPTIONAL: if
+`overview-data.yaml` carries a top-level `phasing` list, this maps feature ->
+phase -> milestone and supports it; if it is absent, milestones are skipped
+entirely (no error -- the project simply has no phases).
 
-Phase is sequencing, not contract. It lives ONLY in the TDD's
-implementation_phases -- never on a capability record and never in the issue
-meta block -- so a capability moving phases does NOT change its per-capability
-fingerprint (item_fingerprint.py). The milestone is the operative store, like a
-native dependency edge: derived from the TDD and re-asserted on every sync. The
+A phasing entry looks like:
+    phasing:
+      - phase: 1
+        name: "Foundation"
+        features: ["checkout", "cart"]   # feature slugs from the feature_index
+
+make-issues turns each phase into ONE GitHub milestone -- title
+"Phase <number>: <name>" -- and assigns every issue to the milestone for the
+phase its FEATURE belongs to (an issue's feature is its meta `feature` slug).
+do-work --phase=<N> then drains a single phase.
+
+Phase is sequencing, not contract. It lives ONLY in the overview's `phasing`
+list -- never on a requirement and never in the issue meta block -- so a feature
+moving phases does NOT change any per-requirement fingerprint
+(item_fingerprint.py). The milestone is the operative store, like a native
+dependency edge: derived from the overview and re-asserted on every sync. The
 leading "Phase <number>" of the title is the stable key both this skill and
 do-work match on; the name is a human label that may change.
 
-  python scripts/phase_milestones.py docs/tdd-data.yaml                 # human-readable maps
-  python scripts/phase_milestones.py docs/tdd-data.yaml --json          # {cap_to_phase, phase_title, ...}
-  python scripts/phase_milestones.py docs/tdd-data.yaml --trace WF-001,INTG-001
-  python scripts/phase_milestones.py docs/tdd-data.yaml --ensure --repo owner/name
+  python scripts/phase_milestones.py docs/specs/overview-data.yaml          # human-readable maps
+  python scripts/phase_milestones.py docs/specs/overview-data.yaml --json    # {feature_to_phase, phase_title, ...}
+  python scripts/phase_milestones.py docs/specs/overview-data.yaml --feature checkout
+  python scripts/phase_milestones.py docs/specs/overview-data.yaml --ensure --repo owner/name
+
+The path may be the overview file or the spec dir (docs/specs).
 
 Exit codes: 0 = ok, 1 = bad args / unresolved, 2 = file/parse error,
             3 = a gh call failed (with --ensure).
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -51,51 +65,49 @@ def parse_phase_ordinal(title):
 
 
 def active_phases(doc):
-    """Active implementation_phases, sorted by number. [] when there is no plan."""
+    """Active `phasing` entries, sorted by number. [] when there is no plan
+    (the common case -- phasing is optional in the new overview)."""
     out = []
-    for ph in doc.get("implementation_phases") or []:
-        if (isinstance(ph, dict) and ph.get("status", "active") == "active"
-                and isinstance(ph.get("number"), int)
-                and not isinstance(ph.get("number"), bool)):
+    for ph in doc.get("phasing") or []:
+        if (isinstance(ph, dict)
+                and ph.get("status", "active") == "active"
+                and isinstance(ph.get("phase"), int)
+                and not isinstance(ph.get("phase"), bool)):
             out.append(ph)
-    out.sort(key=lambda p: p["number"])
+    out.sort(key=lambda p: p["phase"])
     return out
 
 
 def build_maps(doc):
-    """Return (cap_to_phase, phase_meta) from the active plan.
-    cap_to_phase[cap_id] -> phase number (the latest phase listing it, if >1).
-    phase_meta[number]   -> {"title", "name", "summary"}.
+    """Return (feature_to_phase, phase_meta) from the active plan.
+    feature_to_phase[slug] -> phase number (the latest phase listing it, if >1).
+    phase_meta[number]      -> {"title", "name", "summary"}.
+    Empty maps when there is no `phasing` list.
     """
-    cap_to_phase, phase_meta = {}, {}
+    feature_to_phase, phase_meta = {}, {}
     for ph in active_phases(doc):
-        num = ph["number"]
+        num = ph["phase"]
         name = ph.get("name") or ""
         phase_meta[num] = {
             "title": milestone_title(num, name),
             "name": name,
             "summary": " ".join(str(ph.get("summary") or "").split()),
         }
-        for cap in ph.get("capabilities") or []:
-            cap = str(cap)
-            if cap not in cap_to_phase or num > cap_to_phase[cap]:
-                cap_to_phase[cap] = num   # latest phase wins on a (bad) double-listing
-    return cap_to_phase, phase_meta
+        for feat in ph.get("features") or []:
+            feat = str(feat)
+            if feat not in feature_to_phase or num > feature_to_phase[feat]:
+                feature_to_phase[feat] = num   # latest phase wins on a double-listing
+    return feature_to_phase, phase_meta
 
 
-def phase_for_trace(trace_tdd, cap_to_phase):
-    """The phase an issue belongs to, from its trace_tdd capability IDs.
-
-    Rule: the LATEST phase among its capabilities -- an issue cannot complete
-    until its last-phase capability is in play. Returns (number, spanned,
-    mapped_caps): number is None if no traced capability is in the plan; spanned
-    is True when the traced caps fall in more than one phase (a slicing smell to
-    report, not an error)."""
-    nums = sorted({cap_to_phase[c] for c in (trace_tdd or []) if c in cap_to_phase})
-    if not nums:
-        return None, False, []
-    mapped = [c for c in trace_tdd if c in cap_to_phase]
-    return nums[-1], len(nums) > 1, mapped
+def phase_for_feature(feature_slug, feature_to_phase):
+    """The phase NUMBER an issue belongs to, from its feature slug, or None when
+    the feature is not in any phase (or there is no phasing plan). Returned as a
+    (number, number) 2-tuple: the duplicate second slot keeps the historical
+    `num, _ = ...` unpack working; the milestone title is looked up separately
+    from phase_meta by the caller, never returned here."""
+    num = feature_to_phase.get(str(feature_slug))
+    return num, num
 
 
 # ── GitHub side (only used by --ensure) ──────────────────────────────────
@@ -167,40 +179,47 @@ def ensure_milestones(repo, phase_meta):
     return {"actions": actions, "title_to_num": title_to_num}, None
 
 
+def _resolve_overview(path):
+    """Accept the overview file or the spec dir; return the overview path."""
+    if os.path.isdir(path):
+        return os.path.join(path, "overview-data.yaml")
+    return path
+
+
 def main():
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("data_file", help="path to tdd-data.yaml (e.g. docs/tdd-data.yaml)")
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("overview", help="docs/specs/overview-data.yaml (or docs/specs)")
     ap.add_argument("--json", action="store_true", help="emit the maps as JSON")
-    ap.add_argument("--trace", help="comma-separated trace_tdd IDs; print that issue's phase")
+    ap.add_argument("--feature", help="a feature slug; print that feature's phase")
     ap.add_argument("--ensure", action="store_true",
                     help="create/patch the GitHub milestones (needs --repo)")
     ap.add_argument("--repo", help="owner/name (required with --ensure)")
     args = ap.parse_args()
 
+    overview_path = _resolve_overview(args.overview)
     try:
-        with open(args.data_file, encoding="utf-8") as f:
+        with open(overview_path, encoding="utf-8") as f:
             doc = yaml.safe_load(f)
     except (OSError, yaml.YAMLError) as e:
-        print(f"ERROR: cannot read {args.data_file}: {e}", file=sys.stderr)
+        print(f"ERROR: cannot read {overview_path}: {e}", file=sys.stderr)
         sys.exit(2)
     if not isinstance(doc, dict):
-        print(f"ERROR: {args.data_file} is not a YAML mapping", file=sys.stderr)
+        print(f"ERROR: {overview_path} is not a YAML mapping", file=sys.stderr)
         sys.exit(2)
 
-    cap_to_phase, phase_meta = build_maps(doc)
+    feature_to_phase, phase_meta = build_maps(doc)
 
-    if args.trace is not None:
-        trace = [t.strip() for t in args.trace.split(",") if t.strip()]
-        num, spanned, mapped = phase_for_trace(trace, cap_to_phase)
+    if args.feature is not None:
+        num, _ = phase_for_feature(args.feature, feature_to_phase)
         if args.json:
             print(json.dumps({"phase": num,
-                              "milestone": phase_meta.get(num, {}).get("title"),
-                              "spanned": spanned, "mapped_caps": mapped}, indent=2))
+                              "milestone": phase_meta.get(num, {}).get("title")},
+                             indent=2))
         elif num is None:
-            print("no phase (no traced capability is in the plan)")
+            print("no phase (feature is not in the overview's phasing plan)")
         else:
-            extra = "  [spans multiple phases -- consider re-slicing]" if spanned else ""
-            print(f"phase {num} -> \"{phase_meta[num]['title']}\"{extra}")
+            print(f"phase {num} -> \"{phase_meta[num]['title']}\"")
         sys.exit(0)
 
     if args.ensure:
@@ -208,7 +227,8 @@ def main():
             print("ERROR: --ensure requires --repo owner/name", file=sys.stderr)
             sys.exit(1)
         if not phase_meta:
-            print("No implementation_phases in the TDD; nothing to ensure.")
+            print("No `phasing` plan in the overview; nothing to ensure "
+                  "(milestones are optional).")
             sys.exit(0)
         res, err = ensure_milestones(args.repo, phase_meta)
         if res is None:
@@ -228,19 +248,20 @@ def main():
 
     if args.json:
         print(json.dumps({
-            "cap_to_phase": cap_to_phase,
+            "feature_to_phase": feature_to_phase,
             "phase_title": {str(n): m["title"] for n, m in phase_meta.items()},
-            "phases": [{"number": n, **phase_meta[n]} for n in sorted(phase_meta)],
+            "phases": [{"phase": n, **phase_meta[n]} for n in sorted(phase_meta)],
         }, indent=2, sort_keys=True))
         sys.exit(0)
 
     if not phase_meta:
-        print(f"No implementation_phases in {args.data_file} (the plan is optional).")
+        print(f"No `phasing` plan in {overview_path} (phasing is optional -- "
+              "milestones are skipped entirely).")
         sys.exit(0)
     for n in sorted(phase_meta):
-        caps = sorted(c for c, p in cap_to_phase.items() if p == n)
+        feats = sorted(f for f, p in feature_to_phase.items() if p == n)
         print(f"Phase {n}: {phase_meta[n]['name']}  ->  milestone \"{phase_meta[n]['title']}\"")
-        print(f"  capabilities: {', '.join(caps) or '(none)'}")
+        print(f"  features: {', '.join(feats) or '(none)'}")
     sys.exit(0)
 
 

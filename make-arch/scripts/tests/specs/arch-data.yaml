@@ -1,0 +1,59 @@
+meta:
+  doc_type: spec-arch
+  schema_version: '1.0'
+  project_id: proj-fixture
+  project_name: Fixture Storefront
+  arch_version: c2b994935850
+  status: draft
+  generated_at: '2026-06-29T00:00:00Z'
+  fingerprint: c2b99493585049fc15445bf0c02a963138cb3213cd14b47c1f0e7a8ceb45262a
+context: A storefront where shoppers build a cart and pay; orders sync to fulfillment.
+components:
+- id: C-001
+  name: Storefront web app
+  responsibility: Render the catalog, cart, and checkout.
+  tech: Next.js
+  confidence: known
+  governed_by:
+  - ADR-0001
+- id: C-002
+  name: Orders service
+  responsibility: Turn paid carts into orders and sync fulfillment.
+  tech: Node + Postgres
+  confidence: assumption
+  governed_by:
+  - ADR-0003
+integrations:
+- name: Payment gateway
+  external_system: Stripe
+  direction: outbound
+  data: payment intents, webhooks
+  confidence: known
+  governed_by:
+  - ADR-0001
+decisions:
+- id: ADR-0001
+  title: Use Stripe for payments
+  status: accepted
+  scope: feature
+  superseded_by: ''
+  confidence: known
+  governs:
+  - FR-CHK-001
+- id: ADR-0002
+  title: Use a self-hosted payment form
+  status: superseded
+  scope: feature
+  superseded_by: ADR-0003
+  confidence: known
+  governs: []
+- id: ADR-0003
+  title: Use a hosted checkout for PCI scope reduction
+  status: accepted
+  scope: feature
+  superseded_by: ''
+  confidence: known
+  governs:
+  - FR-CHK-002
+diagrams:
+- context

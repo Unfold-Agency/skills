@@ -34,12 +34,14 @@ If you know the output or the action, you know the command.
 
 ### The pipeline skills
 
-These four chain end to end -- see [How these skills chain](#how-these-skills-chain).
+These chain end to end -- see [How these skills chain](#how-these-skills-chain).
+
+> **🚧 Pipeline migration in progress.** The planning lanes are moving to a layered, per-feature model: **`make-spec`** (a lean project overview + one churn-friendly spec per feature) and **`make-arch`** (architecture overview + an append-only ADR log) are replacing the older `make-prd` + `make-tdd`. `make-spec` has landed and `make-prd` is retired; `make-arch`, the `make-issues`/`do-work` repoint, and the full pipeline rewrite (including the chain diagram below, which still shows the legacy lanes) follow in subsequent PRs.
 
 | Skill | What it does |
 |---|---|
-| [`make-prd`](./make-prd) | Generates and amends Product Requirements Documents from discovery material, with citation discipline, a derived machine-readable data file, and a validator. |
-| [`make-tdd`](./make-tdd) | Generates and amends Technical Design Documents from an approved PRD -- recommend-then-refine architecture, full PRD-to-design traceability, a derived data file, and a validator. |
+| [`make-spec`](./make-spec) | Turns discovery material into the layered `docs/specs/` set -- a lean overview (problem, users, goals, scope) plus one WHAT-only spec per feature with EARS acceptance criteria, pinned/feature-namespaced IDs, content-derived versions, a fail-closed fingerprint gate, an `origin/main` no-vanishing check, and a CHANGELOG ledger. |
+| [`make-tdd`](./make-tdd) | _(legacy, being replaced by `make-arch`)_ Generates and amends Technical Design Documents from an approved PRD -- recommend-then-refine architecture, full PRD-to-design traceability, a derived data file, and a validator. |
 | [`make-issues`](./make-issues) | Turns an approved, version-locked PRD and TDD into traceable GitHub Issues and keeps them in sync as the TDD changes -- thin work items, AFK/HITL autonomy flags, a version-lock gate, and a stale-resistant reconciliation engine. |
 | [`do-work`](./do-work) | Builds the project from those GitHub Issues, drains the actionable backlog by default (cap with `--limit=<N>`, scope to one implementation phase with `--phase=<N>`, target one ticket with `--issue=<N>`, or go fully autonomous with `--dangerously`), implements each issue on a branch, runs the build gate, opens a PR that closes it, and then **reviews and fixes that PR** (via `do-pr-review` / `do-pr-fix`) before optionally merging (`--auto-merge`). Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
 
@@ -201,22 +203,22 @@ cd skills
 mkdir -p ~/.claude/skills
 
 # Personal, available everywhere -- copy into the skills directory:
-cp -R make-prd ~/.claude/skills/
+cp -R make-spec ~/.claude/skills/
 
 # ...or symlink, so repo edits are picked up live (use an absolute path):
-ln -s "$(pwd)/make-prd" ~/.claude/skills/
+ln -s "$(pwd)/make-spec" ~/.claude/skills/
 ```
 
 To make a skill available only inside a specific project, copy it into that project's `.claude/skills/` instead:
 
 ```bash
 mkdir -p /path/to/your-project/.claude/skills
-cp -R make-prd /path/to/your-project/.claude/skills/
+cp -R make-spec /path/to/your-project/.claude/skills/
 ```
 
 ### Invoke
 
-- **Directly:** type `/<skill-name>` (for example `/make-prd`).
+- **Directly:** type `/<skill-name>` (for example `/make-spec`).
 - **Automatically:** Claude triggers a skill on its own when your request matches the skill's `description`.
 
 ### Update
@@ -227,7 +229,7 @@ git pull
 ```
 
 - **Symlinked** skills are updated by the `git pull` alone.
-- **Copied** skills need to be re-copied after pulling: `cp -R make-prd ~/.claude/skills/`.
+- **Copied** skills need to be re-copied after pulling: `cp -R make-spec ~/.claude/skills/`.
 
 For sharing across a team or distributing many skills at once, skills can also be packaged and installed as a [Claude Code plugin](https://code.claude.com/docs/en/plugins) instead of copied by hand.
 
@@ -241,10 +243,10 @@ The Claude desktop app and claude.ai use the same custom-skill feature. Skills a
 
 1. From this repo's root, zip the skill's folder (the zip must contain the folder with its `SKILL.md`):
    ```bash
-   zip -r make-prd.zip make-prd
+   zip -r make-spec.zip make-spec
    ```
 2. In the Claude app, open **Settings → Features**.
-3. Under **Skills**, upload `make-prd.zip`.
+3. Under **Skills**, upload `make-spec.zip`.
 
 Claude uses the skill automatically when a request matches its description. The upload takes effect in new conversations.
 
@@ -260,11 +262,11 @@ Every skill needs a `SKILL.md` whose YAML frontmatter declares, at minimum, `nam
 
 ```yaml
 ---
-name: make-prd
-description: Generate and amend PRDs from discovery material. Use when the user wants to create a requirements document, formalize requirements, or amend an existing PRD.
+name: make-spec
+description: Generate and amend layered project specs from discovery material. Use when the user wants to spec out a project, add or change a feature, or write requirements.
 ---
 
-# Make a PRD
+# Make a Spec
 
 Instructions for Claude go here...
 ```

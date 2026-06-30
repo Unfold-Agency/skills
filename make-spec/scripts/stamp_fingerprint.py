@@ -26,16 +26,32 @@ from validate_spec import (  # noqa: E402
 
 def restamp(path, mutate):
     """Parse a spec file's frontmatter, apply mutate(doc), and rewrite the file
-    with ONLY the frontmatter replaced -- the human body is preserved."""
-    with open(path) as f:
-        text = f.read()
+    with ONLY the frontmatter replaced -- the human body is preserved. Files are
+    read/written as UTF-8 (specs are Markdown and routinely carry non-ASCII);
+    a read/write or YAML error exits cleanly instead of a raw traceback."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError as e:
+        print(f"ERROR: cannot read {path}: {e}", file=sys.stderr)
+        sys.exit(1)
     fm, body = split_frontmatter(text)
-    doc = (yaml.safe_load(fm) if fm is not None else {}) or {}
+    try:
+        doc = yaml.safe_load(fm) if fm is not None else {}
+    except yaml.YAMLError as e:
+        print(f"ERROR: cannot parse YAML frontmatter in {path}: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not isinstance(doc, dict):
+        doc = {}
     mutate(doc)
     dumped = yaml.safe_dump(doc, sort_keys=False, default_flow_style=False,
                             allow_unicode=True)
-    with open(path, "w") as f:
-        f.write("---\n" + dumped + "---\n" + body)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("---\n" + dumped + "---\n" + body)
+    except OSError as e:
+        print(f"ERROR: cannot write {path}: {e}", file=sys.stderr)
+        sys.exit(1)
     return doc
 
 

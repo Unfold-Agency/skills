@@ -52,7 +52,7 @@ def compute_fingerprint(doc):
 
 
 def load_yaml(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -66,7 +66,7 @@ def load_spec_doc(path):
     """Parse a single-file spec's YAML frontmatter into its doc dict. Returns {}
     when there is no frontmatter or it is not a mapping -- so a malformed feature
     fails closed rather than crashing the governed_by scan. Tolerates a BOM."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         text = f.read()
     if text.startswith("﻿"):
         text = text[1:]

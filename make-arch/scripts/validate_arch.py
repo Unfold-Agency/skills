@@ -56,18 +56,34 @@ def load_yaml(path):
         return yaml.safe_load(f) or {}
 
 
+# Spec features are single .md files; their requirements (and the governed_by ADR
+# refs this validator cross-checks) live in the YAML frontmatter -- no separate
+# data file. arch-data.yaml is make-arch's own plain-YAML file (load_yaml above).
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
+
+
+def load_spec_doc(path):
+    """Parse a single-file spec's YAML frontmatter into its doc dict ({} if none)."""
+    with open(path) as f:
+        text = f.read()
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return {}
+    return yaml.safe_load(m.group(1)) or {}
+
+
 def feature_governed_by(spec_dir):
     """Union of every ADR id referenced by a feature requirement's governed_by,
-    across docs/specs/features/*-data.yaml."""
+    across docs/specs/features/*.md (read from the frontmatter)."""
     refs = set()
     fdir = os.path.join(spec_dir, "features")
     if not os.path.isdir(fdir):
         return refs
     for name in os.listdir(fdir):
-        if not name.endswith("-data.yaml"):
+        if not name.endswith(".md"):
             continue
         try:
-            doc = load_yaml(os.path.join(fdir, name))
+            doc = load_spec_doc(os.path.join(fdir, name))
         except yaml.YAMLError:
             continue
         for r in doc.get("requirements") or []:

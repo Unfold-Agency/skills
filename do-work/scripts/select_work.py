@@ -4,18 +4,31 @@
 An issue is ACTIONABLE when all of these hold:
   - it is OPEN and managed by make-issues;
   - it carries no not-buildable flag (needs-rebase / spec-drift / orphaned /
-    escalated -- a drifted or handed-back spec is not work until it is resolved);
-  - every issue it is blocked by is CLOSED as COMPLETED (dependencies are read
-    from the issue body's "## Dependencies" mirror -- GitHub does not expose the
-    native blocked-by edges through `gh ... --json`, see SKILL.md, Honest limits);
+    escalated / stale-against-dependency / needs-human-review -- a drifted,
+    handed-back, seam-stale, or acceptance-parked issue is not work until it is
+    resolved);
+  - every issue it is blocked by is CLOSED as COMPLETED, and no blocker is itself
+    flagged stale (building on a drifting foundation waits for /make-issues to
+    reconcile it). Dependencies are read from the issue body's "## Dependencies"
+    mirror -- GitHub does not expose the native blocked-by edges through
+    `gh ... --json`, see SKILL.md, Honest limits;
   - its autonomy matches the filter (default: afk only -- hitl items stop for a
     human and are surfaced separately);
   - when --phase=N is given, its GitHub milestone is that phase ("Phase N: ...",
-    set by make-issues from the TDD's implementation plan);
+    set by make-issues from the overview's optional phasing block);
   - it is not already in flight under someone else's name.
 
 An issue already started by ME (assigned to me) is actionable and RESUMABLE -- it
 sorts first so an interrupted build is picked back up before a fresh one starts.
+
+Within the actionable queue the order is: resumable-mine first, then ascending
+`priority` (an integer in the make-issues:meta block; lower builds sooner; absent
+sorts last), then issue number. Priority is read live at pick time and is never
+part of the fingerprint, so it can be set/changed without flagging an issue as
+drifted. NOTE: make-issues does not stamp a `priority` field today (the spec's
+MoSCoW priority is advisory and out-of-contract), so absent an explicit priority
+the queue currently orders resumable-then-number -- this is the live hook for
+when priority is promoted into the issue contract.
 
 `--issue=N` targets one specific issue: it ignores the rest and bypasses the
 autonomy/phase queue filters (you picked it explicitly), but still applies the
@@ -43,9 +56,28 @@ except ImportError:
     print("PyYAML is required: pip install pyyaml --break-system-packages", file=sys.stderr)
     sys.exit(2)
 
-NOT_BUILDABLE_FLAGS = {"needs-rebase", "spec-drift", "orphaned", "escalated"}
+# Flags that make a managed issue NOT buildable. make-issues sets the spec-drift
+# ones; `escalated` is do-work's own hand-back; `stale-against-dependency` is the
+# SEAM flag -- a dependent whose seen_at_version lags its home feature's live
+# version, which make-issues marks until the dependency is reconciled.
+# `needs-human-review` is do-work's own acceptance-park flag: when a PR comes back
+# review-clean but its as-built ledger is not all-`met`, the issue is parked with
+# this label (PR left open) so it leaves the queue instead of being rebuilt and
+# re-parked every run. (The --dangerously follow-up issues also carry this label,
+# but they are not make-issues-managed, so they are never selected anyway.)
+NOT_BUILDABLE_FLAGS = {"needs-rebase", "spec-drift", "orphaned", "escalated",
+                       "stale-against-dependency", "needs-human-review"}
+# A blocker carrying one of these is itself drifting; building a dependent on top
+# of it (even if the blocker already merged) builds on a shifting foundation, so
+# the dependent waits until make-issues reconciles the blocker.
+STALE_BLOCKER_FLAGS = {"needs-rebase", "spec-drift", "orphaned",
+                       "stale-against-dependency"}
 DOING_LABEL = "status:doing"
-CAP_PREFIXES = ("ENT", "STM", "WF", "INTG", "TNF", "ADR")
+# Pick-time priority: a lower integer builds sooner. Issues with no explicit
+# priority in their meta block get this sentinel, so they sort AFTER prioritized
+# ones and keep their existing relative order (by issue number) -- the change is
+# backward-compatible against issues make-issues has not yet stamped.
+DEFAULT_PRIORITY = 1_000_000
 
 _META_RE = re.compile(
     r"<!--\s*make-issues:meta\s*-->(.*?)<!--\s*/make-issues:meta\s*-->",
@@ -121,6 +153,24 @@ def autonomy_of(issue, meta):
     return None
 
 
+def priority_of(meta):
+    """Pick-time priority (lower = sooner) from the make-issues:meta block. Absent,
+    boolean, or otherwise malformed -> DEFAULT_PRIORITY, so unprioritized issues
+    sort after prioritized ones and keep their by-number order. Priority is
+    deliberately NOT part of the per-capability fingerprint, so re-prioritizing an
+    issue never flags it as drifted -- it is read live here at selection time."""
+    val = (meta or {}).get("priority")
+    # bool is an int subclass, so int(True)==1 / int(False)==0 would silently read a
+    # YAML true/false/yes/no (the tokens a human reaches for) as a real priority and
+    # jump the queue -- `priority: no` would sort to the FRONT. Treat bool as malformed.
+    if isinstance(val, bool):
+        return DEFAULT_PRIORITY
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return DEFAULT_PRIORITY
+
+
 def issue_state(issue):
     """completed | won't-do | started | not-started. 'started' is inferred from
     assignee / closing-PR / status:doing -- GitHub has no native in-progress state
@@ -184,15 +234,25 @@ def select(issues, me, autonomy="afk", phase=None, only=None):
                 continue
 
         deps = parse_dependencies(issue.get("body", ""))
-        unmet = []
+        unmet, stale_blockers = [], []
         for d in deps:
             blocker = by_number.get(d)
             if blocker is None:
                 unmet.append(f"#{d}?")       # not in the managed set; cannot confirm done
+                continue
+            if label_names(blocker) & STALE_BLOCKER_FLAGS:
+                # the foundation is drifting -- wait for make-issues to reconcile it,
+                # whether the blocker is open or already merged
+                stale_blockers.append(f"#{d}")
             elif not _is_done(blocker):
                 unmet.append(f"#{d}")
         if unmet:
             excluded.append({"number": num, "reason": f"blocked by {', '.join(unmet)}"})
+            continue
+        if stale_blockers:
+            excluded.append({"number": num,
+                             "reason": f"blocked by stale {', '.join(stale_blockers)} "
+                                       "(reconcile via /make-issues first)"})
             continue
 
         state = issue_state(issue)
@@ -213,12 +273,15 @@ def select(issues, me, autonomy="afk", phase=None, only=None):
             "autonomy": item_autonomy,
             "state": state,
             "resumable": resumable,
-            "trace_tdd": meta.get("trace_tdd") or [],
+            "priority": priority_of(meta),
+            "trace_req": meta.get("trace_req") or [],
+            "feature": meta.get("feature") or "",
             "url": issue.get("url", ""),
         })
 
-    # Resumable (already mine) first, then by issue number for a stable order.
-    actionable.sort(key=lambda x: (not x["resumable"], x["number"]))
+    # Resumable (already mine) first, then ascending priority (lower builds sooner;
+    # unprioritized issues fall to DEFAULT_PRIORITY), then issue number for stability.
+    actionable.sort(key=lambda x: (not x["resumable"], x["priority"], x["number"]))
     excluded.sort(key=lambda x: x["number"])
     return {"actionable": actionable, "excluded": excluded,
             "counts": {"actionable": len(actionable), "excluded": len(excluded)}}
@@ -289,8 +352,9 @@ def main():
         print(f"Actionable ({len(q)}, {scope}):")
         for it in q:
             tag = " [resume]" if it["resumable"] else ""
-            trace = f" trace:{','.join(it['trace_tdd'])}" if it["trace_tdd"] else ""
-            print(f"  #{it['number']} [{it['autonomy']}] {it['title']}{trace}{tag}")
+            trace = f" trace:{','.join(it['trace_req'])}" if it["trace_req"] else ""
+            prio = f" p{it['priority']}" if it["priority"] != DEFAULT_PRIORITY else ""
+            print(f"  #{it['number']} [{it['autonomy']}]{prio} {it['title']}{trace}{tag}")
         print(f"\nNext: #{q[0]['number']}{' (resume)' if q[0]['resumable'] else ''}")
     else:
         print(f"No actionable issues ({scope}).")

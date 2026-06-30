@@ -14,7 +14,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from select_work import (  # noqa: E402
     parse_meta, parse_dependencies, autonomy_of, issue_state, select,
-    milestone_phase)
+    milestone_phase, priority_of, DEFAULT_PRIORITY)
 
 failures = []
 
@@ -25,16 +25,19 @@ def check(name, cond):
         failures.append(name)
 
 
-def body(autonomy="afk", deps="None", trace="WF-001"):
+def body(autonomy="afk", deps="None", trace="FR-CHK-001", priority=None):
+    prio_line = f"priority: {priority}\n" if priority is not None else ""
     return (
         f"## What to build\nstuff per {trace}\n\n"
         f"## Dependencies\n\n{deps}\n\n"
         "<!-- make-issues:meta -->\n"
         "```yaml\n"
-        f"trace_tdd: [{trace}]\n"
-        "trace_prd: [FR-002]\n"
-        'source_versions: { prd: "1.0", tdd: "1.1" }\n'
+        f"trace_req: [{trace}]\n"
+        "trace_adr: [ADR-0001]\n"
+        "feature: checkout\n"
+        'source_version: "abc123def456"\n'
         f"autonomy: {autonomy}\n"
+        f"{prio_line}"
         'fingerprint: "abc123"\n'
         "```\n"
         "<!-- /make-issues:meta -->\n"
@@ -43,7 +46,7 @@ def body(autonomy="afk", deps="None", trace="WF-001"):
 
 def issue(number, state="OPEN", labels=("make-issues", "afk"), assignees=(),
           reason=None, body_text=None, autonomy="afk", deps="None",
-          closing_prs=(), milestone=None):
+          closing_prs=(), milestone=None, priority=None):
     # milestone: an int -> a "Phase N: ..." milestone; a str -> that exact title;
     # None -> no milestone (the shape gh returns for an unmilestoned issue).
     if isinstance(milestone, int):
@@ -58,16 +61,17 @@ def issue(number, state="OPEN", labels=("make-issues", "afk"), assignees=(),
         "labels": [{"name": n} for n in labels],
         "assignees": [{"login": a} for a in assignees],
         "closedByPullRequestsReferences": list(closing_prs),
-        "body": body_text if body_text is not None else body(autonomy, deps),
+        "body": body_text if body_text is not None else body(autonomy, deps, priority=priority),
         "milestone": ms,
         "url": f"https://example/{number}",
     }
 
 
 # ── parsers ─────────────────────────────────────────────────────────────
-meta = parse_meta(body(autonomy="hitl", trace="INTG-002"))
+meta = parse_meta(body(autonomy="hitl", trace="IR-CHK-002"))
 check("parse_meta reads autonomy", meta.get("autonomy") == "hitl")
-check("parse_meta reads trace_tdd", meta.get("trace_tdd") == ["INTG-002"])
+check("parse_meta reads trace_req", meta.get("trace_req") == ["IR-CHK-002"])
+check("parse_meta reads feature", meta.get("feature") == "checkout")
 check("parse_meta on junk -> {}", parse_meta("no markers here") == {})
 
 check("deps None -> []", parse_dependencies(body(deps="None")) == [])
@@ -181,6 +185,82 @@ check("only=35 bypasses the phase filter (it is phase 2)",
 r = select(only_issues, ME, only=999)
 check("only=999 not in the set -> empty actionable AND excluded",
       not r["actionable"] and not r["excluded"])
+
+# ── pick-time priority ────────────────────────────────────────────────────
+check("parse_meta reads priority", parse_meta(body(priority=3)).get("priority") == 3)
+check("priority_of absent -> sentinel", priority_of({}) == DEFAULT_PRIORITY)
+check("priority_of reads int", priority_of({"priority": 2}) == 2)
+check("priority_of malformed -> sentinel", priority_of({"priority": "soon"}) == DEFAULT_PRIORITY)
+check("priority_of YAML bool -> sentinel (int(True)==1 / int(False)==0 footgun)",
+      priority_of({"priority": True}) == DEFAULT_PRIORITY
+      and priority_of({"priority": False}) == DEFAULT_PRIORITY)
+
+prio_issues = [
+    issue(40, priority=5),
+    issue(41, priority=1),   # lower int = higher priority -> before #40 despite higher number
+    issue(42),               # no priority -> sorts last among actionable
+]
+res_prio = select(prio_issues, ME, autonomy="afk")
+check("priority orders the queue: #41(p1) < #40(p5) < #42(none)",
+      [a["number"] for a in res_prio["actionable"]] == [41, 40, 42])
+check("absent priority falls back to the sentinel",
+      [a for a in res_prio["actionable"] if a["number"] == 42][0]["priority"] == DEFAULT_PRIORITY)
+# This is the REAL make-issues default: issue bodies carry no `priority` field
+# today (the spec's MoSCoW priority is out-of-contract), so a real queue orders
+# resumable-then-number. The priority cases above exercise the live hook with
+# hand-injected values; this pins the actual current behavior.
+check("no priorities anywhere (the real make-issues default) -> by issue number",
+      [a["number"] for a in select([issue(51), issue(50)], ME)["actionable"]] == [50, 51])
+res_res = select([issue(60, priority=1),
+                  issue(61, priority=9, assignees=("alice",),
+                        labels=("make-issues", "afk", "status:doing"))], ME)
+check("resumable (mine) still sorts before a higher-priority fresh issue",
+      [a["number"] for a in res_res["actionable"]] == [61, 60])
+# A hand-typed YAML boolean (priority: no/yes/true/false) must NOT be read as 0/1 and
+# jump the queue: it parses to a Python bool, falls to the sentinel, and sorts LAST
+# like any malformed value. (Without the bool guard, `priority: no` -> False -> 0 ->
+# the very front of the queue, the inverse of intent.)
+res_bool = select([issue(70, priority="no"), issue(71, priority=5)], ME)
+check("YAML-bool priority 'no' falls to the sentinel and sorts LAST, not first",
+      [a["number"] for a in res_bool["actionable"]] == [71, 70])
+
+# ── seam / stale-blocker exclusion ─────────────────────────────────────────
+# An issue carrying the seam flag is not buildable at all.
+seam_issues = [issue(70, labels=("make-issues", "afk", "stale-against-dependency"))]
+exc_seam = {e["number"]: e["reason"] for e in select(seam_issues, ME)["excluded"]}
+check("seam-flagged issue excluded (stale-against-dependency)",
+      "flagged stale-against-dependency" in exc_seam.get(70, ""))
+
+# An acceptance-parked issue (do-work's own needs-human-review flag) must leave
+# the queue -- even when it is still assigned to me with status:doing (the park
+# never clears those), so it must NOT come back as resumable and get rebuilt.
+parked = [issue(72, assignees=("alice",),
+                labels=("make-issues", "afk", "status:doing", "needs-human-review"))]
+res_parked = select(parked, ME)
+exc_parked = {e["number"]: e["reason"] for e in res_parked["excluded"]}
+check("acceptance-parked issue (needs-human-review) excluded, not resumable",
+      not res_parked["actionable"]
+      and "flagged needs-human-review" in exc_parked.get(72, ""))
+
+# A dependent whose blocker has MERGED but is now flagged stale must wait for
+# /make-issues to reconcile, even though the blocker is closed-completed.
+stale_dep = [
+    issue(80, deps="- #81 the foundation"),                       # depends on #81
+    issue(81, state="CLOSED", reason="COMPLETED",
+          labels=("make-issues", "afk", "spec-drift")),           # merged but drifting
+]
+res_sd = select(stale_dep, ME)
+exc_sd = {e["number"]: e["reason"] for e in res_sd["excluded"]}
+check("dependent on a merged-but-stale blocker is excluded",
+      not res_sd["actionable"] and "blocked by stale #81" in exc_sd.get(80, ""))
+
+# A clean merged blocker still unblocks normally (no regression).
+ok_dep = [
+    issue(90, deps="- #91 the foundation"),
+    issue(91, state="CLOSED", reason="COMPLETED"),
+]
+check("dependent on a clean merged blocker is actionable",
+      [a["number"] for a in select(ok_dep, ME)["actionable"]] == [90])
 
 print()
 if failures:

@@ -101,8 +101,11 @@ def build_maps(doc):
 
 
 def phase_for_feature(feature_slug, feature_to_phase):
-    """The phase an issue belongs to, from its feature slug. Returns (number,
-    title) or (None, None) when the feature is not in any phase (or no plan)."""
+    """The phase NUMBER an issue belongs to, from its feature slug, or None when
+    the feature is not in any phase (or there is no phasing plan). Returned as a
+    (number, number) 2-tuple: the duplicate second slot keeps the historical
+    `num, _ = ...` unpack working; the milestone title is looked up separately
+    from phase_meta by the caller, never returned here."""
     num = feature_to_phase.get(str(feature_slug))
     return num, num
 

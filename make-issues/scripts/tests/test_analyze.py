@@ -17,11 +17,14 @@ Exit 0 = every branch plans as expected.
 """
 import os
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from item_fingerprint import compute_item_fingerprint  # noqa: E402
 import analyze  # noqa: E402
+
+UPSTREAM = os.path.join(HERE, "specs", "upstream")
 
 failures = []
 
@@ -215,6 +218,58 @@ p = plan_for(many_reqs, many_issues, max_refactors=10)
 check("cap=10 over 5 refactors -> no tracking op",
       not any(o["action"] == analyze.REFACTOR_TRACKING for o in p["ops"]))
 check("under cap -> not blocking", not p["blocking"])
+
+# ── won't-do (CLOSED/NOT_PLANNED): always SKIP, respect the human decision ───
+# active req whose fingerprint changed + a won't-do issue -> SKIP (not FLAG)
+iss = [issue(20, ["FR-CHK-001"], "STALEHASH", state="CLOSED", reason="NOT_PLANNED")]
+p = plan_for(reqs, iss)
+check("changed active req + won't-do issue -> SKIP (not COMMENT-AND-FLAG)",
+      op_for(p, "FR-CHK-001")["action"] == analyze.SKIP and not p["blocking"])
+# superseded req + won't-do issue -> SKIP (not STALE/CLOSE)
+iss = [issue(21, ["FR-CHK-001"], compute_item_fingerprint(r_sup),
+             state="CLOSED", reason="NOT_PLANNED")]
+p = plan_for(reqs_sup, iss)
+check("superseded req + won't-do issue -> SKIP (not STALE/CLOSE)",
+      op_for(p, "FR-CHK-001")["action"] == analyze.SKIP)
+# removed req + won't-do issue -> SKIP (orphan loop, not STALE/CLOSE)
+iss = [issue(22, ["FR-GONE-001"], "WHATEVER", state="CLOSED", reason="NOT_PLANNED")]
+p = plan_for(reqs, iss)
+op = next((o for o in p["ops"] if o.get("req") == "FR-GONE-001"), None)
+check("removed req + won't-do issue -> SKIP (respect the human decision)",
+      op and op["action"] == analyze.SKIP)
+
+# ── the spec-read loaders, pinned to the real upstream fixtures (not injected) ─
+adr = analyze.load_adr_status(UPSTREAM)
+check("load_adr_status reads arch-data.yaml: ADR-0002 superseded, ADR-0001 accepted",
+      adr.get("ADR-0002") == "superseded" and adr.get("ADR-0001") == "accepted")
+up_reqs = analyze.load_requirements(UPSTREAM)
+check("load_requirements reads the feature files end-to-end (FR-CHK-001 present)",
+      "FR-CHK-001" in up_reqs and len(up_reqs) >= 4)
+check("load_requirements computes a non-empty fingerprint per requirement",
+      all(info["fingerprint"] for info in up_reqs.values()))
+
+# ── a malformed requirement fails CLOSED as the documented exit-2, not a crash ─
+with tempfile.TemporaryDirectory() as tmp:
+    fdir = os.path.join(tmp, "features")
+    os.makedirs(fdir)
+    with open(os.path.join(fdir, "x-data.yaml"), "w", encoding="utf-8") as f:
+        f.write('meta: {slug: x, feature_version: "1.0"}\n'
+                "requirements:\n"
+                "  - id: FR-X-001\n"
+                "    description: d\n"
+                '    acceptance_criteria: ["WHEN x THE SYSTEM SHALL y."]\n'
+                '    depends_on: ["FR-A-001", 5]\n'   # mixed str/int -> sorted() TypeError
+                "    governed_by: []\n"
+                "    status: active\n")
+    raised = None
+    try:
+        analyze.load_requirements(tmp)
+    except ValueError:
+        raised = "ValueError"
+    except Exception as e:   # noqa: BLE001
+        raised = type(e).__name__
+    check("malformed requirement raises ValueError (-> clean exit 2), not a raw TypeError",
+          raised == "ValueError")
 
 print()
 if failures:

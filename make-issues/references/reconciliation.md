@@ -2,7 +2,7 @@
 
 How to bring an existing set of GitHub issues back in line with changed specs. The prime directive: **the specs are canonical; the issue is a projection.** You never edit a requirement in an issue to change scope -- you change the feature spec and re-sync. And you **never overwrite a human's notes**. Reconciliation reasons about exactly one kind of drift -- a feature **requirement** vs. its issue -- because the fail-closed fingerprint gate (preflight) guarantees the specs are internally consistent before you start. Generate mode is this engine run against an empty existing set.
 
-The reconcile is **bounded by construction**: a committed watermark defines "since the last sync," the CHANGELOG's structured delta scopes which requirements changed, every op carries a stable idempotency key, and the refactor fan-out is capped. `scripts/analyze.py` computes the whole plan read-only and is the **hard gate** -- no GitHub write happens until it exits 0 or a human approves its remediation report.
+The reconcile is **bounded by construction**: `scripts/analyze.py` walks the finite set of requirements and compares each one's live fingerprint against its issue's stamped one -- an **exhaustive** scan, never CHANGELOG-scoped, so a stale or missing CHANGELOG entry can never hide a real change. Every op carries a stable idempotency key, and the refactor fan-out is capped. The committed watermark records "since the last sync" for the report (the executor advances it after a successful sync); the CHANGELOG is the human narrative of the delta, not an input to the scan. `scripts/analyze.py` computes the whole plan read-only and is the **hard gate** -- no GitHub write happens until it exits 0 or a human approves its remediation report.
 
 ## 1. Pull the issues and run analyze
 
@@ -35,7 +35,7 @@ Internally analyze builds the match map: **`by_req[req_id] -> [issue, ...]`**, m
 }
 ```
 
-On a sync, read the watermark, then read `CHANGELOG.md` forward from each feature's `last_changelog_entry`. The CHANGELOG's structured **Added / Modified / Removed** id lists since the watermark **scope** the work -- they tell you which requirement ids are new, changed, or gone without re-diffing the whole spec. The fingerprint comparison is still the source of truth per item (it catches anything the CHANGELOG missed), but the watermark keeps the reconcile bounded and explains, in the report, exactly what window was processed. After a successful run, **advance the watermark** to each feature's current `feature_version` and the latest CHANGELOG entry, and commit it.
+`analyze.py` is **exhaustive**: every run it walks every requirement and compares its live fingerprint against the matching issue's stamped one. It does **not** read the CHANGELOG, and the watermark does **not** scope the plan -- a full fingerprint scan is the safe choice, because a stale or missing CHANGELOG entry can never hide a real change. The CHANGELOG's structured **Added / Modified / Removed** id lists are the human narrative of the delta (and what you write into the report), not an input that narrows the scan. The watermark records the last sync point per feature; after a successful run, **advance the watermark** to each feature's current `feature_version` and the latest CHANGELOG entry, and commit it. The finite requirement set and the refactor fan-out cap are the real bounds.
 
 `analyze.py` reads the watermark and surfaces it in the plan; it does not write it -- advancing the watermark is the executor's final step, after the GitHub writes succeed.
 
@@ -135,8 +135,8 @@ Print the receipt -- it is the only durable record of what changed, and the cove
 - **Traceability:** every managed issue resolves to a current requirement, with ADR trace (`trace_adr`) and the source `feature_version` stamped.
 - **DAG integrity:** the desired dependency graph (from `depends_on`, mirrored in the issue body) is acyclic (or the cycle is named).
 - **Integrity:** the fail-closed fingerprint gate passed (asserted in preflight).
-- **Drift:** every changed-fingerprint requirement is accounted for by one of the actions above -- created, updated, flagged, refactored, closed, or followed-up -- scoped to the CHANGELOG window since the watermark.
+- **Drift:** every changed-fingerprint requirement is accounted for by one of the actions above -- created, updated, flagged, refactored, closed, or followed-up (from the exhaustive per-requirement fingerprint scan).
 - **Phases** (when the overview has a plan): every active phase has >=1 issue and every issue has a milestone, or the gap is named; plus any phase-spanning feature filed under its latest phase.
-- **Watermark:** the window processed (from -> to per feature), and the new watermark written after the run.
+- **Watermark:** each feature's last-synced version (read for the report), and the new watermark the executor writes after the run.
 
 Summarize counts: created, updated, flagged, closed, refactors, refactor-tracking, skipped; and, with a plan, milestones created/updated and issues re-assigned to a new phase. Report any refactor fan-out truncation explicitly.

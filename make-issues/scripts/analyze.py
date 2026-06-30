@@ -24,10 +24,14 @@ Per requirement vs its matching issue (matched on the meta block's `trace_req`):
   requirement MODIFIED + issue completed/merged          -> REFACTOR (HITL)
   requirement governed by a SUPERSEDED ADR + issue merged -> REFACTOR (HITL)
 
-Watermark: docs/specs/.make-issues-sync.json records, per feature, the
-last-synced feature_version and last-synced CHANGELOG entry. "Since last sync"
-is defined by it, not vibes -- the CHANGELOG's Added/Modified/Removed id lists
-since the watermark scope which requirements changed.
+Plan scope: this engine is EXHAUSTIVE -- it walks every current requirement and
+compares its live item fingerprint against the matching issue's stamped one, on
+every run. That is the safe choice: a stale or missing CHANGELOG entry can never
+cause a real change to be skipped. The watermark
+(docs/specs/.make-issues-sync.json, the per-feature last-synced feature_version)
+is surfaced for the report and advanced by the EXECUTOR after a successful sync;
+it does NOT scope or short-circuit this plan. The CHANGELOG is the human/SKILL
+narrative of the delta, not read by this script.
 
 Idempotency: every op carries a stable idempotency key (req id + action +
 fingerprint). A re-run with no spec change yields an all-SKIP plan and no
@@ -115,11 +119,16 @@ def load_requirements(spec_dir):
         for req in doc.get("requirements") or []:
             if isinstance(req, dict) and req.get("id"):
                 rid = str(req["id"])
+                try:
+                    fingerprint = compute_item_fingerprint(req)
+                except (TypeError, ValueError) as e:
+                    raise ValueError(f"cannot fingerprint requirement {rid} in "
+                                     f"{fpath}: {e}")
                 reqs[rid] = {
                     "record": req,
                     "feature": slug,
                     "feature_version": feature_version,
-                    "fingerprint": compute_item_fingerprint(req),
+                    "fingerprint": fingerprint,
                     "status": str(req.get("status") or "active"),
                     "governed_by": [str(a) for a in (req.get("governed_by") or [])],
                 }
@@ -272,6 +281,18 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
             stamped = str(meta.get("fingerprint") or "")
             state = issue_state(issue)
 
+            # A human deliberately closed this as won't-do (NOT_PLANNED). Respect
+            # it -- never re-open, re-flag, or re-close. SKIP (the decision tree's
+            # won't-do row), whether or not the requirement still exists/changed.
+            if state == "wont-do":
+                ops.append({"action": SKIP, "req": rid,
+                            "issue": issue.get("number"), "fingerprint": fp,
+                            "key": idempotency_key(rid, SKIP, fp,
+                                                   str(issue.get("number"))),
+                            "why": "issue closed as won't-do (NOT_PLANNED); "
+                                   "respecting the human decision"})
+                continue
+
             # superseded/deferred requirement -> orphan or refactor
             if not active:
                 if is_merged(issue):
@@ -348,6 +369,14 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
         for issue in matched:
             if issue.get("number") in seen_issue_numbers:
                 continue
+            if issue_state(issue) == "wont-do":
+                ops.append({"action": SKIP, "req": rid,
+                            "issue": issue.get("number"), "fingerprint": "",
+                            "key": idempotency_key(rid, SKIP, "",
+                                                   str(issue.get("number"))),
+                            "why": "issue closed as won't-do; respecting the "
+                                   "human decision (requirement gone from specs)"})
+                continue
             if is_merged(issue):
                 refactor_candidates.append(
                     (rid, issue,
@@ -380,7 +409,7 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
         ops.append({"action": REFACTOR_TRACKING, "req": None,
                     "count": truncated,
                     "key": idempotency_key("ALL", REFACTOR_TRACKING, "",
-                                           str(max_refactors)),
+                                           f"{max_refactors}:{truncated}"),
                     "why": f"{truncated} more refactor(s) over the --max-refactors "
                            f"{max_refactors} cap; one tracking issue planned, "
                            "rest deferred for human triage"})

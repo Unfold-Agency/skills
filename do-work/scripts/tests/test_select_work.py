@@ -191,6 +191,9 @@ check("parse_meta reads priority", parse_meta(body(priority=3)).get("priority") 
 check("priority_of absent -> sentinel", priority_of({}) == DEFAULT_PRIORITY)
 check("priority_of reads int", priority_of({"priority": 2}) == 2)
 check("priority_of malformed -> sentinel", priority_of({"priority": "soon"}) == DEFAULT_PRIORITY)
+check("priority_of YAML bool -> sentinel (int(True)==1 / int(False)==0 footgun)",
+      priority_of({"priority": True}) == DEFAULT_PRIORITY
+      and priority_of({"priority": False}) == DEFAULT_PRIORITY)
 
 prio_issues = [
     issue(40, priority=5),
@@ -202,13 +205,24 @@ check("priority orders the queue: #41(p1) < #40(p5) < #42(none)",
       [a["number"] for a in res_prio["actionable"]] == [41, 40, 42])
 check("absent priority falls back to the sentinel",
       [a for a in res_prio["actionable"] if a["number"] == 42][0]["priority"] == DEFAULT_PRIORITY)
-check("no priorities anywhere -> stable by-number order (backward-compatible)",
+# This is the REAL make-issues default: issue bodies carry no `priority` field
+# today (the spec's MoSCoW priority is out-of-contract), so a real queue orders
+# resumable-then-number. The priority cases above exercise the live hook with
+# hand-injected values; this pins the actual current behavior.
+check("no priorities anywhere (the real make-issues default) -> by issue number",
       [a["number"] for a in select([issue(51), issue(50)], ME)["actionable"]] == [50, 51])
 res_res = select([issue(60, priority=1),
                   issue(61, priority=9, assignees=("alice",),
                         labels=("make-issues", "afk", "status:doing"))], ME)
 check("resumable (mine) still sorts before a higher-priority fresh issue",
       [a["number"] for a in res_res["actionable"]] == [61, 60])
+# A hand-typed YAML boolean (priority: no/yes/true/false) must NOT be read as 0/1 and
+# jump the queue: it parses to a Python bool, falls to the sentinel, and sorts LAST
+# like any malformed value. (Without the bool guard, `priority: no` -> False -> 0 ->
+# the very front of the queue, the inverse of intent.)
+res_bool = select([issue(70, priority="no"), issue(71, priority=5)], ME)
+check("YAML-bool priority 'no' falls to the sentinel and sorts LAST, not first",
+      [a["number"] for a in res_bool["actionable"]] == [71, 70])
 
 # ── seam / stale-blocker exclusion ─────────────────────────────────────────
 # An issue carrying the seam flag is not buildable at all.

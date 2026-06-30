@@ -17,7 +17,7 @@ import json
 import sys
 
 from select_work import (  # sibling module; pure parsers shared with selection
-    _list_issues, _me, issue_state, label_names, parse_meta, select,
+    _list_issues, _me, issue_state, label_names, select,
     NOT_BUILDABLE_FLAGS)
 
 
@@ -26,9 +26,11 @@ def _closing_prs(issue):
 
 
 def classify(issues, me):
-    """Partition issues into the morning-after buckets. An OPEN issue can appear in
-    at most one of {parked, in_flight, resumable, ready/blocked}; CLOSED ones are
-    merged or won't-do."""
+    """Partition issues into the morning-after buckets. CLOSED issues are merged
+    or won't-do; an OPEN issue is parked (flagged), resumable (started by me), or
+    dangling (started by someone else). Fresh not-started work -- ready vs
+    blocked -- is computed in main() from select_work, kept disjoint from these
+    buckets so nothing is double-listed."""
     merged, wont_do, parked, in_flight, dangling = [], [], [], [], []
     for i in issues:
         num = i.get("number")
@@ -75,11 +77,18 @@ def main():
         sys.exit(2)
     me = _me(args.me)
     buckets = classify(issues, me)
-    # the still-actionable AFK front, for "what's safe to pick up next"
-    ready = select(issues, me, autonomy="afk")["actionable"]
+    # Fresh not-started work, split into ready vs dependency-blocked, from the same
+    # selector the build loop uses. Exclude anything already in flight (it shows
+    # under resumable/dangling) so the surface is a clean partition, not a
+    # double-count.
+    sel = select(issues, me, autonomy="afk")
+    inflight = {r["number"] for r in buckets["resumable"] + buckets["dangling"]}
+    ready = [r for r in sel["actionable"] if r["number"] not in inflight]
+    blocked = [e for e in sel["excluded"]
+               if str(e.get("reason", "")).startswith("blocked by")]
 
     if args.json:
-        print(json.dumps({**buckets, "ready": ready}, indent=2))
+        print(json.dumps({**buckets, "ready": ready, "blocked": blocked}, indent=2))
         sys.exit(0)
 
     def show(title, rows, fmt):
@@ -100,12 +109,16 @@ def main():
          lambda r: f"#{r['number']} {r['title']}  (by {', '.join(r['assignees']) or '?'})")
     show("Safe to resume (started by you, unmerged)", buckets["resumable"],
          lambda r: f"#{r['number']} {r['title']}")
-    show("Ready to build next (actionable AFK front)", ready,
+    show("Ready to build next (fresh, not started)", ready,
+         lambda r: f"#{r['number']} {r['title']}")
+    show("Blocked (waiting on a dependency)", blocked,
+         lambda r: f"#{r['number']}: {r['reason']}")
+    show("Won't-do (closed, not planned)", buckets["wont_do"],
          lambda r: f"#{r['number']} {r['title']}")
     print(f"summary: {len(buckets['merged'])} merged, "
           f"{len(buckets['parked'])} parked, {len(buckets['dangling'])} dangling, "
-          f"{len(buckets['resumable'])} resumable, {len(ready)} ready"
-          + (f", {len(buckets['wont_do'])} won't-do" if buckets["wont_do"] else ""))
+          f"{len(buckets['resumable'])} resumable, {len(ready)} ready, "
+          f"{len(blocked)} blocked, {len(buckets['wont_do'])} won't-do")
     sys.exit(0)
 
 

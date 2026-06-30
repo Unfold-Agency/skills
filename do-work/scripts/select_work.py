@@ -22,9 +22,12 @@ sorts first so an interrupted build is picked back up before a fresh one starts.
 
 Within the actionable queue the order is: resumable-mine first, then ascending
 `priority` (an integer in the make-issues:meta block; lower builds sooner; absent
-sorts last), then issue number. A freshly-added high-priority story jumps the queue
-with no renumbering -- priority is read live at pick time and is never part of the
-per-capability fingerprint, so re-prioritizing an issue never flags it as drifted.
+sorts last), then issue number. Priority is read live at pick time and is never
+part of the fingerprint, so it can be set/changed without flagging an issue as
+drifted. NOTE: make-issues does not stamp a `priority` field today (the spec's
+MoSCoW priority is advisory and out-of-contract), so absent an explicit priority
+the queue currently orders resumable-then-number -- this is the live hook for
+when priority is promoted into the issue contract.
 
 `--issue=N` targets one specific issue: it ignores the rest and bypasses the
 autonomy/phase queue filters (you picked it explicitly), but still applies the
@@ -145,13 +148,19 @@ def autonomy_of(issue, meta):
 
 
 def priority_of(meta):
-    """Pick-time priority (lower = sooner) from the make-issues:meta block. Absent
-    or malformed -> DEFAULT_PRIORITY, so unprioritized issues sort after prioritized
-    ones and keep their by-number order. Priority is deliberately NOT part of the
-    per-capability fingerprint, so re-prioritizing an issue never flags it as
-    drifted -- it is read live here at selection time."""
+    """Pick-time priority (lower = sooner) from the make-issues:meta block. Absent,
+    boolean, or otherwise malformed -> DEFAULT_PRIORITY, so unprioritized issues
+    sort after prioritized ones and keep their by-number order. Priority is
+    deliberately NOT part of the per-capability fingerprint, so re-prioritizing an
+    issue never flags it as drifted -- it is read live here at selection time."""
+    val = (meta or {}).get("priority")
+    # bool is an int subclass, so int(True)==1 / int(False)==0 would silently read a
+    # YAML true/false/yes/no (the tokens a human reaches for) as a real priority and
+    # jump the queue -- `priority: no` would sort to the FRONT. Treat bool as malformed.
+    if isinstance(val, bool):
+        return DEFAULT_PRIORITY
     try:
-        return int((meta or {}).get("priority"))
+        return int(val)
     except (TypeError, ValueError):
         return DEFAULT_PRIORITY
 

@@ -36,7 +36,8 @@ issues = [
     issue(1, state="CLOSED", reason="COMPLETED", closing_prs=(101,)),       # merged
     issue(2, state="CLOSED", reason="NOT_PLANNED"),                          # won't-do
     issue(3, labels=("make-issues", "afk", "spec-drift")),                   # parked
-    issue(4, labels=("make-issues", "hitl", "escalated")),                   # parked
+    issue(4, assignees=("bob",),
+          labels=("make-issues", "hitl", "escalated", "status:doing")),       # flagged AND started -> parked (flags win)
     issue(5, assignees=("alice",), labels=("make-issues", "afk", "status:doing")),  # resumable (mine)
     issue(6, assignees=("bob",), labels=("make-issues", "afk", "status:doing")),    # dangling (theirs)
     issue(7, closing_prs=(107,)),                                            # dangling (PR, no assignee)
@@ -54,8 +55,9 @@ check("resumable = {5} (started by me)",
       [r["number"] for r in b["resumable"]] == [5])
 check("dangling = {6,7} (started, not mine)",
       sorted(r["number"] for r in b["dangling"]) == [6, 7])
-check("a flagged-but-started issue is parked, not double-counted",
-      all(r["number"] != 4 for r in b["dangling"] + b["resumable"]))
+check("a flagged-AND-started issue is parked (flags win over started)",
+      any(r["number"] == 4 for r in b["parked"])
+      and all(r["number"] != 4 for r in b["dangling"] + b["resumable"]))
 check("not-started #8 is in none of the started buckets",
       all(r["number"] != 8 for r in b["parked"] + b["dangling"] + b["resumable"] + b["merged"]))
 
@@ -63,6 +65,45 @@ check("not-started #8 is in none of the started buckets",
 b2 = classify(issues, "")
 check("when me is unknown, nothing is resumable",
       b2["resumable"] == [] and 5 in [r["number"] for r in b2["dangling"]])
+
+# ── main()'s ready/blocked partition (classify + select combined) ────────────
+# Reproduce main()'s logic so the no-double-list invariant and the blocked bucket
+# are covered without a network round-trip.
+from select_work import select  # noqa: E402
+
+
+def body(deps="None", autonomy="afk"):
+    return (f"## Dependencies\n\n{deps}\n\n"
+            "<!-- make-issues:meta -->\n```yaml\n"
+            f"trace_req: [FR-X-001]\nfeature: x\nautonomy: {autonomy}\n"
+            'fingerprint: "abc"\n```\n<!-- /make-issues:meta -->\n')
+
+
+def issue_b(number, body_text, **kw):
+    i = issue(number, **kw)
+    i["body"] = body_text
+    return i
+
+
+part = [
+    issue_b(10, body(), assignees=("alice",),
+            labels=("make-issues", "afk", "status:doing")),   # resumable (mine)
+    issue_b(11, body()),                                       # ready (fresh)
+    issue_b(12, body(deps="- #11 prerequisite")),             # blocked by open #11
+]
+pb = classify(part, ME)
+psel = select(part, ME, autonomy="afk")
+inflight = {r["number"] for r in pb["resumable"] + pb["dangling"]}
+p_ready = [r for r in psel["actionable"] if r["number"] not in inflight]
+p_blocked = [e for e in psel["excluded"]
+             if str(e.get("reason", "")).startswith("blocked by")]
+check("resumable #10 is NOT also listed in ready (no double-list)",
+      10 in [r["number"] for r in pb["resumable"]]
+      and 10 not in [r["number"] for r in p_ready])
+check("ready = {11} only (fresh, not started, not blocked)",
+      [r["number"] for r in p_ready] == [11])
+check("blocked #12 is surfaced (waiting on its dependency)",
+      [e["number"] for e in p_blocked] == [12])
 
 print()
 if failures:

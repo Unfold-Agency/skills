@@ -142,13 +142,13 @@ def parse_frontmatter(text):
 
 
 def load_yaml(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
 def load_spec_doc(path):
     """Parse a single-file spec's frontmatter into the structured doc dict."""
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return parse_frontmatter(f.read())
 
 
@@ -477,7 +477,7 @@ def main():
                           f"(> {args.budget_reqs}) -- consider splitting it")
         if os.path.isfile(md_path):
             try:
-                with open(md_path) as f:
+                with open(md_path, encoding="utf-8") as f:
                     words = len(f.read().split())
                 if words > args.budget_words:
                     warn("S-012", f"feature '{slug}' markdown is {words} words "

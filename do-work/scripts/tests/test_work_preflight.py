@@ -37,11 +37,12 @@ def make_specs(feature_versions):
                 "feature_index": [{"slug": s, "prefix": s[:3].upper(),
                                    "feature_version": v, "status": "active"}
                                   for s, v in feature_versions.items()]}
-    with open(os.path.join(root, "overview-data.yaml"), "w") as f:
-        yaml.safe_dump(overview, f, sort_keys=False)
+    with open(os.path.join(root, "overview.md"), "w") as f:
+        f.write("---\n" + yaml.safe_dump(overview, sort_keys=False) + "---\n\n# overview\n")
     for s in feature_versions:
-        with open(os.path.join(root, "features", f"{s}-data.yaml"), "w") as f:
-            yaml.safe_dump({"meta": {"slug": s}, "requirements": []}, f, sort_keys=False)
+        with open(os.path.join(root, "features", f"{s}.md"), "w") as f:
+            f.write("---\n" + yaml.safe_dump({"meta": {"slug": s}, "requirements": []},
+                                             sort_keys=False) + "---\n\n# " + s + "\n")
     return root
 
 
@@ -76,15 +77,15 @@ shutil.rmtree(root)
 
 empty = tempfile.mkdtemp(prefix="dowork-specs-")
 os.makedirs(os.path.join(empty, "features"))
-with open(os.path.join(empty, "overview-data.yaml"), "w") as f:
-    yaml.safe_dump({"meta": {}, "feature_index": []}, f)
+with open(os.path.join(empty, "overview.md"), "w") as f:
+    f.write("---\n" + yaml.safe_dump({"meta": {}, "feature_index": []}) + "---\n\n# overview\n")
 r = check_specs(empty)
 check("overview but no features -> not ok", r["ok"] is False and not r.get("fatal"))
 shutil.rmtree(empty)
 
 missing = tempfile.mkdtemp(prefix="dowork-specs-")
 r = check_specs(missing)
-check("no overview-data.yaml -> fatal (drives exit 2)", r.get("fatal") is True)
+check("no overview.md -> fatal (drives exit 2)", r.get("fatal") is True)
 shutil.rmtree(missing)
 
 # ── backlog gate ────────────────────────────────────────────────────────

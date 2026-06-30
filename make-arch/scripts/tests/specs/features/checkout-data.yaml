@@ -1,4 +1,4 @@
-# Minimal make-spec feature data file — make-arch only reads requirements[].governed_by
+# Minimal make-spec feature data file -- make-arch only reads requirements[].governed_by
 # from here (the no-orphan cross-check, A-004).
 meta:
   doc_type: spec-feature

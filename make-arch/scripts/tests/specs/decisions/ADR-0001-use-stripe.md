@@ -1,4 +1,4 @@
-# ADR-0001 — Use Stripe for payments
+# ADR-0001 -- Use Stripe for payments
 
 - **Status:** Accepted
 - **Date:** 2026-06-29

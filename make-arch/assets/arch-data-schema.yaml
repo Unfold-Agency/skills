@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════
-# arch-data.yaml — SCHEMA v1.0   (make-arch)
+# arch-data.yaml -- SCHEMA v1.0   (make-arch)
 # The derived machine companion to the architecture Markdown.
 #
 # GENERATED FILE. make-arch compiles this from architecture.md + the ADR
@@ -9,10 +9,10 @@
 # violation.
 #
 # The architecture layer is the slow-changing HOW. It is two things:
-#   architecture.md / arch-data.yaml     — a thin C4/arc42-lite overview
+#   architecture.md / arch-data.yaml     -- a thin C4/arc42-lite overview
 #                                           (stack, components, integrations)
 #                                           + MERMAID diagrams
-#   decisions/ADR-NNNN-<slug>.md          — an APPEND-ONLY log, one file per
+#   decisions/ADR-NNNN-<slug>.md          -- an APPEND-ONLY log, one file per
 #                                           decision (Nygard ADR: Status /
 #                                           Context / Decision / Consequences
 #                                           + rejected alternatives)
@@ -23,7 +23,7 @@
 #     This is why the architecture layer stays in sync: each decision is a
 #     frozen point-in-time record.
 #   - Recommend-then-refine: make-arch proposes a stack, but every choice
-#     carries a TYPED confidence — `known` (backed by a stated requirement,
+#     carries a TYPED confidence -- `known` (backed by a stated requirement,
 #     constraint, or client fact) or `assumption` (the agent's default,
 #     pending human confirmation). Assumption-backed choices surface a badge
 #     so a human architects against them deliberately.
@@ -43,7 +43,7 @@ meta:
   project_name: ""
   arch_version: ""               # first 12 hex of the fingerprint (OUT)
   status: draft                  # draft | review | approved
-  generated_at: ""               # ISO 8601 — OUT of the fingerprint
+  generated_at: ""               # ISO 8601 -- OUT of the fingerprint
   fingerprint: ""                # sha256 over contract content (A-007)
 
 # One-paragraph system context (the C4 level-1 story; the diagram is in md).
@@ -91,7 +91,7 @@ diagrams:
 
 # ═══════════════════════════════════════════════════════════════════
 # FINGERPRINT IN/OUT CONTRACT (A-007)
-#   OUT (advisory / derived — do NOT flip the fingerprint):
+#   OUT (advisory / derived -- do NOT flip the fingerprint):
 #       meta.fingerprint, meta.generated_at, meta.arch_version, notes
 #   IN  (everything else is contract content): context, components,
 #       integrations, decisions (incl. status + confidence + governed_by),
@@ -100,7 +100,7 @@ diagrams:
 # ═══════════════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════════════
-# VALIDATOR RULES — run fails (exit 1) on any violation.
+# VALIDATOR RULES -- run fails (exit 1) on any violation.
 # Run: python scripts/validate_arch.py [docs/specs] [--baseline-ref origin/main | --no-baseline]
 #
 #   A-001  Well-formed: required meta fields + top-level keys present
@@ -117,7 +117,7 @@ diagrams:
 #          confidence in {known, assumption}
 #   A-006  Diagrams: architecture.md exists and contains a ```mermaid block
 #          for every kind listed in `diagrams` (at least the context diagram)
-#   A-007  meta.fingerprint matches a recompute over contract content — FAILS
+#   A-007  meta.fingerprint matches a recompute over contract content -- FAILS
 #          CLOSED (the gate that blocks internal drift)
 #   A-008  Append-only: no ADR id present at the baseline (origin/main) is
 #          missing now. FAILS CLOSED when the baseline can't be trusted

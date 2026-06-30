@@ -9,13 +9,13 @@ the same file as the prose. The validator (A-006) checks that every kind listed 
 
 Keep diagrams thin -- they illustrate the decisions, they do not replace the ADRs.
 
-## Context (required) — C4 level 1
+## Context (required) -- C4 level 1
 
 Who/what uses the system and what it talks to. Use `C4Context`.
 
 ```mermaid
 C4Context
-  title System context — Storefront
+  title System context -- Storefront
   Person(shopper, "Shopper")
   System(store, "Storefront", "Cart, checkout, orders")
   System_Ext(stripe, "Stripe", "Payments")
@@ -25,11 +25,11 @@ C4Context
   Rel(store, fulfil, "Sends paid orders")
 ```
 
-## Container (optional) — C4 level 2
+## Container (optional) -- C4 level 2
 
 The deployable/runnable pieces and how they communicate. Use `C4Container`.
 
-## Sequence (optional) — a key workflow
+## Sequence (optional) -- a key workflow
 
 A single important flow (checkout, auth) as a `sequenceDiagram`. One per
 genuinely tricky interaction; do not diagram the trivial ones.
@@ -45,7 +45,7 @@ sequenceDiagram
   S-->>U: Order confirmed
 ```
 
-## ERD (optional) — the data model
+## ERD (optional) -- the data model
 
 The core entities and relations as an `erDiagram`, when the data shape is
 non-obvious.

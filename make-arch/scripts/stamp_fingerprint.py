@@ -5,7 +5,7 @@ make-arch (re-)derives arch-data.yaml from architecture.md + the ADR files:
 
   python scripts/stamp_fingerprint.py docs/specs
 
-arch_version is the first 12 hex of the content fingerprint — content-derived,
+arch_version is the first 12 hex of the content fingerprint -- content-derived,
 no counter to race.
 """
 import os

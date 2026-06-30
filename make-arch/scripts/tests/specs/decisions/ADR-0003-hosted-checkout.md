@@ -1,4 +1,4 @@
-# ADR-0003 — Use a hosted checkout for PCI scope reduction
+# ADR-0003 -- Use a hosted checkout for PCI scope reduction
 
 - **Status:** Accepted
 - **Date:** 2026-06-29

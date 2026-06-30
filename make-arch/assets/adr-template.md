@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-ADR TEMPLATE — docs/specs/decisions/ADR-NNNN-<slug>.md   (make-arch)
+ADR TEMPLATE -- docs/specs/decisions/ADR-NNNN-<slug>.md   (make-arch)
 
 One file per decision (Michael Nygard's ADR format). The ADR log is
 APPEND-ONLY and immutable: once a decision is Accepted you NEVER edit it.
@@ -19,7 +19,7 @@ human should look first.
 ═══════════════════════════════════════════════════════════════════
 -->
 
-# ADR-NNNN — [Decision title, imperative: "Use X for Y"]
+# ADR-NNNN -- [Decision title, imperative: "Use X for Y"]
 
 - **Status:** Proposed | Accepted | Superseded by ADR-MMMM | Deprecated
 - **Date:** YYYY-MM-DD

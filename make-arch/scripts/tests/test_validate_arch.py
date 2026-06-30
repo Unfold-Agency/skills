@@ -4,9 +4,12 @@
   1. the valid fixture passes
   2. fingerprint integrity (A-007) fails CLOSED on a contract change un-restamped
   3. one targeted mutation per rule trips EXACTLY that rule
-  4. A-008 append-only — origin/main baseline fails CLOSED on a non-repo, an
+  4. A-008 append-only -- origin/main baseline fails CLOSED on a non-repo, an
      unresolvable ref, and a shallow clone; passes greenfield; catches a real
      deleted ADR (throwaway local git repos, no network)
+  5. supersession integrity (cycles of any length, dead/proposed targets, a
+     feature governed_by a superseded/unknown ADR) and A-006 matching diagram
+     kinds inside the mermaid fence (prose headings cannot satisfy a kind)
 
   python scripts/tests/test_validate_arch.py
 Exit 0 = every case behaved as expected.
@@ -94,11 +97,19 @@ with tempfile.TemporaryDirectory() as tmp:
 
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
-    # arch_version is OUT of the fingerprint — touching it alone still passes
+    # arch_version is OUT of the fingerprint -- touching it alone still passes
     edit_yaml(arch(d), lambda doc: doc["meta"].__setitem__("arch_version", "zzzzzzzzzzzz"))
     rc, out = run_validator(d, "--no-baseline")
     check("A-007 OUT: an arch_version-only change still passes",
           rc == 0 and "A-007" not in codes(out))
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    # A blank (never-stamped) fingerprint must fail CLOSED, like a drift.
+    edit_yaml(arch(d), lambda doc: doc["meta"].__setitem__("fingerprint", ""))
+    rc, out = run_validator(d, "--no-baseline")
+    check("A-007 blank: an un-stamped fingerprint fails closed",
+          rc == 1 and codes(out) == {"A-007"} and "blank" in out)
 
 
 # ── 3. one targeted mutation per rule ────────────────────────────────
@@ -181,7 +192,7 @@ def init_repo(path, with_specs=True):
 
 
 if shutil.which("git") is None:
-    print("WARN git not available — skipping A-008 git scenarios")
+    print("WARN git not available -- skipping A-008 git scenarios")
 else:
     # (A) non-repo → fail closed
     with tempfile.TemporaryDirectory() as tmp:
@@ -234,6 +245,82 @@ else:
         rc, out = run_validator(wspecs)
         check("A-008 greenfield against resolvable main passes",
               rc == 0 and not codes(out))
+
+
+# ── 5. supersession integrity + A-006 diagram-kind matching (the fixes) ──
+def run_mut(mutate, restamp):
+    with tempfile.TemporaryDirectory() as tmp:
+        d = copy_fixture(os.path.join(tmp, "specs"))
+        mutate(d)
+        if restamp:
+            stamp(d)
+        return run_validator(d, "--no-baseline")
+
+
+def set_adr(doc, adr_id, **kv):
+    next(x for x in doc["decisions"] if x["id"] == adr_id).update(kv)
+
+
+def add_feature_ref(d, adr):
+    edit_yaml(feature(d), lambda doc: doc["requirements"][0].__setitem__(
+        "governed_by",
+        list(doc["requirements"][0].get("governed_by") or []) + [adr]))
+
+
+# self-supersession (1-cycle)
+rc, out = run_mut(lambda d: edit_yaml(arch(d),
+    lambda doc: set_adr(doc, "ADR-0002", superseded_by="ADR-0002")), True)
+check("A-003: self-supersession is caught", rc == 1 and "A-003" in codes(out))
+
+# dangling superseded_by -> a non-existent ADR
+rc, out = run_mut(lambda d: edit_yaml(arch(d),
+    lambda doc: set_adr(doc, "ADR-0002", superseded_by="ADR-9999")), True)
+check("A-003: a dangling superseded_by is caught",
+      rc == 1 and "A-003" in codes(out) and "not a known ADR" in out)
+
+# superseded_by an ADR that is still 'proposed' (not a live decision)
+rc, out = run_mut(lambda d: edit_yaml(arch(d),
+    lambda doc: set_adr(doc, "ADR-0003", status="proposed")), True)
+check("A-003: supersede-by-a-proposed-ADR is caught",
+      rc == 1 and "A-003" in codes(out) and "proposed" in out)
+
+# a 2-cycle ADR-0002 <-> ADR-0003 (also trips A-004: a feature cites ADR-0003)
+rc, out = run_mut(lambda d: edit_yaml(arch(d),
+    lambda doc: set_adr(doc, "ADR-0003", status="superseded",
+                        superseded_by="ADR-0002")), True)
+check("A-003: a supersession cycle (no live head) is detected",
+      rc == 1 and "A-003" in codes(out) and "cycle" in out)
+
+# a feature governed_by a SUPERSEDED ADR (feature file is not arch-fingerprinted)
+rc, out = run_mut(lambda d: add_feature_ref(d, "ADR-0002"), False)
+check("A-004: a feature governed_by a superseded ADR is caught",
+      rc == 1 and "A-004" in codes(out) and "superseded" in out)
+
+# a feature governed_by an ADR absent from the index (the untested A-004 branch)
+rc, out = run_mut(lambda d: add_feature_ref(d, "ADR-7777"), False)
+check("A-004: a feature governed_by an unknown ADR is caught",
+      rc == 1 and "A-004" in codes(out) and "ADR-7777" in out)
+
+
+# A-006: a mermaid fence present but NOT a real context diagram -- the prose
+# heading '## System context' must NOT satisfy the 'context' kind.
+def break_context_diagram(d):
+    p = archmd(d)
+    with open(p) as f:
+        text = f.read()
+    with open(p, "w") as f:
+        f.write(text.replace("C4Context", "flowchart"))
+
+
+rc, out = run_mut(break_context_diagram, False)
+check("A-006: a mermaid fence with no real context diagram fails (prose can't satisfy it)",
+      rc == 1 and "A-006" in codes(out))
+
+# A-006: a listed kind with no matching diagram block (diagrams is IN -> restamp)
+rc, out = run_mut(lambda d: edit_yaml(arch(d),
+    lambda doc: doc.__setitem__("diagrams", ["context", "sequence"])), True)
+check("A-006: a listed kind (sequence) with no matching mermaid block fails",
+      rc == 1 and "A-006" in codes(out) and "sequence" in out)
 
 
 print()

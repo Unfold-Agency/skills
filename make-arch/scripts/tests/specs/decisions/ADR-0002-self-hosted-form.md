@@ -1,4 +1,4 @@
-# ADR-0002 — Use a self-hosted payment form
+# ADR-0002 -- Use a self-hosted payment form
 
 - **Status:** Superseded by ADR-0003
 - **Date:** 2026-06-20

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validate_arch.py — enforce validator rules A-001..A-008 across docs/specs/
+validate_arch.py -- enforce validator rules A-001..A-008 across docs/specs/
 
 Validates the architecture layer: arch-data.yaml + decisions/ADR-*.md +
 architecture.md, and cross-checks the ADR index against the make-spec feature
@@ -32,7 +32,7 @@ DOC_STATUS = ("draft", "review", "approved")
 CONFIDENCE = ("known", "assumption")
 DIAGRAM_KINDS = ("context", "container", "sequence", "erd")
 
-# Fingerprint IN/OUT contract (A-007) — advisory/derived keys dropped before hashing.
+# Fingerprint IN/OUT contract (A-007) -- advisory/derived keys dropped before hashing.
 OUT_KEYS = {"fingerprint", "generated_at", "arch_version", "notes"}
 
 
@@ -86,20 +86,35 @@ def baseline_adr_ids(spec_dir, ref, fail):
     cwd = os.path.abspath(spec_dir)
     inside = _git(["rev-parse", "--is-inside-work-tree"], cwd)
     if inside.returncode != 0 or inside.stdout.strip() != "true":
-        fail("A-008", "not a git repository — cannot establish an append-only "
+        fail("A-008", "not a git repository -- cannot establish an append-only "
                       "baseline (use --no-baseline only for the greenfield kickoff)")
         return None
-    if _git(["rev-parse", "--is-shallow-repository"], cwd).stdout.strip() == "true":
-        fail("A-008", "shallow clone — run 'git fetch --unshallow' (refusing to "
-                      "pass on partial history)")
+    shallow = _git(["rev-parse", "--is-shallow-repository"], cwd)
+    if shallow.returncode != 0 or shallow.stdout.strip() == "true":
+        fail("A-008", "shallow or unverifiable repository -- run 'git fetch "
+                      "--unshallow' (refusing to pass on partial history)")
         return None
     if _git(["rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd).returncode != 0:
-        fail("A-008", f"cannot resolve baseline ref '{ref}' — fetch it or pass "
+        fail("A-008", f"cannot resolve baseline ref '{ref}' -- fetch it or pass "
                       "--no-baseline for the greenfield kickoff")
         return None
+    # Distinguish "absent at baseline" (greenfield, legit) from "unreadable"
+    # (corrupt/partial clone -- fail closed). ls-tree reads the tree: an empty
+    # listing means the file did not exist at the baseline; a nonzero rc means
+    # the tree itself is unusable.
+    listing = _git(["ls-tree", "--name-only", ref, "--", "arch-data.yaml"], cwd)
+    if listing.returncode != 0:
+        fail("A-008", f"cannot list the baseline tree at '{ref}' (git ls-tree "
+                      f"failed: {listing.stderr.strip()}) -- baseline unusable, "
+                      "refusing to pass")
+        return None
+    if not listing.stdout.strip():
+        return set()  # no arch-data at baseline -- greenfield, nothing to lose
     show = _git(["show", f"{ref}:./arch-data.yaml"], cwd)
     if show.returncode != 0:
-        return set()  # no arch-data at baseline — greenfield, nothing to lose
+        fail("A-008", f"cannot read arch-data.yaml at '{ref}' (git show failed: "
+                      f"{show.stderr.strip()}) -- baseline incomplete, refusing to pass")
+        return None
     try:
         prev = yaml.safe_load(show.stdout) or {}
     except yaml.YAMLError:
@@ -159,6 +174,9 @@ def main():
             fail("A-002", f"duplicate ADR id '{did}'")
         adr_ids[did] = d
 
+    # The ADR *index* (arch-data.yaml decisions[]) is the source the validator
+    # gates for status/supersession; the decisions/ADR-*.md bodies are checked
+    # for existence only (their prose Status/Supersedes lines are not parsed).
     dec_dir = os.path.join(spec_dir, "decisions")
     adr_files = {}
     if os.path.isdir(dec_dir):
@@ -187,6 +205,27 @@ def main():
                 fail("A-003", f"{did} cannot supersede itself")
             elif sb not in adr_ids:
                 fail("A-003", f"{did}.superseded_by '{sb}' is not a known ADR")
+            elif str(adr_ids[sb].get("status") or "") == "proposed":
+                fail("A-003", f"{did}.superseded_by '{sb}' is still 'proposed' -- "
+                              "supersede only by an accepted (or already-superseded) "
+                              "decision")
+    # Supersession cycles of any length (1-cycles are caught above): walk each
+    # superseded/deprecated ADR's superseded_by chain; revisiting a node = a cycle
+    # with no live head, which silently breaks the <=2-hops-to-current guarantee.
+    for did, d in adr_ids.items():
+        if str(d.get("status") or "") not in ("superseded", "deprecated"):
+            continue
+        seen, cur = set(), did
+        while cur in adr_ids:
+            if cur in seen:
+                fail("A-003", f"supersession cycle through {did} "
+                              f"(the superseded_by chain revisits {cur})")
+                break
+            seen.add(cur)
+            nxt = str(adr_ids[cur].get("superseded_by") or "")
+            if not nxt:
+                break
+            cur = nxt
 
     # ---- A-005: typed confidence ---------------------------------------
     for coll in ("components", "integrations", "decisions"):
@@ -214,6 +253,10 @@ def main():
         if ref not in adr_ids:
             fail("A-004", f"a feature references governed_by '{ref}' but it is not "
                           "in the arch-data decisions index")
+        elif str(adr_ids[ref].get("status") or "") == "superseded":
+            sb = str(adr_ids[ref].get("superseded_by") or "?")
+            fail("A-004", f"a feature is governed_by '{ref}' which is superseded -- "
+                          f"repoint governed_by at {sb}")
 
     # ---- A-006: mermaid diagrams present -------------------------------
     arch_md = os.path.join(spec_dir, "architecture.md")
@@ -224,27 +267,26 @@ def main():
         low = md.lower()
         if "```mermaid" not in low:
             fail("A-006", "architecture.md has no ```mermaid block")
+        # Match each listed kind against the BODIES of the mermaid fences only,
+        # not the surrounding prose -- else a '## System context' heading would
+        # satisfy the 'context' kind with no real diagram present.
+        blocks = "\n".join(re.findall(r"```mermaid(.*?)```", low, re.DOTALL))
         kinds = [k for k in (arch.get("diagrams") or []) if k in DIAGRAM_KINDS]
         if "context" not in kinds:
             fail("A-006", "diagrams must include the 'context' diagram")
+        SIGNATURE = {"context": "c4context", "container": "c4container",
+                     "erd": "erdiagram", "sequence": "sequencediagram"}
         for kind in kinds:
-            # a labelled mermaid block or the kind keyword near a mermaid fence
-            if kind == "erd":
-                ok = "erdiagram" in low
-            elif kind == "sequence":
-                ok = "sequencediagram" in low
-            else:  # context / container — a C4/flow diagram naming the kind
-                ok = kind in low
-            if not ok:
+            if SIGNATURE[kind] not in blocks:
                 fail("A-006", f"diagrams lists '{kind}' but architecture.md has no "
-                              f"matching mermaid diagram")
+                              f"matching mermaid {SIGNATURE[kind]} block")
 
     # ---- A-007: fingerprint integrity (FAIL CLOSED) --------------------
     stored = str(meta.get("fingerprint") or "")
     if not stored:
         fail("A-007", "meta.fingerprint is blank")
     elif stored != compute_fingerprint(arch):
-        fail("A-007", "fingerprint mismatch — arch-data.yaml drifted from its "
+        fail("A-007", "fingerprint mismatch -- arch-data.yaml drifted from its "
                       "markdown or was hand-edited (re-derive and re-stamp)")
 
     # ---- A-008: append-only ADRs vs baseline (FAIL CLOSED) -------------
@@ -253,22 +295,22 @@ def main():
         if prior is not None:
             for v in sorted(prior - set(adr_ids)):
                 fail("A-008", f"ADR '{v}' existed at {args.baseline_ref} and is now "
-                              "missing — ADRs are append-only (supersede, never delete)")
+                              "missing -- ADRs are append-only (supersede, never delete)")
 
     # ---- report ---------------------------------------------------------
     for w in warns:
         print(f"  warn {w}")
     if errors:
-        print(f"\nFAIL — {len(errors)} violation(s) in {spec_dir}\n")
+        print(f"\nFAIL -- {len(errors)} violation(s) in {spec_dir}\n")
         for e in errors:
             print(f"  {e}")
         sys.exit(1)
     n_assume = sum(1 for coll in ("components", "integrations", "decisions")
                    for it in (arch.get(coll) or [])
                    if isinstance(it, dict) and it.get("confidence") == "assumption")
-    print(f"PASS — {spec_dir} arch (status {meta.get('status') or '?'}, "
+    print(f"PASS -- {spec_dir} arch (status {meta.get('status') or '?'}, "
           f"{len(adr_ids)} ADR(s), {n_assume} assumption-backed choice(s))"
-          + (f" — {len(warns)} warning(s)" if warns else ""))
+          + (f" -- {len(warns)} warning(s)" if warns else ""))
     sys.exit(0)
 
 

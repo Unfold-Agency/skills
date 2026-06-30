@@ -1,6 +1,6 @@
 ---
 name: make-arch
-description: Propose and maintain the architecture layer of a project spec — a thin C4/arc42-lite architecture overview with mermaid diagrams, plus an append-only Architecture Decision Record (ADR) log. Use this skill after make-spec, whenever the user wants to choose or change the tech stack, decide an integration or data approach, record "which database / payment processor / framework are we using and why", add or supersede an ADR, or draw the system's architecture diagrams. Trigger it for "what's our architecture", "pick the stack", "write an ADR", "we're switching from X to Y", or "diagram the system". This is the HOW layer; the WHAT (features, requirements) is the upstream make-spec skill. Do NOT use it to author feature requirements.
+description: Propose and maintain the architecture layer of a project spec -- a thin C4/arc42-lite architecture overview with mermaid diagrams, plus an append-only Architecture Decision Record (ADR) log. Use this skill after make-spec, whenever the user wants to choose or change the tech stack, decide an integration or data approach, record "which database / payment processor / framework are we using and why", add or supersede an ADR, or draw the system's architecture diagrams. Trigger it for "what's our architecture", "pick the stack", "write an ADR", "we're switching from X to Y", or "diagram the system". This is the HOW layer; the WHAT (features, requirements) is the upstream make-spec skill. Do NOT use it to author feature requirements.
 ---
 
 # Make Architecture

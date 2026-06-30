@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-ARCHITECTURE TEMPLATE — docs/specs/architecture.md   (make-arch)
+ARCHITECTURE TEMPLATE -- docs/specs/architecture.md   (make-arch)
 
 A thin C4/arc42-lite overview of HOW the system is built: the stack, the
 components, the external integrations, and the diagrams that make it
@@ -29,7 +29,7 @@ last_updated: ""          # YYYY-MM-DD
 data_file: arch-data.yaml
 ---
 
-# Architecture — [Project Name]
+# Architecture -- [Project Name]
 
 ## System context
 
@@ -74,7 +74,7 @@ record lives in decisions/ADR-NNNN-<slug>.md. -->
 
 <!--
 ═══════════════════════════════════════════════════════════════════
-CHECKLIST — strip before publishing
+CHECKLIST -- strip before publishing
 □ A ```mermaid context diagram is present (A-006)
 □ Every component / integration / decision has a typed confidence (A-005)
 □ Assumption-backed choices carry a visible badge

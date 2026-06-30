@@ -5,7 +5,7 @@ status: draft
 data_file: arch-data.yaml
 ---
 
-# Architecture — Fixture Storefront
+# Architecture -- Fixture Storefront
 
 A storefront where shoppers build a cart and pay; orders sync to fulfillment.
 

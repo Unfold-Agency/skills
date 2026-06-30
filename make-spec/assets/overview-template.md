@@ -2,93 +2,95 @@
 ═══════════════════════════════════════════════════════════════════
 OVERVIEW TEMPLATE -- docs/specs/overview.md   (make-spec)
 
+ONE FILE, ONE TRUTH. The YAML frontmatter is the machine-readable
+contract (problem, users, goals/metrics, scope + no-gos, and the
+FEATURE INDEX). The body below is human narrative for reviewers. There
+is NO separate data file -- the bytes you review and sign ARE the bytes
+the pipeline validates and hashes.
+
 The lean PRD layer: the slow-changing project context every feature
-shares. Problem, users, goals + metrics, scope + no-gos, and the
-FEATURE INDEX. It states WHAT and WHY at the project level; it does
-NOT enumerate per-feature requirements (those live in features/<slug>.md)
+shares. It states WHAT and WHY at the project level; it does NOT
+enumerate per-feature requirements (those live in features/<slug>.md)
 and it does NOT decide HOW (that is an ADR, via make-arch).
 
-Everything in HTML comments is authoring guidance and MUST be stripped
-from the published overview. Plain words, short sentences, no marketing
-language. Never an em dash; use a spaced double hyphen ` -- ` for asides.
-
-TWO FILES, ONE TRUTH. This Markdown is what people read and sign. The
-Skill derives overview-data.yaml from it and stamps a fingerprint; the
-YAML is generated, never hand-edited. scripts/validate_spec.py fails the
-run if they drift.
+meta.fingerprint is STAMPED by scripts/stamp_fingerprint.py; the
+feature_index feature_version values are stamped too (mirrored from each
+feature). Leave them blank when authoring; never hand-edit. Plain words,
+short sentences, no marketing language. Never an em dash; use ` -- `.
+Strip all HTML comments before publishing.
 ═══════════════════════════════════════════════════════════════════
 -->
 
 ---
-doc_type: spec-overview
-project_id: ""            # e.g. proj-2026-014
-project_name: ""
-client: ""
-project_version: "0.1"    # a human milestone label, not a lock -- the
-                          # real change signal is each feature's content
-                          # version (see the Feature Index)
-mode: full                # full | lite (lite skips the architecture layer)
-status: draft             # draft | review | approved
-last_updated: ""          # YYYY-MM-DD
-data_file: overview-data.yaml
+meta:
+  doc_type: spec-overview
+  schema_version: "1.0"
+  project_id: ""            # e.g. proj-2026-014
+  project_name: ""
+  client: ""
+  project_version: "0.1"    # a human milestone label, not a lock -- OUT of the fingerprint
+  mode: full                # full | lite (lite skips the architecture layer)
+  status: draft             # draft | review | approved
+  fingerprint: ""           # STAMPED -- sha256 over contract content
+problem: ""                 # one or two sentences: the problem and why now
+users:
+  - name: ""
+    description: ""
+    primary_needs: []
+goals:
+  - id: "G-001"
+    kind: business          # business | user
+    statement: ""
+    metric: ""              # the measurable success criterion (S-009)
+    measurement_method: ""  # how/when measured -- required (S-009)
+    baseline: ""            # "" allowed; note the gap in the body, never invent
+    status: active
+scope:
+  in_scope: []              # short feature-area lines
+  out_of_scope:             # the parking lot -- what we are NOT doing
+    - item: ""
+      reason: ""
+      disposition: future-phase   # future-phase | declined | needs-pricing
+non_goals: []               # outcomes we are explicitly NOT chasing
+feature_index:              # THE REGISTRY -- every features/<slug>.md MUST have a row
+  - slug: ""                # kebab-case; the file is features/<slug>.md
+    prefix: ""              # ^[A-Z]{2,5}$ -- unique across the project (S-003/S-007)
+    title: ""
+    feature_version: ""     # STAMPED -- mirrors the feature's content version (S-008)
+    status: active          # active | superseded | deferred
+    appetite: ""            # OUT of the fingerprint
 ---
 
 # [Project Name] -- Spec Overview
 
+<!-- HUMAN NARRATIVE. The frontmatter above is the signed contract; this body
+helps a reviewer read it. Summarize; do not invent metrics or restate the index
+as a second source of truth. -->
+
 ## Problem
 
-<!-- One short paragraph: the problem we are solving and why now. Plain
-words. This is the "why" the whole spec set serves. -->
+[One short paragraph: the problem we are solving and why now.]
 
 ## Users
 
-<!-- Who this is for and what they are trying to do. One row per
-audience -- summarize, link decks, do not paste them. -->
+[Who this is for and what they are trying to do. Summarize; link decks, do not
+paste them.]
 
-| Audience | Description | Primary needs |
-|---|---|---|
-| | | |
+## Goals
 
-## Goals & Success Metrics
-
-<!-- Every goal needs a MEASURABLE metric and how/when it is measured.
-"User-friendly" is not a metric. If a baseline is unknown, leave it
-blank and say so in prose -- never invent a number. IDs are G-001, G-002,
-... and never reused. -->
-
-| ID | Kind | Goal | Metric | Measurement method | Baseline |
-|---|---|---|---|---|---|
-| G-001 | business / user | | | | |
+[Each goal G-NNN with its measurable metric and measurement method. If a
+baseline is unknown, say so plainly -- never invent a number.]
 
 ## Scope
 
-### In scope
-<!-- Short feature-area lines. Each becomes (or maps to) a feature spec. -->
-
-### Out of scope (parking lot)
-<!-- What stakeholders raised that we are NOT doing, with a reason and a
-disposition (future-phase / declined / needs-pricing). This protects the
-budget. -->
-
-| Item | Reason | Disposition |
-|---|---|---|
-| | | |
-
-### Non-goals
-<!-- Outcomes we are explicitly NOT chasing, even if adjacent. Distinct
-from out-of-scope features -- these are outcomes. -->
+[In-scope feature areas; the out-of-scope parking lot with dispositions; the
+non-goals (outcomes we are not chasing).]
 
 ## Feature Index
 
-<!-- THE REGISTRY. Every features/<slug>.md MUST appear here. The Skill
-maintains feature_version (the content-derived version of each feature
-spec) and the prefix (the uppercased short slug that namespaces that
-feature's requirement IDs, e.g. CHK for checkout). Prefixes are unique
-across the project. The validator (S-007/S-008) enforces all of this. -->
-
-| Slug | Prefix | Title | Version | Status | Appetite |
-|---|---|---|---|---|---|
-| checkout | CHK | | | active | 2 weeks |
+[A readable table of the features (slug, prefix, title, appetite). The
+authoritative index -- including each feature's stamped version -- is the
+frontmatter.]
 
 <!--
 ═══════════════════════════════════════════════════════════════════
@@ -96,7 +98,7 @@ CHECKLIST -- strip before publishing
 □ Every goal has a measurable metric + a measurement method (S-009)
 □ Every feature file has a Feature Index row; prefixes are unique
 □ Out of scope captures everything raised but cut
-□ overview-data.yaml derived, fingerprint stamped, validator passes
+□ Fingerprints stamped (scripts/stamp_fingerprint.py); validator passes
 □ All guidance comments removed
 ═══════════════════════════════════════════════════════════════════
 -->

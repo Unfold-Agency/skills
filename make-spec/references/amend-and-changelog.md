@@ -23,16 +23,16 @@ specific IDs, you don't understand it well enough to classify yet.
 | Class | Test | Effect |
 |---|---|---|
 | **Trivial** | Typo / wording, no ID's *meaning* changes (the fingerprint is unchanged) | The `--trivial` lane: record it in the CHANGELOG, no re-derive round-trip. |
-| **Minor** | Additive or clarifying: a new requirement within scope, a question answered, wording tightened without changing meaning | Edit in place; CHANGELOG `minor`; re-derive + reconcile. |
-| **Major** | The meaning of an existing requirement, goal, or scope item changes; anything cut; a new feature | Edit in place; CHANGELOG `major`; re-derive + reconcile; refactor issues for affected merged work. |
+| **Minor** | Additive or clarifying: a new requirement within scope, a question answered, wording tightened without changing meaning | Edit in place; CHANGELOG `minor`; re-stamp + reconcile. |
+| **Major** | The meaning of an existing requirement, goal, or scope item changes; anything cut; a new feature | Edit in place; CHANGELOG `major`; re-stamp + reconcile; refactor issues for affected merged work. |
 
 Borderline -> classify up (prefer major). Reclassifying down later is cheap;
 discovering at build time that a "minor" edit rewrote a contract is not.
 
 **The `--trivial` lane (resolves the "edits go underground" risk).** A typo fix
 shouldn't force a full version churn, or people stop running the skill for small
-edits. So: make the edit, re-derive, and confirm the fingerprint is **unchanged**
-(it should be -- you only touched OUT content or pure prose). If the fingerprint
+edits. So: make the edit, re-stamp, and confirm the fingerprint is **unchanged**
+(it should be -- you only touched the body or an OUT field). If the fingerprint
 *did* change, the edit altered meaning -- it is not trivial; reclassify to minor or
 major. The validator's fingerprint gate (S-006) is what makes this lane safe: it
 will not let a meaning change masquerade as trivial.
@@ -61,11 +61,14 @@ cross-feature impact and any ADR added/superseded. **make-issues reads these id
 lists to drive its reconcile**, so they must be accurate -- this entry is the
 machine-readable delta, not flavor text.
 
-## 5. Re-derive, stamp, validate
+## 5. Edit, stamp, validate
 
-1. Re-derive the affected `*-data.yaml`.
-2. `python scripts/stamp_fingerprint.py docs/specs` -- re-stamps changed features
-   and rewrites their content versions into the overview Feature Index.
+1. Edit the affected `features/<slug>.md` / `overview.md` in place -- the
+   frontmatter contract and, as needed, the body. There is no separate data file
+   to re-derive.
+2. `python scripts/stamp_fingerprint.py docs/specs` -- re-stamps changed specs
+   and rewrites their content versions into the overview Feature Index
+   (frontmatter only; bodies preserved).
 3. Validate against the baseline (this is **not** optional in amend mode -- it is
    what enforces no-vanishing):
    ```

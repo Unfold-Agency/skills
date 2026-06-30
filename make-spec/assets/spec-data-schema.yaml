@@ -1,18 +1,23 @@
 # ═══════════════════════════════════════════════════════════════════
 # spec-data -- SCHEMA v1.0
-# The derived machine companions to the human-authored spec Markdown.
+# The machine-readable contract embedded in each spec's YAML frontmatter.
 #
-# GENERATED FILES. The make-spec Skill compiles these from the spec
-# Markdown on every run. Never hand-edit. If a data file and its
-# markdown disagree, the markdown wins and the data file is regenerated
-# and re-stamped. The validator (scripts/validate_spec.py) enforces the
-# rules listed at the bottom (S-001 .. S-012) and fails on any violation.
+# ONE FILE PER DOCUMENT. A spec is a single Markdown file: the YAML
+# frontmatter (documented here) is the contract; the body is human
+# narrative. The frontmatter is authored by a human and parsed
+# DETERMINISTICALLY -- it is never re-derived by an LLM into a separate
+# copy, so the bytes a human reviews and signs are the bytes that are
+# hashed and validated. meta.fingerprint / meta.feature_version are
+# stamped by scripts/stamp_fingerprint.py; everything else is
+# hand-authored (never hand-edit the stamps). The validator
+# (scripts/validate_spec.py) enforces the rules at the bottom
+# (S-001 .. S-012) and fails on any violation.
 #
-# Two file SHAPES live under docs/specs/:
-#   overview-data.yaml          -- one per project (the lean PRD layer)
-#   features/<slug>-data.yaml    -- one per feature (the churn-heavy layer)
-# This schema documents both. The CHANGELOG.md is human Markdown only
-# (Keep a Changelog format) and has no derived data file.
+# Two doc SHAPES live under docs/specs/, each in the frontmatter of:
+#   overview.md            -- one per project (the lean PRD layer)
+#   features/<slug>.md      -- one per feature (the churn-heavy layer)
+# This schema documents both frontmatter shapes. CHANGELOG.md is human
+# Markdown only (Keep a Changelog format) and has no frontmatter contract.
 #
 # THE DOCTRINE: a feature spec states WHAT and WHY, never HOW. The
 # governing technical decision lives in an ADR (make-arch) and is
@@ -31,7 +36,7 @@
 
 
 # ───────────────────────────────────────────────────────────────────
-# SHAPE 1 -- overview-data.yaml  (docs/specs/overview-data.yaml)
+# SHAPE 1 -- overview.md frontmatter  (docs/specs/overview.md)
 # The lean PRD: problem, users, goals/metrics, scope + no-gos, the
 # canonical project version, and the FEATURE INDEX (the registry that
 # every feature must appear in).
@@ -79,7 +84,7 @@ overview_example:
 
   # THE FEATURE INDEX -- the registry. Every features/<slug>.md MUST have
   # a row here, and the recorded feature_version MUST equal the feature
-  # data file's actual content version (S-008). Prefixes are unique
+  # frontmatter's actual content version (S-008). Prefixes are unique
   # across the index (S-007).
   feature_index:
     - slug: "checkout"           # kebab-case; the file is features/checkout.md
@@ -91,7 +96,7 @@ overview_example:
 
 
 # ───────────────────────────────────────────────────────────────────
-# SHAPE 2 -- features/<slug>-data.yaml  (one per feature)
+# SHAPE 2 -- features/<slug>.md frontmatter  (one per feature)
 # The lean, churn-heavy spec: user stories + EARS acceptance criteria +
 # appetite/no-gos. WHAT-only. The governing decision is referenced by
 # `governed_by` (ADR id), never restated here.
@@ -141,7 +146,7 @@ feature_example:
 #
 # The fingerprint is computed over CONTRACT content only, so that a
 # change of *meaning* flips it (and fails the fail-closed gate until the
-# Skill re-derives and re-stamps), while an advisory change does not.
+# Skill re-stamps), while an advisory change does not.
 #
 #   IN  (changing these flips the fingerprint):
 #       description, acceptance_criteria, governed_by, depends_on,
@@ -167,7 +172,7 @@ feature_example:
 # Run: python scripts/validate_spec.py [docs/specs] [--baseline-ref origin/main | --no-baseline]
 #
 # Integrity
-#   S-001  Each data file is well-formed (required meta + top-level keys)
+#   S-001  Each spec's frontmatter is well-formed (required meta + top-level keys)
 #   S-002  Every ID matches its grammar:
 #            goals       ^G-\d{3,}$
 #            requirements ^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$
@@ -189,7 +194,7 @@ feature_example:
 #          meta.prefix; prefix matches ^[A-Z]{2,5}$
 #   S-008  Index sync: every features/<slug>.md has an overview
 #          feature_index row, and the row's feature_version equals the
-#          feature data file's actual feature_version
+#          feature frontmatter's actual feature_version
 #
 # Completeness
 #   S-009  Every active goal has a metric AND a measurement_method

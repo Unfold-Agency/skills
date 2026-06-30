@@ -35,8 +35,8 @@ Worked examples:
 ```
 - Four digits, assigned in order by make-arch: `ADR-0001`, `ADR-0002`, ...
 - A requirement that an architecture decision governs links to it via
-  `governed_by: [ADR-0001]` in the derived data file (the machine link). The
-  human feature markdown stays WHAT-only -- it never restates the decision.
+  `governed_by: [ADR-0001]` in its frontmatter (the machine link). The feature
+  spec stays WHAT-only -- it never restates the decision.
 
 ### Overview goals
 ```

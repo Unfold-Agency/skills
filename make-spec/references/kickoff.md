@@ -74,12 +74,15 @@ failure path, an unnamed decision-maker, unstated content ownership, implied-but
 unconfirmed constraints. Everything else is noted as an open item. Ship the first
 pass with honest gaps -- do not block on answers.
 
-## 5. Derive, stamp, validate
+## 5. Author, stamp, validate
 
-1. Derive `overview-data.yaml` and each `features/<slug>-data.yaml` per
-   `assets/spec-data-schema.yaml`.
+1. Author `overview.md` and each `features/<slug>.md` from the templates -- one
+   file each, the structured contract in the **frontmatter** (per
+   `assets/spec-data-schema.yaml`), the human narrative in the body. There is no
+   separate data file to derive.
 2. Stamp the fingerprints: `python scripts/stamp_fingerprint.py docs/specs`. This
-   also writes each feature's content version into the overview Feature Index.
+   hashes each spec's frontmatter and writes each feature's content version into
+   the overview Feature Index (it rewrites only the frontmatter; bodies are kept).
 3. Validate. On a brand-new repo with no pushed `main` yet, the no-vanishing
    baseline doesn't exist, so pass `--no-baseline`:
    ```

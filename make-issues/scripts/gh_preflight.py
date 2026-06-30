@@ -48,22 +48,28 @@ STATIC_LABELS = ["make-issues", "afk", "hitl", "needs-rebase", "spec-drift",
                  "orphaned", "refactor", "refactor-tracking"]
 
 # ── The C1 fingerprint discipline, applied at the FILE level ─────────────────
-# A spec file's stored meta.fingerprint is computed over its CONTRACT content
-# with the same IN/OUT split the make-spec/make-arch validators use. These keys
-# are OUT -- they never affect any fingerprint:
-#   - meta-level: fingerprint, feature_version, generated_at, project_version,
-#     appetite
-#   - requirement-level advisory: priority, architecture_hints, related_files,
-#     notes
-# Everything else is IN, notably (per requirement) description,
-# acceptance_criteria, governed_by, depends_on, interface, id, kind, status.
-# NOTE: at the FILE level, requirement `status` is IN (it is part of the spec's
-# content the way make-spec fingerprints it). The PER-ITEM hash in
-# item_fingerprint.py deliberately excludes status -- a narrower scope for the
+# A spec file's stored meta.fingerprint is computed over its CONTRACT content.
+# This gate RE-COMPUTES it and must produce a hash BYTE-IDENTICAL to the upstream
+# validator that stamped the file, or it would reject legitimately-stamped specs:
+#   - overview-data.yaml / features/*-data.yaml -> make-spec/scripts/validate_spec.py
+#   - arch-data.yaml                            -> make-arch/scripts/validate_arch.py
+# To stay identical we copy their exact discipline: drop the OUT keys FLAT
+# (wherever they appear -- they live in `meta` AND, for the overview, in
+# feature_index rows), do NO text normalization (the upstream dumps strings
+# verbatim), then yaml.safe_dump(sort_keys=True, default_flow_style=False,
+# allow_unicode=True) -> sha256. The two skills use DIFFERENT OUT sets, so the
+# gate picks the set per file. The golden cross-fixtures in
+# scripts/tests/specs/upstream/ (stamped by the real upstream skills) lock this
+# interop; if these sets ever drift from the validators, that test fails.
+#
+# OUT keys never affect the fingerprint; everything else is IN. At the FILE level
+# requirement `status` is IN (make-spec hashes it); the PER-ITEM hash in
+# item_fingerprint.py separately excludes status -- a narrower scope for the
 # reconcile decision tree. Keep these two scopes distinct.
-OUT_META_KEYS = {"fingerprint", "feature_version", "generated_at",
-                 "project_version", "appetite"}
-OUT_REQUIREMENT_KEYS = {"priority", "architecture_hints", "related_files", "notes"}
+SPEC_OUT_KEYS = {"priority", "architecture_hints", "related_files", "notes",
+                 "fingerprint", "feature_version", "generated_at",
+                 "project_version", "appetite"}      # == make-spec OUT_KEYS
+ARCH_OUT_KEYS = {"fingerprint", "generated_at", "arch_version", "notes"}  # == make-arch OUT_KEYS
 
 
 def _run(cmd, timeout=30):
@@ -79,47 +85,27 @@ def _run(cmd, timeout=30):
         return 127, "", f"{cmd[0]} not found"
 
 
-def _strip_out(value, key=None, in_meta=False):
-    """Recursively drop OUT keys from a value so the fingerprint sees only
-    CONTRACT content. `in_meta` marks that we're inside a `meta` mapping (so the
-    meta-level OUT keys apply); requirement-level OUT keys are dropped wherever a
-    mapping carries them. Returns a normalized, OUT-free copy."""
+def _strip_out(value, out_keys):
+    """Drop every OUT key wherever it appears -- FLAT, exactly like the upstream
+    validators (make-spec/make-arch). No text normalization: the upstream dumps
+    strings verbatim, so we must too, or the recompute would diverge. Returns an
+    OUT-free copy; the original is untouched."""
     if isinstance(value, dict):
-        out = {}
-        for k, v in value.items():
-            if k in OUT_REQUIREMENT_KEYS:
-                continue
-            if in_meta and k in OUT_META_KEYS:
-                continue
-            out[k] = _strip_out(v, key=k, in_meta=(in_meta or k == "meta"))
-        return out
+        return {k: _strip_out(v, out_keys) for k, v in value.items()
+                if k not in out_keys}
     if isinstance(value, list):
-        return [_strip_out(v) for v in value]
-    if isinstance(value, str):
-        return " ".join(value.split())
+        return [_strip_out(v, out_keys) for v in value]
     return value
 
 
-def compute_fingerprint(doc):
-    """Recompute a spec file's fingerprint over its CONTRACT content.
-
-    Mirrors the make-spec/make-arch compute_fingerprint discipline: strip every
-    OUT key (meta-level and requirement-level), normalize whitespace in scalars,
-    then yaml.safe_dump(sort_keys=True) -> sha256. Applies uniformly to an
-    overview, a feature, or an arch data file -- they differ only in which
-    CONTRACT keys they carry.
-    """
-    if not isinstance(doc, dict):
-        contract = doc
-    else:
-        contract = {}
-        for k, v in doc.items():
-            # `fingerprint` lives under meta, but guard the top level too in case
-            # a file stores it at the root; never let it feed its own recompute.
-            if k in OUT_META_KEYS and k != "meta":
-                continue
-            contract[k] = _strip_out(v, key=k, in_meta=(k == "meta"))
-    normalized = yaml.safe_dump(contract, sort_keys=True,
+def compute_fingerprint(doc, out_keys=SPEC_OUT_KEYS):
+    """Recompute a spec file's fingerprint EXACTLY as the upstream validator that
+    stamped it does. Pass SPEC_OUT_KEYS for an overview/feature file, ARCH_OUT_KEYS
+    for arch-data.yaml -- they differ only in the OUT set. Byte-for-byte identical
+    to make-spec/make-arch's compute_fingerprint (verified by the golden
+    cross-fixtures), so the gate accepts any spec the upstream skills stamped."""
+    stripped = _strip_out(doc, out_keys)
+    normalized = yaml.safe_dump(stripped, sort_keys=True,
                                 default_flow_style=False, allow_unicode=True)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
@@ -181,7 +167,8 @@ def check_spec_integrity(spec_dir):
             continue
         meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
         stored = str(meta.get("fingerprint") or "")
-        recomputed = compute_fingerprint(doc)
+        out_keys = ARCH_OUT_KEYS if label == "arch" else SPEC_OUT_KEYS
+        recomputed = compute_fingerprint(doc, out_keys)
         if not stored:
             results.append({"file": label, "ok": False,
                             "detail": "no stored meta.fingerprint to verify"})

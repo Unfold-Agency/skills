@@ -18,8 +18,9 @@ import yaml
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from gh_preflight import (  # noqa: E402
-    check_spec_integrity, compute_fingerprint)
+    check_spec_integrity, compute_fingerprint, SPEC_OUT_KEYS, ARCH_OUT_KEYS)
 
+HERE = os.path.dirname(os.path.abspath(__file__))
 failures = []
 
 
@@ -29,12 +30,15 @@ def check(name, cond):
         failures.append(name)
 
 
-def stamped(doc):
-    """Return a copy of doc with meta.fingerprint set to its correct recompute."""
+def stamped(doc, out_keys=SPEC_OUT_KEYS):
+    """Return a copy of doc with meta.fingerprint set to its correct recompute.
+    Arch files use ARCH_OUT_KEYS (the gate picks the same set per file), so the
+    stamp and the gate's recompute agree -- just as make-spec/make-arch and the
+    gate must agree on a real spec."""
     doc = dict(doc)
     doc.setdefault("meta", {})
     doc["meta"] = dict(doc["meta"])
-    doc["meta"]["fingerprint"] = compute_fingerprint(doc)
+    doc["meta"]["fingerprint"] = compute_fingerprint(doc, out_keys)
     return doc
 
 
@@ -85,7 +89,7 @@ ARCH = {
 def fresh_tree():
     root = tempfile.mkdtemp(prefix="mkissues-specs-")
     write_specs(root, stamped(OVERVIEW),
-                {"checkout": stamped(CHECKOUT)}, stamped(ARCH))
+                {"checkout": stamped(CHECKOUT)}, stamped(ARCH, ARCH_OUT_KEYS))
     return root
 
 
@@ -100,7 +104,7 @@ shutil.rmtree(root)
 root = tempfile.mkdtemp(prefix="mkissues-specs-")
 chk = stamped(CHECKOUT)          # stamp first
 chk["requirements"][0]["priority"] = "could"   # OUT edit AFTER stamping
-write_specs(root, stamped(OVERVIEW), {"checkout": chk}, stamped(ARCH))
+write_specs(root, stamped(OVERVIEW), {"checkout": chk}, stamped(ARCH, ARCH_OUT_KEYS))
 r = check_spec_integrity(root)
 check("OUT-field edit without re-stamp -> still ok (OUT not in fingerprint)",
       r["ok"] is True)
@@ -111,7 +115,7 @@ root = tempfile.mkdtemp(prefix="mkissues-specs-")
 chk = stamped(CHECKOUT)          # stamp the original AC
 chk["requirements"][0]["acceptance_criteria"] = [
     "WHEN out of stock THE SYSTEM SHALL warn but allow."]   # IN edit, no re-stamp
-write_specs(root, stamped(OVERVIEW), {"checkout": chk}, stamped(ARCH))
+write_specs(root, stamped(OVERVIEW), {"checkout": chk}, stamped(ARCH, ARCH_OUT_KEYS))
 r = check_spec_integrity(root)
 check("AC mutated without re-stamp -> gate FAILS", r["ok"] is False)
 bad = [f["file"] for f in r["files"] if not f["ok"]]
@@ -122,14 +126,14 @@ shutil.rmtree(root)
 # ── a feature with NO stored fingerprint -> FAIL ─────────────────────────────
 root = tempfile.mkdtemp(prefix="mkissues-specs-")
 chk = dict(CHECKOUT)             # no meta.fingerprint at all
-write_specs(root, stamped(OVERVIEW), {"checkout": chk}, stamped(ARCH))
+write_specs(root, stamped(OVERVIEW), {"checkout": chk}, stamped(ARCH, ARCH_OUT_KEYS))
 r = check_spec_integrity(root)
 check("feature with no stored fingerprint -> gate FAILS", r["ok"] is False)
 shutil.rmtree(root)
 
 # ── arch fingerprint drift -> FAIL ───────────────────────────────────────────
 root = tempfile.mkdtemp(prefix="mkissues-specs-")
-arch = stamped(ARCH)
+arch = stamped(ARCH, ARCH_OUT_KEYS)
 arch["decisions"][0]["status"] = "superseded"   # IN edit, no re-stamp
 write_specs(root, stamped(OVERVIEW), {"checkout": stamped(CHECKOUT)}, arch)
 r = check_spec_integrity(root)
@@ -154,6 +158,20 @@ shutil.rmtree(root)
 d = stamped(CHECKOUT)
 check("compute_fingerprint is self-consistent (idempotent recompute)",
       d["meta"]["fingerprint"] == compute_fingerprint(d))
+
+# ── GOLDEN cross-skill interop ───────────────────────────────────────────────
+# specs/upstream/ holds an overview, two features, and an arch file stamped by
+# the REAL make-spec / make-arch skills. The gate MUST accept them unmodified --
+# this is the test that locks SPEC_OUT_KEYS / ARCH_OUT_KEYS and the dump to the
+# upstream validators. If it fails, the gate has drifted and would reject
+# legitimately-stamped specs (a self-stamped fixture cannot catch that).
+UPSTREAM = os.path.join(HERE, "specs", "upstream")
+if os.path.isdir(UPSTREAM):
+    r = check_spec_integrity(UPSTREAM)
+    check("gate accepts REAL make-spec/make-arch-stamped specs (interop locked)",
+          r["ok"] is True and not r.get("fatal"))
+else:
+    check("golden upstream fixtures present", False)
 
 print()
 if failures:

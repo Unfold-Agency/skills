@@ -42,14 +42,19 @@ def stamped(doc, out_keys=SPEC_OUT_KEYS):
     return doc
 
 
+def _write_md(path, doc):
+    """Write a single-file spec: doc as YAML frontmatter + a stub body."""
+    with open(path, "w") as f:
+        f.write("---\n" + yaml.safe_dump(doc, sort_keys=False) + "---\n\n# fixture\n")
+
+
 def write_specs(root, overview, features, arch=None):
-    """Lay out a docs/specs tree. Each arg is a (already-stamped) doc."""
+    """Lay out a docs/specs tree. Each arg is a (already-stamped) doc. Specs are
+    single .md files (contract in frontmatter); arch-data.yaml is plain YAML."""
     os.makedirs(os.path.join(root, "features"), exist_ok=True)
-    with open(os.path.join(root, "overview-data.yaml"), "w") as f:
-        yaml.safe_dump(overview, f, sort_keys=False)
+    _write_md(os.path.join(root, "overview.md"), overview)
     for slug, doc in features.items():
-        with open(os.path.join(root, "features", f"{slug}-data.yaml"), "w") as f:
-            yaml.safe_dump(doc, f, sort_keys=False)
+        _write_md(os.path.join(root, "features", f"{slug}.md"), doc)
     if arch is not None:
         with open(os.path.join(root, "arch-data.yaml"), "w") as f:
             yaml.safe_dump(arch, f, sort_keys=False)
@@ -147,11 +152,11 @@ r = check_spec_integrity(root)
 check("no arch-data.yaml -> gate ok (arch optional)", r["ok"] is True)
 shutil.rmtree(root)
 
-# ── missing overview-data.yaml -> fatal (drives exit 2) ──────────────────────
+# ── missing overview.md -> fatal (drives exit 2) ─────────────────────────────
 root = tempfile.mkdtemp(prefix="mkissues-specs-")
 os.makedirs(os.path.join(root, "features"))
 r = check_spec_integrity(root)
-check("missing overview-data.yaml -> fatal", r.get("fatal") is True)
+check("missing overview.md -> fatal", r.get("fatal") is True)
 shutil.rmtree(root)
 
 # ── fingerprint is self-consistent: recompute after stamping == stored ───────

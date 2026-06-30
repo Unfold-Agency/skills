@@ -1,3 +1,4 @@
+---
 meta:
   doc_type: spec-overview
   schema_version: '1.0'
@@ -53,3 +54,8 @@ feature_index:
   feature_version: 4e462b08a5ee
   status: active
   appetite: 2 weeks
+---
+
+# Fixture Storefront -- Spec Overview
+
+Human narrative; the frontmatter above is the signed contract.

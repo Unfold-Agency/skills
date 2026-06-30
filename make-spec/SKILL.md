@@ -11,17 +11,24 @@ as a few small documents that read in a sitting, not one monolith:
 
 ```
 docs/specs/
-  overview.md  / overview-data.yaml      # the lean PRD: problem, users, goals,
-                                          #   scope + no-gos, the FEATURE INDEX
-  features/<slug>.md / <slug>-data.yaml   # one lean spec per feature (WHAT-only,
-                                          #   user stories + EARS acceptance)
-  CHANGELOG.md                            # Keep a Changelog ledger of every change
+  overview.md            # the lean PRD: problem, users, goals, scope + no-gos,
+                         #   the FEATURE INDEX
+  features/<slug>.md     # one lean spec per feature (WHAT-only, user stories +
+                         #   EARS acceptance)
+  CHANGELOG.md           # Keep a Changelog ledger of every change
 ```
 
-Each layer is **Markdown that people read and sign** plus a derived `*-data.yaml`
-that downstream tools consume. The Markdown wins every disagreement; the YAML is
-regenerated and re-stamped, never hand-edited. The architecture layer
-(`architecture.md` + `decisions/ADR-*.md`) is produced by the separate
+**One file per document.** Each spec is a single Markdown file: the YAML
+**frontmatter is the machine-readable contract** (meta + requirements / feature
+index) that the validator parses, the fingerprint hashes, and the downstream
+skills consume; the **body is human narrative** for reviewers. There is no
+separately derived `*-data.yaml` -- the bytes a human reviews and signs ARE the
+bytes the pipeline validates and builds from. The frontmatter is authored by
+hand and parsed deterministically; only `meta.fingerprint` and
+`meta.feature_version` are machine-stamped. (This closes the integrity gap in the
+older two-file design, where an LLM re-derived a second copy the human never
+signed and the gate only checked that copy against itself.) The architecture
+layer (`architecture.md` + `decisions/ADR-*.md`) is produced by the separate
 **`make-arch`** skill and referenced from here by ADR id -- this skill never
 decides HOW.
 
@@ -47,7 +54,7 @@ And two flags that compose with the modes:
   a real architectural decision arises. Rigor is **opt-out**: the full model is the
   default; `--lite` is the deliberate minimization.
 - **`--trivial`** -- a typo or wording fix that changes no ID's *meaning*. Records
-  the edit in the CHANGELOG without a full re-derive/reconcile round-trip. The
+  the edit in the CHANGELOG without a full re-stamp/reconcile round-trip. The
   validator's fingerprint gate enforces honesty: if the edit actually changed
   meaning (the fingerprint moved), it is not trivial -- reclassify. See
   `references/amend-and-changelog.md` §2.
@@ -59,20 +66,21 @@ And two flags that compose with the modes:
 - `assets/feature-template.md` -- the per-feature template (WHAT-only, EARS).
 - `assets/changelog-entry-template.md` -- the structured CHANGELOG entry; its
   Added/Modified/Removed id lists are what `make-issues` reconciles against.
-- `assets/spec-data-schema.yaml` -- the schema for both data-file shapes, the
+- `assets/spec-data-schema.yaml` -- the schema for both frontmatter shapes, the
   fingerprint **IN/OUT contract**, and validator rules S-001..S-012. Read before
-  deriving any YAML.
+  authoring any spec.
 - `references/kickoff.md` -- greenfield: scope the corpus, consolidate the
-  overview, distill features, derive + validate.
+  overview, distill features, author + stamp + validate.
 - `references/amend-and-changelog.md` -- brownfield: classify, diff-don't-rewrite,
   supersede-not-delete, the CHANGELOG delta, the `--trivial` lane.
 - `references/ears-grammar.md` -- the five EARS templates the validator parses.
 - `references/id-grammar.md` -- the pinned, feature-namespaced ID grammars and the
   traceability chains.
-- `scripts/stamp_fingerprint.py` -- run after deriving any data file: stamps each
-  fingerprint + content version and syncs the Feature Index.
+- `scripts/stamp_fingerprint.py` -- run after authoring or editing any spec:
+  stamps each fingerprint + content version into the frontmatter (the body is
+  preserved) and syncs the Feature Index.
 - `scripts/validate_spec.py` -- run after every stamp. Never present a spec whose
-  data file fails validation.
+  validation fails.
 
 ## Location & filing
 
@@ -92,7 +100,7 @@ prior version, read it from git.
   `governed_by`, `depends_on`, interface -- the IN set), excluding advisory fields
   (priority, hints, notes -- the OUT set). The validator refuses to pass when a
   stored fingerprint ≠ its recompute. So a change of *meaning* blocks the run until
-  you re-derive and re-stamp; a priority tweak does not. We claim it **detects and
+  you re-stamp; a priority tweak does not. We claim it **detects and
   blocks internal drift**, never that drift is impossible.
 - **No-vanishing against `origin/main`.** The validator diffs IDs against the
   `origin/main` baseline and **fails closed** when that baseline can't be trusted --
@@ -100,18 +108,21 @@ prior version, read it from git.
   than silencing it; `--no-baseline` is only for the greenfield first commit before
   `main` carries the docs.
 
-## The derive -> stamp -> validate loop (both modes)
+## The author -> stamp -> validate loop (both modes)
 
-1. Author/edit the Markdown (the template comments are the rules).
-2. Derive the affected `*-data.yaml` per the schema.
-3. `python scripts/stamp_fingerprint.py docs/specs`
-4. `python scripts/validate_spec.py docs/specs` (add `--no-baseline` only on the
+1. Author or edit the single Markdown file -- the structured contract in the
+   frontmatter (per the schema), the human narrative in the body. The template
+   comments are the rules. There is no separate data file to derive.
+2. `python scripts/stamp_fingerprint.py docs/specs` -- stamps the fingerprint and
+   content version into each frontmatter (your body is preserved) and syncs the
+   Feature Index.
+3. `python scripts/validate_spec.py docs/specs` (add `--no-baseline` only on the
    greenfield first commit). Fix every failure before presenting; if a fix means
    downgrading an unsourced claim to an open question, say so in your report.
 
 For a large corpus, push the bulky, self-contained work to sub-agents -- one reader
 per source returns a cited digest; consolidation, ID assignment, and the
-derive/validate loop stay coordinated centrally (see `references/kickoff.md`).
+stamp/validate loop stay coordinated centrally (see `references/kickoff.md`).
 
 ## Honest limits
 

@@ -14,11 +14,16 @@ Usage:
 Exit codes: 0 = pass (S-012 budget warnings do not fail), 1 = violations,
             2 = file/parse/usage error.
 
+Each spec document is a SINGLE markdown file: the YAML frontmatter is the
+machine-readable contract, the body is human narrative. The frontmatter is
+parsed deterministically here -- there is no separately-derived data file, so
+the bytes a human reviews and signs are the bytes that are validated and hashed.
+
 THE KEYSTONE (S-006): meta.fingerprint is recomputed over CONTRACT content only
 (the IN/OUT contract in assets/spec-data-schema.yaml) and the run FAILS CLOSED
 on any mismatch. A change of meaning (an acceptance criterion, a description, a
-governed_by link) flips the fingerprint and blocks the run until the Skill
-re-derives and re-stamps; an advisory change (priority, notes) does neither.
+governed_by link) flips the fingerprint and blocks the run until you re-stamp;
+an advisory change (priority, notes) does neither.
 
 NO-VANISHING (S-005) is checked against a named git ref (default origin/main)
 and FAILS CLOSED when the baseline cannot be trusted -- no git repo, a shallow
@@ -66,7 +71,7 @@ def _strip_out(obj):
 
 
 def compute_fingerprint(doc):
-    """sha256 over the data file with the OUT fields removed everywhere.
+    """sha256 over the doc (frontmatter) with the OUT fields removed everywhere.
     The Skill's stamp step uses this identical normalization, so the two
     never disagree. meta.feature_version is the first 12 hex of this digest."""
     stripped = _strip_out(copy.deepcopy(doc))
@@ -104,23 +109,51 @@ def ears_kind(text):
     return "ubiquitous"
 
 
-# ── loading ──────────────────────────────────────────────────────────
+# ── loading: single-file specs (frontmatter is the signed contract) ───
+# A spec document is ONE markdown file whose YAML frontmatter carries the
+# machine-readable contract (meta + requirements / feature_index) and whose
+# body is human narrative. The frontmatter is parsed deterministically here
+# -- there is no separately-derived data file, so the bytes a human reviews
+# and signs are the bytes that are validated and hashed.
+FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
+
+
+def split_frontmatter(text):
+    """(frontmatter_text, body) for a leading --- ... --- block, else (None, text)."""
+    m = FRONTMATTER_RE.match(text)
+    if not m:
+        return None, text
+    return m.group(1), text[m.end():]
+
+
+def parse_frontmatter(text):
+    """The structured doc embedded in a spec file's frontmatter ({} if none)."""
+    fm, _ = split_frontmatter(text)
+    if fm is None:
+        return {}
+    return yaml.safe_load(fm) or {}
+
+
 def load_yaml(path):
     with open(path) as f:
         return yaml.safe_load(f) or {}
 
 
+def load_spec_doc(path):
+    """Parse a single-file spec's frontmatter into the structured doc dict."""
+    with open(path) as f:
+        return parse_frontmatter(f.read())
+
+
 def feature_files(spec_dir):
-    """Return [(slug, md_path, data_path)] for every features/<slug>-data.yaml."""
+    """Return [(slug, md_path)] for every features/<slug>.md."""
     fdir = os.path.join(spec_dir, "features")
     out = []
     if not os.path.isdir(fdir):
         return out
     for name in sorted(os.listdir(fdir)):
-        if name.endswith("-data.yaml"):
-            slug = name[: -len("-data.yaml")]
-            out.append((slug, os.path.join(fdir, f"{slug}.md"),
-                        os.path.join(fdir, name)))
+        if name.endswith(".md"):
+            out.append((name[: -len(".md")], os.path.join(fdir, name)))
     return out
 
 
@@ -147,7 +180,7 @@ def _git(args, cwd):
 
 
 def baseline_ids(spec_dir, ref, fail):
-    """Collect the UNION of ids across every *-data.yaml under spec_dir at the
+    """Collect the UNION of ids across every spec .md under spec_dir at the
     baseline ref. Returns a set, or None if the baseline cannot be trusted
     (the caller has already recorded the fail-closed S-005 violation)."""
     cwd = os.path.abspath(spec_dir)
@@ -172,7 +205,9 @@ def baseline_ids(spec_dir, ref, fail):
     # CWD-relative paths, so `git show` must use the `:./` form (also
     # cwd-relative) to match. If the dir does not exist at the baseline
     # (greenfield against a resolvable main), the listing is empty -- nothing
-    # prior, nothing can vanish.
+    # prior, nothing can vanish. Spec docs are single .md files; their ids
+    # live in the frontmatter (CHANGELOG.md and other .md carry no frontmatter
+    # ids, so they contribute none).
     listing = _git(["ls-tree", "-r", "--name-only", ref, "--", "."], cwd)
     if listing.returncode != 0:
         fail("S-005", f"cannot list the spec tree at '{ref}' (git ls-tree failed: "
@@ -180,7 +215,7 @@ def baseline_ids(spec_dir, ref, fail):
         return None
     ids = set()
     for path in listing.stdout.splitlines():
-        if not path.endswith("-data.yaml"):
+        if not path.endswith(".md"):
             continue
         show = _git(["show", f"{ref}:./{path}"], cwd)
         if show.returncode != 0:
@@ -188,7 +223,7 @@ def baseline_ids(spec_dir, ref, fail):
                           f"{show.stderr.strip()}) -- baseline incomplete, refusing to pass")
             return None
         try:
-            ids |= ids_from_any(yaml.safe_load(show.stdout) or {})
+            ids |= ids_from_any(parse_frontmatter(show.stdout))
         except yaml.YAMLError:
             continue  # an unparseable historical file can't witness an id
     return ids
@@ -209,9 +244,9 @@ def main():
     args = ap.parse_args()
 
     spec_dir = args.spec_dir
-    overview_path = os.path.join(spec_dir, "overview-data.yaml")
+    overview_path = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview_path):
-        print(f"ERROR: no overview-data.yaml under {spec_dir}", file=sys.stderr)
+        print(f"ERROR: no overview.md under {spec_dir}", file=sys.stderr)
         sys.exit(2)
 
     errors, warns = [], []
@@ -224,27 +259,27 @@ def main():
 
     # ---- load everything ------------------------------------------------
     try:
-        overview = load_yaml(overview_path)
+        overview = load_spec_doc(overview_path)
     except Exception as e:
         print(f"ERROR: cannot parse {overview_path}: {e}", file=sys.stderr)
         sys.exit(2)
-    feats = []  # (slug, md_path, data_path, doc)
-    for slug, md_path, data_path in feature_files(spec_dir):
+    feats = []  # (slug, md_path, doc)
+    for slug, md_path in feature_files(spec_dir):
         try:
-            feats.append((slug, md_path, data_path, load_yaml(data_path)))
+            feats.append((slug, md_path, load_spec_doc(md_path)))
         except Exception as e:
-            fail("S-001", f"cannot parse {data_path}: {e}")
+            fail("S-001", f"cannot parse {md_path}: {e}")
 
     # ---- S-001: well-formed --------------------------------------------
     o_meta = overview.get("meta") or {}
     if not isinstance(overview.get("meta"), dict):
-        fail("S-001", "overview-data.yaml: meta block missing or not a mapping")
+        fail("S-001", "overview.md: meta block missing or not a mapping")
     for key in ("project_version", "mode", "status", "fingerprint"):
         if key not in o_meta:
-            fail("S-001", f"overview-data.yaml: meta missing '{key}'")
+            fail("S-001", f"overview.md: meta missing '{key}'")
     if "feature_index" not in overview:
-        fail("S-001", "overview-data.yaml: missing 'feature_index'")
-    for slug, _md, dpath, doc in feats:
+        fail("S-001", "overview.md: missing 'feature_index'")
+    for slug, dpath, doc in feats:
         m = doc.get("meta") or {}
         if not isinstance(doc.get("meta"), dict):
             fail("S-001", f"{dpath}: meta block missing or not a mapping")
@@ -263,11 +298,11 @@ def main():
             return
         actual = compute_fingerprint(doc)
         if stored != actual:
-            fail("S-006", f"{label}: fingerprint mismatch -- the data file drifted "
-                          "from its markdown or was hand-edited (re-derive and re-stamp)")
+            fail("S-006", f"{label}: fingerprint mismatch -- the spec changed since it "
+                          "was last stamped (re-run scripts/stamp_fingerprint.py)")
 
-    check_fingerprint("overview-data.yaml", overview)
-    for slug, _md, dpath, doc in feats:
+    check_fingerprint("overview.md", overview)
+    for slug, dpath, doc in feats:
         check_fingerprint(dpath, doc)
 
     # ---- S-002 / S-003 / S-007: ids, uniqueness, namespacing -----------
@@ -291,7 +326,7 @@ def main():
             fail("S-002", f"malformed goal id '{gid}' (want ^G-\\d{{3,}}$)")
         register(gid, "overview")
 
-    for slug, _md, dpath, doc in feats:
+    for slug, dpath, doc in feats:
         m = doc.get("meta") or {}
         prefix = str(m.get("prefix") or "")
         if not PREFIX_RE.match(prefix):
@@ -332,7 +367,7 @@ def main():
                 adr_files.add(mo.group(1))
 
     # ---- S-004 / S-010 / S-011: per-requirement references + EARS ------
-    for slug, _md, dpath, doc in feats:
+    for slug, dpath, doc in feats:
         for r in doc.get("requirements") or []:
             if not isinstance(r, dict) or r.get("status") not in (None, "active"):
                 continue  # superseded/deferred reqs are kept but not enforced
@@ -404,8 +439,8 @@ def main():
     for rslug in index:
         if rslug not in feat_slugs:
             fail("S-008", f"feature_index lists '{rslug}' but features/{rslug}.md "
-                          "(data file) does not exist")
-    for slug, _md, dpath, doc in feats:
+                          "does not exist")
+    for slug, dpath, doc in feats:
         row = index.get(slug)
         if not row:
             continue
@@ -427,7 +462,7 @@ def main():
                               "missing (supersede or defer; never delete)")
 
     # ---- S-012: lean budget (WARNING) ----------------------------------
-    for slug, md_path, _dpath, doc in feats:
+    for slug, md_path, doc in feats:
         active = [r for r in (doc.get("requirements") or [])
                   if isinstance(r, dict) and r.get("status") in (None, "active")]
         if len(active) > args.budget_reqs:

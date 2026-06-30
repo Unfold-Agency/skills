@@ -66,19 +66,30 @@ def codes(out):
 
 
 def edit_yaml(path, fn):
+    """Edit the YAML frontmatter of a single-file spec in place, preserving body."""
     with open(path) as f:
-        doc = yaml.safe_load(f)
+        text = f.read()
+    fm, body = _vs.split_frontmatter(text)
+    doc = (yaml.safe_load(fm) if fm is not None else {}) or {}
     fn(doc)
+    dumped = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
     with open(path, "w") as f:
-        yaml.safe_dump(doc, f, sort_keys=False, allow_unicode=True)
+        f.write("---\n" + dumped + "---\n" + (body or ""))
+
+
+def write_doc(path, doc, body="\n# fixture\n"):
+    """Write a new single-file spec from a doc dict + a minimal body."""
+    dumped = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+    with open(path, "w") as f:
+        f.write("---\n" + dumped + "---\n" + body)
 
 
 def feat(spec_dir, slug):
-    return os.path.join(spec_dir, "features", f"{slug}-data.yaml")
+    return os.path.join(spec_dir, "features", f"{slug}.md")
 
 
 def overview(spec_dir):
-    return os.path.join(spec_dir, "overview-data.yaml")
+    return os.path.join(spec_dir, "overview.md")
 
 
 # ── 1. base passes ───────────────────────────────────────────────────
@@ -166,8 +177,7 @@ def m_s003_dup_prefix(d):
             "priority": "could", "architecture_hints": "", "related_files": [],
             "notes": "", "status": "active"}],
     }
-    with open(feat(d, "extra"), "w") as f:
-        yaml.safe_dump(extra, f, sort_keys=False, allow_unicode=True)
+    write_doc(feat(d, "extra"), extra)
     edit_yaml(overview(d), lambda doc: doc["feature_index"].append(
         {"slug": "extra", "prefix": "CHK", "title": "Extra",
          "feature_version": "", "status": "active"}))
@@ -385,8 +395,7 @@ else:
 
 # ── 7. compute_fingerprint: OUT keys stripped at EVERY level (C1 unit) ───
 def _load(path):
-    with open(path) as f:
-        return yaml.safe_load(f)
+    return _vs.load_spec_doc(path)
 
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
@@ -456,15 +465,15 @@ def _run_baseline(overrides):
 res, errs = _run_baseline({"ls_tree": _FakeProc(128, "", "fatal: not a tree object")})
 check("baseline_ids: ls-tree failure fails CLOSED (None + S-005), not empty set",
       res is None and "S-005" in errs)
-res, errs = _run_baseline({"ls_tree": _FakeProc(0, "overview-data.yaml\n"),
+res, errs = _run_baseline({"ls_tree": _FakeProc(0, "overview.md\n"),
                            "show": _FakeProc(128, "", "fatal: bad object")})
 check("baseline_ids: an unreadable baseline blob fails CLOSED (None + S-005)",
       res is None and "S-005" in errs)
 res, errs = _run_baseline({"shallow": _FakeProc(128, "", "fatal")})
 check("baseline_ids: an erroring shallow probe fails CLOSED (None + S-005)",
       res is None and "S-005" in errs)
-res, errs = _run_baseline({"ls_tree": _FakeProc(0, "overview-data.yaml\n"),
-                           "show": _FakeProc(0, "goals:\n  - id: G-001\n")})
+res, errs = _run_baseline({"ls_tree": _FakeProc(0, "overview.md\n"),
+                           "show": _FakeProc(0, "---\ngoals:\n- id: G-001\n---\n")})
 check("baseline_ids: a clean baseline returns the prior id set (not None)",
       res == {"G-001"} and not errs)
 

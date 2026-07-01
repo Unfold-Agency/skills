@@ -417,7 +417,8 @@ def main():
     # deferred features are kept but not enforced (mirrors S-004).
     goal_ids = set(filter(None, overview_ids(overview)))
     for slug, dpath, doc in feats:
-        if (doc.get("meta") or {}).get("status") not in (None, "active"):
+        meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+        if meta.get("status") not in (None, "active"):
             continue
         for gid in doc.get("supports") or []:
             if not GOAL_ID_RE.match(str(gid)):

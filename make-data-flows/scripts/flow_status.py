@@ -87,7 +87,9 @@ def build_plan(spec_dir, scope, force):
     for slug, path in files:
         try:
             features.append(plan_feature(path, force))
-        except ValueError as e:
+        except (ValueError, OSError) as e:
+            # A malformed region (ValueError) or an unreadable file (OSError) is
+            # blocking drift, not a crash -- record it and keep planning.
             blocking.append(str(e))
 
     known = {f["slug"] for f in features}

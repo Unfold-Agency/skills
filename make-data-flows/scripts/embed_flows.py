@@ -196,7 +196,9 @@ def main():
             continue
         try:
             result = embed_feature(path, spec.get("flows") or [], now)
-        except EmbedError as e:
+        except (EmbedError, OSError) as e:
+            # A defensive-assert failure or a file read/write error on one feature
+            # must not crash the run -- report it and keep processing the rest.
             print(f"ERROR: {e}", file=sys.stderr)
             failed = True
             continue

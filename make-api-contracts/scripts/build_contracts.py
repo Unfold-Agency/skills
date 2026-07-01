@@ -49,7 +49,7 @@ from contract_fingerprint import compute_doc_fingerprint, compute_op_fingerprint
 from contractlib import (  # noqa: E402
     HTTP_METHODS, HUMAN_OP_FIELDS, OPENAPI_VERSION, OPERATION_ID_RE, X_FEATURE,
     X_FLOW, X_INTEGRATION, X_OP_FP, X_SOURCE_VERSION, X_STATUS, X_TRACE_ADR,
-    X_TRACE_REQ, dump_doc, read_arch, read_features, strip_volatile,
+    X_TRACE_REQ, as_list, dump_doc, read_arch, read_features, strip_volatile,
 )
 
 try:
@@ -75,6 +75,8 @@ def load_openapi(path):
         doc = yaml.safe_load(text) or {}
     except yaml.YAMLError as e:
         raise BuildError(f"cannot parse {path}: {e}")
+    if not isinstance(doc, dict):
+        raise BuildError(f"invalid OpenAPI document in {path} (expected a mapping)")
     return doc, text
 
 
@@ -128,6 +130,8 @@ def detect(doc, features):
 
 # ── upsert ───────────────────────────────────────────────────────────────────
 def _validate_op(spec, features):
+    if not isinstance(spec, dict):
+        raise BuildError(f"operation entry is not a mapping: {spec!r}")
     oid = spec.get("operationId")
     if not oid or not OPERATION_ID_RE.match(oid):
         raise BuildError(f"operation '{oid}' bad operationId (want <feature-slug>.<verbResource>)")
@@ -152,10 +156,10 @@ def upsert(doc, spec, features, scope):
     op = {
         "operationId": oid,
         "tags": [feat],
-        X_TRACE_REQ: sorted(str(x) for x in (spec.get("trace_req") or [])),
+        X_TRACE_REQ: sorted(str(x) for x in as_list(spec.get("trace_req"))),
         X_FEATURE: feat,
         X_SOURCE_VERSION: finfo["feature_version"],
-        X_TRACE_ADR: sorted(str(x) for x in (spec.get("trace_adr") or [])),
+        X_TRACE_ADR: sorted(str(x) for x in as_list(spec.get("trace_adr"))),
     }
     if spec.get("integration"):
         op[X_INTEGRATION] = spec["integration"]
@@ -188,14 +192,23 @@ def upsert(doc, spec, features, scope):
             if spec.get(hf):
                 op[hf] = spec[hf]
 
-    doc.setdefault("paths", {}).setdefault(path, {})[method] = op
+    # Defensively re-init any section a malformed YAML parsed as null (setdefault
+    # on an existing null key returns None, not the fallback).
+    if not isinstance(doc.get("paths"), dict):
+        doc["paths"] = {}
+    doc["paths"].setdefault(path, {})[method] = op
     # tag registry
-    tags = doc.setdefault("tags", [])
-    if not any(t.get("name") == feat for t in tags if isinstance(t, dict)):
-        tags.append({"name": feat})
+    if not isinstance(doc.get("tags"), list):
+        doc["tags"] = []
+    if not any(t.get("name") == feat for t in doc["tags"] if isinstance(t, dict)):
+        doc["tags"].append({"name": feat})
     # schemas
+    if not isinstance(doc.get("components"), dict):
+        doc["components"] = {}
+    if not isinstance(doc["components"].get("schemas"), dict):
+        doc["components"]["schemas"] = {}
     for name, schema in (spec.get("schemas") or {}).items():
-        doc.setdefault("components", {}).setdefault("schemas", {})[name] = schema
+        doc["components"]["schemas"][name] = schema
     return "wrote"
 
 
@@ -266,7 +279,9 @@ def build_ledger(doc):
 # ── write with stamp + no-op guard ───────────────────────────────────────────
 def stamp_and_write(doc, out_dir, header, prior_text, prior_doc, now):
     doc.setdefault("openapi", OPENAPI_VERSION)
-    info = doc.setdefault("info", {"title": "API", "version": "0.1"})
+    if not isinstance(doc.get("info"), dict):
+        doc["info"] = {"title": "API", "version": "0.1"}
+    info = doc["info"]
     fp = compute_doc_fingerprint(doc)
     info["x-fingerprint"] = fp
     info["x-contract-version"] = fp[:12]
@@ -369,15 +384,24 @@ def main():
     except (OSError, json.JSONDecodeError) as e:
         print(f"ERROR: cannot read payload: {e}", file=sys.stderr)
         sys.exit(2)
+    if not isinstance(payload, dict):
+        print("ERROR: payload must be a JSON object", file=sys.stderr)
+        sys.exit(1)
 
     scope = set() if args.all else set(args.feature)
     prior_ops = sum(1 for _ in iter_operations(prior_doc)) if prior_doc else 0
-    doc = prior_doc if prior_doc is not None else seed_doc(payload.get("info"))
-    if prior_doc is not None and payload.get("info"):
-        doc["info"].update(payload["info"])
+    payload_info = payload.get("info") if isinstance(payload.get("info"), dict) else None
+    doc = prior_doc if prior_doc is not None else seed_doc(payload_info)
+    if prior_doc is not None and payload_info:
+        if not isinstance(doc.get("info"), dict):
+            doc["info"] = {}
+        doc["info"].update(payload_info)
 
+    operations = payload.get("operations")
+    if not isinstance(operations, list):
+        operations = []
     try:
-        results = [upsert(doc, spec, features, scope) for spec in payload.get("operations") or []]
+        results = [upsert(doc, spec, features, scope) for spec in operations]
     except BuildError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)

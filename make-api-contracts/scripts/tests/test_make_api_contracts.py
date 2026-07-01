@@ -10,7 +10,7 @@ import build_contracts as bc
 import contract_fingerprint as cf
 import validate_contracts as vc
 from contractlib import (X_FEATURE, X_FLOW, X_OP_FP, X_SOURCE_VERSION, X_STATUS,
-                         X_TRACE_REQ, read_features, split_frontmatter)
+                         X_TRACE_REQ, as_list, read_features, split_frontmatter)
 from validate_spec import compute_fingerprint  # make-spec, via conftest
 
 
@@ -214,6 +214,44 @@ def test_validate_ac004_live_op_tracing_inactive_req_fails(spec_dir):
     features = read_features(spec_dir)
     fails, _ = vc.validate(doc, features, {"ADR-0001"})
     assert any("AC-004" in f for f in fails)
+
+
+def test_as_list_coercion():
+    assert as_list(None) == []
+    assert as_list("IR-CHK-001") == ["IR-CHK-001"]        # scalar -> single-item, not shredded
+    assert as_list(["a", "b"]) == ["a", "b"]
+    assert as_list(("a",)) == ["a"]
+
+
+def test_upsert_coerces_string_trace_req(spec_dir):
+    features = read_features(spec_dir)
+    doc = bc.seed_doc({"title": "T", "version": "0.1"})
+    # A payload author writes trace_req as a bare string instead of a list.
+    spec = _op("checkout.createOrder", "post", "/orders", "checkout", "IR-CHK-001")
+    bc.upsert(doc, spec, features, set())
+    assert doc["paths"]["/orders"]["post"][X_TRACE_REQ] == ["IR-CHK-001"]  # not ['I','R',...]
+
+
+def test_build_survives_null_yaml_sections(spec_dir):
+    # A malformed/empty openapi doc where sections parsed as null must not crash.
+    features = read_features(spec_dir)
+    doc = {"openapi": "3.1.0", "info": None, "paths": None, "tags": None, "components": None}
+    bc.upsert(doc, CK_OP, features, set())
+    bc.tombstone_orphans(doc, features, set())
+    out = os.path.join(spec_dir, "api")
+    bc.stamp_and_write(doc, out, "# API Contracts\n", None, None, "2026-07-01T00:00:00Z")
+    assert doc["paths"]["/orders"]["post"]["operationId"] == "checkout.createOrder"
+    assert doc["info"]["x-fingerprint"]
+
+
+def test_validate_coerces_string_trace_req(spec_dir):
+    doc, _ = _build(spec_dir, [CK_OP])
+    # Simulate a hand-written scalar x-trace-req in the YAML.
+    doc["paths"]["/orders"]["post"][X_TRACE_REQ] = "IR-CHK-001"
+    features = read_features(spec_dir)
+    fails, _ = vc.validate(doc, features, {"ADR-0001"})
+    # It resolves as one active id, not shredded chars -> no AC-004 failure.
+    assert not any("AC-004" in f for f in fails)
 
 
 def test_validate_ac002_duplicate_operation_id(spec_dir):

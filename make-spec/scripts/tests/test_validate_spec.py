@@ -284,6 +284,13 @@ def m_s013_dangling_supports(d):
               lambda doc: doc.__setitem__("supports", ["G-999"]))
 
 
+def m_s013_nonlist_supports(d):
+    # a bare scalar instead of a list (supports: G-001). The guard must fire one
+    # S-013 rather than iterating the string char-by-char into a noisy cascade.
+    edit_yaml(feat(d, "checkout"),
+              lambda doc: doc.__setitem__("supports", "G-001"))
+
+
 # (rule, mutate_fn, restamp?) -- restamp so only the intended rule trips
 MUTATIONS = [
     ("S-001", m_s001, True),
@@ -304,6 +311,7 @@ MUTATIONS = [
     ("S-010", m_s010_non_ears, True),
     ("S-011", m_s011_no_unwanted, True),
     ("S-013", m_s013_dangling_supports, True),
+    ("S-013", m_s013_nonlist_supports, True),
 ]
 
 for rule, mut, restamp in MUTATIONS:

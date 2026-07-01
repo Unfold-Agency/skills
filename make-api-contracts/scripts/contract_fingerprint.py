@@ -26,7 +26,7 @@ import sys
 
 sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.abspath(__file__)))
 from contractlib import (  # noqa: E402
-    HTTP_METHODS, X_INTEGRATION, X_TRACE_ADR, X_TRACE_REQ, strip_volatile,
+    HTTP_METHODS, X_INTEGRATION, X_TRACE_ADR, X_TRACE_REQ, as_list, strip_volatile,
 )
 
 try:
@@ -55,8 +55,8 @@ def compute_op_fingerprint(op, method, path):
         "path": path,
         "requestBody": op.get("requestBody"),
         "responses": op.get("responses"),
-        "trace_req": sorted(str(x) for x in (op.get(X_TRACE_REQ) or [])),
-        "trace_adr": sorted(str(x) for x in (op.get(X_TRACE_ADR) or [])),
+        "trace_req": sorted(str(x) for x in as_list(op.get(X_TRACE_REQ))),
+        "trace_adr": sorted(str(x) for x in as_list(op.get(X_TRACE_ADR))),
         "integration": _norm(op.get(X_INTEGRATION) or ""),
     }
     # Drop empty keys so an absent requestBody and requestBody: null hash alike.
@@ -71,7 +71,10 @@ def compute_doc_fingerprint(doc):
 
 def iter_operations(doc):
     """Yield (operationId, method, path, op) for every operation in the doc."""
-    for path, item in (doc.get("paths") or {}).items():
+    paths = doc.get("paths")
+    if not isinstance(paths, dict):
+        return
+    for path, item in paths.items():
         if not isinstance(item, dict):
             continue
         for method, op in item.items():

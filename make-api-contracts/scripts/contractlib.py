@@ -217,8 +217,8 @@ def canonical_doc(doc):
     if not isinstance(paths, dict):
         paths = {}
     out["paths"] = {
-        p: {m: _ordered(paths[p][m], _OP_ORDER) if isinstance(paths[p][m], dict) else paths[p][m]
-            for m in sorted(paths[p])}
+        p: ({m: _ordered(paths[p][m], _OP_ORDER) if isinstance(paths[p][m], dict) else paths[p][m]
+             for m in sorted(paths[p])} if isinstance(paths[p], dict) else paths[p])
         for p in sorted(paths)
     }
     comp = out.get("components")

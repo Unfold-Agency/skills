@@ -91,7 +91,9 @@ def validate(doc, features, adr_ids):
         warns.append(f"AC-001: {msg} -- structural check only")
         if "info" not in doc or "paths" not in doc:
             fails.append("AC-001: missing required top-level keys (info/paths)")
-        missing_refs = _refs(doc) - set((doc.get("components") or {}).get("schemas") or {})
+        components = doc.get("components")
+        schemas = components.get("schemas") if isinstance(components, dict) else None
+        missing_refs = _refs(doc) - set(schemas or {})
         if missing_refs:
             fails.append(f"AC-001: unresolved $ref schema(s): {sorted(missing_refs)}")
     elif ok is False:

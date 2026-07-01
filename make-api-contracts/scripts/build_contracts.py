@@ -111,7 +111,7 @@ def detect(doc, features):
     stale, orphan = [], []
     traced = set()
     for oid, method, path, op in iter_operations(doc):
-        reqs = [str(x) for x in (op.get(X_TRACE_REQ) or [])]
+        reqs = [str(x) for x in as_list(op.get(X_TRACE_REQ))]
         traced.update(reqs)
         feat = op.get(X_FEATURE)
         if reqs and not (set(reqs) & active):
@@ -219,7 +219,7 @@ def tombstone_orphans(doc, features, scope):
               if r["status"] == "active"}
     tombstoned, out_of_scope = [], []
     for oid, method, path, op in iter_operations(doc):
-        reqs = [str(x) for x in (op.get(X_TRACE_REQ) or [])]
+        reqs = [str(x) for x in as_list(op.get(X_TRACE_REQ))]
         if not reqs or (set(reqs) & active):
             continue  # still has a live requirement
         feat = op.get(X_FEATURE)
@@ -244,8 +244,8 @@ def render_markdown(doc, header):
         lines.append("| Operation | Method | Path | Traces to | Notes |")
         lines.append("|---|---|---|---|---|")
         for oid, method, path, op in sorted(by_feat[feat]):
-            traces = ", ".join(op.get(X_TRACE_REQ) or [])
-            adrs = ", ".join(op.get(X_TRACE_ADR) or [])
+            traces = ", ".join(as_list(op.get(X_TRACE_REQ)))
+            adrs = ", ".join(as_list(op.get(X_TRACE_ADR)))
             trace_cell = traces + (f" / {adrs}" if adrs else "")
             notes = []
             if op.get(X_STATUS) == "tombstoned":

@@ -646,10 +646,13 @@ def resolve_generated_at(data, prior_data, now):
     if prior_data and isinstance(prior_data.get("meta"), dict):
         prev_at = prior_data["meta"].get("generatedAt")
         # Compare without copying: null the timestamp in place, then restore it.
-        # prior_data is not used after this, but restoring keeps the function pure.
-        prior_data["meta"]["generatedAt"] = None
-        is_match = _canonical(prior_data) == candidate
-        prior_data["meta"]["generatedAt"] = prev_at
+        # The try/finally guarantees prior_data is restored even if _canonical
+        # raises, keeping the function pure on every path.
+        try:
+            prior_data["meta"]["generatedAt"] = None
+            is_match = _canonical(prior_data) == candidate
+        finally:
+            prior_data["meta"]["generatedAt"] = prev_at
         if prev_at and is_match:
             return prev_at
     return now
@@ -746,8 +749,18 @@ def main():
     try:
         data = generate(args.spec_dir, args.out, issues, resolve_repo(args.repo),
                         now, allow_empty=args.allow_empty)
-    except (FileNotFoundError, yaml.YAMLError) as e:
-        print(f"ERROR: cannot read specs under {args.spec_dir}: {e}", file=sys.stderr)
+    except yaml.YAMLError as e:
+        print(f"ERROR: cannot parse specs under {args.spec_dir}: {e}", file=sys.stderr)
+        sys.exit(2)
+    except FileNotFoundError as e:
+        # FileNotFoundError is an OSError subclass, so a missing INTERNAL asset
+        # (template.html) during the write phase would otherwise be misreported as
+        # a spec-read error. Attribute it by whether the path is under the spec dir.
+        if e.filename and not os.path.abspath(e.filename).startswith(os.path.abspath(args.spec_dir)):
+            print(f"ERROR: filesystem error reading specs or writing to {args.out}: {e}",
+                  file=sys.stderr)
+        else:
+            print(f"ERROR: cannot read specs under {args.spec_dir}: {e}", file=sys.stderr)
         sys.exit(2)
     except OSError as e:
         print(f"ERROR: filesystem error reading specs or writing to {args.out}: {e}",

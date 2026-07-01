@@ -68,7 +68,12 @@ check('negative limit -> 1 (nonsense falls to the default)', resolveLimit({ limi
 // Draining is the explicit opt-in: noLimit:true or limit:0.
 check('limit:0 -> Infinity (drain -- back-compat with the old signal)',
   resolveLimit({ limit: 0 }) === Infinity)
+check('limit:"0" -> Infinity (drain -- string form)', resolveLimit({ limit: '0' }) === Infinity)
 check('noLimit:true -> Infinity (drain)', resolveLimit({ noLimit: true }) === Infinity)
+// An explicit Infinity must NOT collapse to 1 (parseInt(Infinity) is NaN).
+check('limit:Infinity -> Infinity (explicit unlimited)', resolveLimit({ limit: Infinity }) === Infinity)
+check('limit:"Infinity" -> Infinity (explicit unlimited, string form)',
+  resolveLimit({ limit: 'Infinity' }) === Infinity)
 check('noLimit:true wins over a positive limit -> Infinity',
   resolveLimit({ noLimit: true, limit: 2 }) === Infinity)
 check('noLimit:false with a positive limit -> that limit',

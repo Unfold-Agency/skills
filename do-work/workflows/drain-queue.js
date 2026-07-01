@@ -63,13 +63,17 @@ const PARALLEL = Math.max(1, Math.min(3, parseInt(A.parallel, 10) || 1))
 const ISO = PARALLEL > 1 ? { isolation: 'worktree' } : {}
 // Resolve the per-run issue cap. The default is ONE issue -- a bounded, observable
 // run -- so a bare invocation never runs away over the whole backlog. Draining is an
-// explicit opt-in: noLimit:true (or limit:0) processes every actionable issue across
-// re-select rounds; a positive limit caps at exactly N; junk / negative falls to the
-// default 1. Kept pure so it is unit-tested against the source (see scripts/tests).
+// explicit opt-in in any form a caller might reach for: noLimit:true, limit:0, or an
+// explicit limit:Infinity ("Infinity"). A positive limit caps at exactly N; junk /
+// negative falls to the default 1. (parseInt(Infinity) is NaN, so the unlimited forms
+// are matched BEFORE parsing, or an explicit Infinity would wrongly collapse to 1.)
+// Kept pure so it is unit-tested against the source (see scripts/tests).
 function resolveLimit(a) {
-  const n = parseInt((a || {}).limit, 10)
-  if ((a || {}).noLimit === true || n === 0) return Infinity  // --no-limit / drain
-  return n > 0 ? n : 1                                        // N, else the default 1
+  const raw = (a || {}).limit
+  if ((a || {}).noLimit === true || raw === Infinity || raw === 'Infinity') return Infinity
+  const n = parseInt(raw, 10)
+  if (n === 0) return Infinity   // limit:0 (or "0") == --no-limit / drain
+  return n > 0 ? n : 1           // N, else the default 1
 }
 const LIMIT = resolveLimit(A)
 const PHASE = parseInt(A.phase, 10) > 0 ? parseInt(A.phase, 10) : null

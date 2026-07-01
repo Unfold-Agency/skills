@@ -11,7 +11,7 @@ Before escalating, be sure it is an escalation and not just hard work. Ask: *can
 - **Yes, it is just hard** -> build it. Difficulty is not a blocker.
 - **No, and the gap is in the HOW** -> route to `/make-arch` (a design decision is missing or wrong).
 - **No, and the gap is in the WHAT** -> route to `/make-spec` (the requirement itself is wrong).
-- **The issue is already marked stale** -> route to `/make-issues` (it reconciles first).
+- **The issue is already marked stale, or has no acceptance criteria to build against** -> route to `/make-issues` (it reconciles or re-authors first).
 
 Pin the problem to IDs before routing. A blocker you cannot tie to the issue's `trace_req` requirement or its `trace_adr` decision is not understood well enough to escalate yet -- read more first.
 
@@ -42,6 +42,8 @@ Then: comment the problem on the issue, add the `escalated` label, stop, and tel
 ## Route 3 -- the issue is already stale -> `/make-issues`
 
 If the issue carries `needs-rebase`, `spec-drift`, `orphaned`, or `stale-against-dependency`, `make-issues` has already detected that the spec moved under it (or a dependency did). Fixing that is `make-issues`' job, not yours. `select_work.py` excludes these from the actionable queue for this reason. Do not build them. Tell the user to run `/make-issues` to reconcile; once the flag clears, the issue becomes buildable again.
+
+The same lane owns an issue with **no acceptance criteria to build against** -- a `make-issues` `amendment` authored without criteria (a spec issue always embeds its EARS criteria, so this is an amendment case). `select_work.py` treats a criteria-less issue as hitl and keeps it out of the afk drain, because an unattended worker has nothing to verify "done" against; do **not** invent criteria to make it buildable. Route it to `/make-issues` to author the acceptance criteria (or promote the amendment to a real requirement), then it becomes afk-buildable. Likewise, an `amendment` whose feature anchor was removed from the specs is flagged `orphaned` by `/make-issues` and handled exactly like any stale issue above -- a human re-anchors or closes it there, not here.
 
 ## HITL stop points (not a failure, a gate)
 

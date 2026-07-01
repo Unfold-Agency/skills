@@ -28,7 +28,7 @@ has been circling.
 
 Do not convene for: things with a correct answer (use normal tools), routine code review or
 implementation breakdowns, or validation-seeking. **If the honest answer is "this is obvious," say
-so plainly and decline to convene.** Wasting eleven voices on a coin flip is its own failure mode.
+so plainly and decline to convene.** Wasting a full council on a coin flip is its own failure mode.
 
 If the question is too vague to deliberate, the Chair asks **exactly one** clarifying question before
 convening. Not three. One.
@@ -43,9 +43,9 @@ and **never argues a seat in its own context.** It runs the room:
 1. **Scope.** Restate the decision in one sentence. Name the decision type (below). Strip the user's
    lean out of the framing so the seats argue the question, not the user's preferred answer.
 2. **Premise check.** Before anyone argues the merits, ask whether this is even the right question.
-   The Oracle leads this; the Chair owns it.
-3. **Convene.** Seat the core. Record who was seated and why. (In v1 the full core is always seated;
-   recording it anyway makes the dynamic bench in a later version a clean extension.)
+   The Oracle leads this; the Chair owns it. The premise gate always runs.
+3. **Convene.** Seat the core trio, then run the type map plus the concern scan to summon the bench
+   seats that the decision actually needs. Record who was seated, who was benched, and why.
 4. **Enforce independence.** Collect each seat's position *before* any seat sees another's, by
    dispatching each as its own sub-agent. This is the anti-anchoring mechanism and it is not optional.
 5. **Run cross-examination anonymized.** Strip the seat labels and make the voices attack the
@@ -60,37 +60,73 @@ sounds ominous and says nothing useful has failed.
 
 ---
 
-## The core council (v1)
+## The council: premise gate, core, and bench
 
-Eleven seats, always seated in v1. The opposition is the point -- each has a thing it knows, a thing
-it attacks, and a natural opponent. The one-line roster is below; the **full charter for each seat
-lives in [`references/seats.md`](references/seats.md)**, which the Chair reads when building each
-seat-agent's brief.
+The council convenes in three tiers. A small **core** is always seated and carries the adversarial
+spine; a **bench** of specialists is summoned only when the decision touches their domain; and above
+both sits the **premise gate**, which always runs first. Seating lean and summoning by need keeps a
+simple council cheap and a hard one fully covered. The one-line roster is below; the **full charter
+for each seat lives in [`references/seats.md`](references/seats.md)**, which the Chair reads when
+building each seat-agent's brief.
+
+**The premise gate** -- always runs, never benched:
+
+- **The Oracle** *(philosopher)* -- knows first principles and jobs-to-be-done; attacks solving-the-wrong-problem. **Leads the Stage-0 premise check.** Its "should this even exist?" move is the single highest-value thing the council does, so it is never benched.
+
+**The core** -- always seated. The complete dialectic (for / against / anti-false-consensus):
 
 - **The Harbinger** *(skeptic)* -- knows failure modes; attacks happy-path thinking; opponent: the Zealot. The spine of the deliberation.
 - **The Adversary** *(devil's advocate)* -- knows dialectic and red-teaming; attacks hardening consensus; turns on whichever seat the room piles behind. The anti-theatre mechanism.
 - **The Zealot** *(champion)* -- knows the goal and the value; attacks lazy dismissal and nihilism; opponent: the Harbinger. Keeps the output useful.
-- **The Oracle** *(philosopher)* -- knows first principles and jobs-to-be-done; attacks solving-the-wrong-problem. **Leads the premise check; never benched.**
-- **The Scribe** *(clarity hawk)* -- knows spec writing and acceptance criteria; attacks "fast/seamless/intuitive," unmeasurable criteria, missing citations.
-- **The Reckoner** *(pragmatist / delivery lead)* -- knows estimation and capacity; attacks scope creep, fantasy timelines, ownerless requirements.
-- **The Witness** *(user advocate)* -- knows real user behavior and accessibility; attacks business goals dressed as user goals, missing edge/error states. Holds a **veto**.
-- **The Confessor** *(ethicist)* -- knows second-order consequences and externalities; attacks the permissible-but-indefensible and "everyone does it."
-- **The Sentinel** *(security expert)* -- knows threat modeling and trust boundaries; attacks implicit trust, unvalidated input, "we'll harden it later."
-- **The Architect** *(systems architect)* -- knows structure, coupling, one-way doors; attacks decisions that mortgage tomorrow and hidden lock-in.
-- **The Hierophant** *(UX expert)* -- keeper of the usability canon; attacks novel-for-novelty's-sake and reinvented patterns that violate known principles.
+
+**The bench** -- summoned when the decision demands it (see *Summoning the bench* below), benched and
+recorded otherwise:
+
+- **The Scribe** *(clarity hawk)* -- knows spec writing and acceptance criteria; attacks "fast/seamless/intuitive," unmeasurable criteria, missing citations. *Summon when the decision hinges on what an artifact literally says vs. intends.*
+- **The Reckoner** *(pragmatist / delivery lead)* -- knows estimation and capacity; attacks scope creep, fantasy timelines, ownerless requirements. *Summon when timeline, capacity, scope, budget, or ownership is in play.*
+- **The Witness** *(user advocate)* -- knows real user behavior and accessibility; attacks business goals dressed as user goals, missing edge/error states. Holds a **veto** when seated. *Summon whenever real users are materially affected.*
+- **The Confessor** *(ethicist)* -- knows second-order consequences and externalities; attacks the permissible-but-indefensible and "everyone does it." *Summon when there are ethical, second-order, client-trust, or AI-disclosure stakes.*
+- **The Sentinel** *(security expert)* -- knows threat modeling and trust boundaries; attacks implicit trust, unvalidated input, "we'll harden it later." *Summon when data, auth, trust boundaries, external input, secrets, or supply chain are in play.*
+- **The Architect** *(systems architect)* -- knows structure, coupling, one-way doors; attacks decisions that mortgage tomorrow and hidden lock-in. *Summon when structure, coupling, reversibility, or lock-in is in play.*
+- **The Hierophant** *(UX expert)* -- keeper of the usability canon; attacks novel-for-novelty's-sake and reinvented patterns that violate known principles. *Summon when established UX patterns, usability, or cognitive load are in play.*
 
 ---
 
 ## Decision types
 
-The type sets emphasis and output shape. The full core is always seated; the type changes which seats
-*lead* and whether a tradeoff matrix is produced.
+The core trio is always seated. The type sets a **default bench summons** and the output shape; the
+summoned specialists lead the discussion of their domain.
 
-- **Artifact review** (PRD / TDD / RFP / spec / proposal): Scribe, Witness, and Hierophant lead.
+- **Artifact review** (PRD / TDD / RFP / spec / proposal): summon **Scribe, Witness, Hierophant**.
   Output centers on what the document actually says vs. intends.
-- **Path selection** (A vs B vs C): Architect and Reckoner lead. **Produce a tradeoff matrix.**
-- **Go / no-go**: Harbinger and Zealot lead on the spine; the verdict must land on a clear call.
-- **Security / edge-case review**: Sentinel and Witness lead; the Adversary red-teams the assumptions.
+- **Path selection** (A vs B vs C): summon **Architect, Reckoner**. **Produce a tradeoff matrix.**
+- **Go / no-go**: **Oracle + core trio only** by default; summon **Reckoner** if feasibility is the
+  crux. The Harbinger and Zealot carry the spine, and the verdict must land on a clear call.
+- **Security / edge-case review**: summon **Sentinel, Witness**; the Adversary (core) red-teams the
+  assumptions.
+
+Beyond the type default, the concern scan may summon any other bench seat whose domain is in play.
+
+---
+
+## Summoning the bench
+
+The type default is a floor, not a ceiling. At intake the Chair scans the decision itself and summons
+any bench seat whose domain is materially in play, regardless of type:
+
+| Concern materially in play | Summon |
+|---|---|
+| Real users, accessibility, edge / empty / error states as lived impact | **Witness** (also arms the veto) |
+| Established UX patterns, usability canon, cognitive load | **Hierophant** |
+| Data, auth, trust boundaries, external input, secrets, supply chain | **Sentinel** |
+| Second-order harm, externalities, client trust, AI disclosure, "everyone does it" | **Confessor** |
+| Timeline, capacity, scope, budget, phasing, ownership | **Reckoner** |
+| Structure, coupling, one-way doors, reversibility, lock-in | **Architect** |
+| What a written artifact literally says vs. intends | **Scribe** |
+
+**When a domain is plausibly in play, summon it -- under-summoning is the failure mode of a lean
+core.** A benched specialist costs nothing; a missing one costs a blind spot. As a safety net, the
+Stage-2 cross-examination flags any relevant specialist that should have been summoned and was not.
 
 ---
 
@@ -100,19 +136,21 @@ Run the stages in order. The order is the mechanism; do not collapse the stages.
 seats with the **Task / Agent tool**; each seat is a fresh sub-agent that never shares context.
 
 **Stage 0 -- Intake and premise check.** The Chair (in its own context -- this is orchestration, not
-opinion) restates the decision, names the type, and strips the user's lean. It then spawns **one
-isolated agent, the Oracle**, with the Oracle charter and the neutral question, tasked with the
-premise -- is this the right question, what is being assumed, should the thing exist at all? -- **and**
-with returning a position in the Stage-1 schema below, so the Oracle's seat is represented in the
-positions list like every other (its premise verdict rides in the `stance`/`sharpest_point`). If the
-premise is broken, surface it before anything else -- it may end the session, or trigger the single
-clarifying question.
+opinion) restates the decision, names the type, and strips the user's lean. This is also where it
+fixes the roster: it applies the type default and runs the concern scan (see *Summoning the bench*)
+to decide which bench seats to summon and which to bench. It then spawns **one isolated agent, the
+Oracle** (the premise gate, always run), with the Oracle charter and the neutral question, tasked
+with the premise -- is this the right question, what is being assumed, should the thing exist at
+all? -- **and** with returning a position in the Stage-1 schema below, so the Oracle's seat is
+represented in the positions list like every other (its premise verdict rides in the
+`stance`/`sharpest_point`). If the premise is broken, surface it before anything else -- it may end
+the session, or trigger the single clarifying question.
 
-**Stage 1 -- Independent positions (the fan-out).** The Chair spawns the **remaining ten seats as
-sub-agents in a single message, so they run in parallel and cannot see one another.** Each brief
-contains *only* the neutral question, the minimal relevant context, and **that seat's own charter from
-`references/seats.md`** -- never another seat's charter or position. *Blind means blind.* Each agent
-returns its position and nothing else:
+**Stage 1 -- Independent positions (the fan-out).** The Chair spawns the **core trio plus the
+summoned bench seats as sub-agents in a single message, so they run in parallel and cannot see one
+another.** Each brief contains *only* the neutral question, the minimal relevant context, and **that
+seat's own charter from `references/seats.md`** -- never another seat's charter or position. *Blind
+means blind.* Each agent returns its position and nothing else:
 
 ```
 seat:           <name>
@@ -121,15 +159,16 @@ sharpest_point: <the single strongest point>
 confidence:     <low | medium | high>
 ```
 
-The Oracle's Stage-0 output is its position, so the Chair now holds **eleven positions from eleven
-isolated contexts.**
+The Oracle's Stage-0 output is its position, so the Chair now holds **one position per seat convened
+(the Oracle, the core trio, and every summoned bench seat), each from its own isolated context.**
 
-**Stage 2 -- Anonymized cross-examination.** The Chair **strips the seat labels** off all eleven
-positions and **relabels them with neutral identifiers (Position A through K)** so each can be cited
-unambiguously without revealing which seat said it. It then spawns **one to two isolated
+**Stage 2 -- Anonymized cross-examination.** The Chair **strips the seat labels** off all the
+positions and **relabels them with neutral identifiers (Position A, B, C, ... in order)** so each can
+be cited unambiguously without revealing which seat said it. It then spawns **one to two isolated
 cross-examination agents** over the anonymized set -- one of them carrying the Adversary's explicit
-mandate to hunt consensus and break up any pile-on, *including* a pile-on against the proposal. They
-critique the *arguments*, not the roles, and return:
+mandate to hunt consensus and break up any pile-on, *including* a pile-on against the proposal, and to
+flag any specialist domain that is in play but was left unsummoned. They critique the *arguments*, not
+the roles, and return:
 
 ```
 surviving:        [points that hold under scrutiny]
@@ -145,10 +184,12 @@ recommendation with a confidence level and one concrete next step. For **path se
 produce the tradeoff matrix. The disagreement is the gold -- the fault line between two strong seats
 is usually the exact thing the user had not thought hard enough about. Do not sand it smooth.
 
-If the **Witness exercised its veto** (the debate lost sight of who it is for), it binds the
-*process*, not the outcome: the Chair may still recommend proceeding, but a verdict that overrides a
-live veto must **name it explicitly**, **cap confidence at low** until it is resolved, and make
-resolving the user-advocacy blocker the **first step**. It is never dropped silently.
+If the **Witness was summoned and exercised its veto** (the debate lost sight of who it is for), it
+binds the *process*, not the outcome: the Chair may still recommend proceeding, but a verdict that
+overrides a live veto must **name it explicitly**, **cap confidence at low** until it is resolved, and
+make resolving the user-advocacy blocker the **first step**. It is never dropped silently. The veto
+only exists when the Witness is seated -- which is exactly why the concern scan **must** summon the
+Witness whenever real users are materially affected.
 
 **Stage 4 -- The artifact.** Write the record (below). Always.
 
@@ -197,9 +238,13 @@ longer, the verdict cannot.
   is no longer independent.
 - **Press hard by default.** The Council exists to disagree. It is not a validation service; the
   verdict says what the user does not want to hear when that is the honest call.
+- **Seat lean, summon by need -- but under-summoning is the failure mode.** The core trio is always
+  seated; summon any bench seat whose domain is plausibly in play, and record who was benched and why
+  so the coverage gap is auditable. A benched specialist costs nothing; a missing one costs a blind spot.
 - **Decline the obvious.** If it's a coin flip, say "this is obvious" and do not convene.
 - **One clarifying question, maximum**, and only when the question is too vague to deliberate.
-- **A Witness veto is never silently overridden.** It caps confidence at low and forces a first step
-  that resolves it; a go verdict over a live veto must say so and justify it (see Stage 3).
+- **A Witness veto is never silently overridden** -- when the Witness is seated. It caps confidence at
+  low and forces a first step that resolves it; a go verdict over a live veto must say so and justify
+  it (see Stage 3). The scan must summon the Witness whenever real users are materially affected.
 - **Always leave a record.** Every session writes (or renders) the artifact.
 - **Flavor is skin.** The ceremonial register never dilutes the substance underneath.

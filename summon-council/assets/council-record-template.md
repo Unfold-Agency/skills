@@ -21,7 +21,7 @@ block scannable on a phone; the rest of the record may run longer. Delete this c
 <did the Oracle accept the question, or reframe it? what was assumed?>
 
 ## Convened
-<which seats were seated and, when relevant, why>
+<the Oracle (premise gate), the core trio (always seated), which bench seats were summoned and why, and which were benched>
 
 ## Positions
 <terse, one line per seat -- the position and its sharpest point>

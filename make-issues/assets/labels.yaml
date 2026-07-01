@@ -44,8 +44,24 @@ static:
     color: "ededed"              # grey
     description: "Managed by the make-issues skill. Do not hand-edit managed regions."
 
+  # Provenance mode -- how the issue traces to the spec set. The meta block's
+  # `provenance` field is authoritative; this label is the human-scannable copy.
+  # A spec-provenance issue projects a specific requirement (trace_req >= 1) and
+  # is fingerprint-reconciled. An `amendment` issue was added on demand (a "quick
+  # amendment, not a rewrite") and anchors to an existing feature/goal/ADR rather
+  # than a requirement; the reconciler leaves its body alone (human-owned) and
+  # never orphan-closes or refactors it -- it only checks the anchor still exists
+  # and can PROMOTE it to a spec issue once a requirement covers it. There is no
+  # `spec` label: a make-issues issue WITHOUT the amendment label is spec
+  # provenance (the default), so existing issues need no migration.
+  - name: amendment
+    color: "1d76db"             # blue
+    description: "Added on demand and anchored to the spec set (not a requirement projection). Body is human-owned; reconcile never clobbers or orphan-closes it."
+
   # Autonomy -- the signal the overnight loop reads to decide what it can
-  # do unattended. Exactly one per issue.
+  # do unattended. Exactly one per issue. afk REQUIRES checkable acceptance
+  # criteria (do-work refuses to auto-build an issue with none, regardless of
+  # this label); an amendment with no authored criteria must be hitl.
   - name: afk
     color: "0e8a16"              # green
     description: "Away-from-keyboard: an agent may complete this unattended."
@@ -81,22 +97,31 @@ static:
 # loop parses; the reconciler reads `fingerprint` and `trace_req`, and do-work
 # reads `source_version` (the version stamp that used to be a src: label).
 #
-#   trace_req:       [<requirement ids>]   # ^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$; >=1, required
+#   provenance:      spec | amendment      # how it traces; absent == spec (default)
+#   trace_req:       [<requirement ids>]   # ^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$;
+#                                          #   spec: >=1 required. amendment: may be []
 #   trace_adr:       [<ADR ids>]           # governing ADRs, from the requirement's
 #                                          # governed_by; may be empty
-#   feature:         <slug>                # the feature this requirement lives in
-#   source_version:  "<feature_version>"   # the feature_version at birth
-#   autonomy:        afk | hitl
-#   fingerprint:     "<sha256>"            # per-requirement hash from item_fingerprint.py
+#   feature:         <slug>                # the feature this requirement/anchor lives in
+#   source_version:  "<feature_version>"   # the feature_version at birth ("" for amendment)
+#   autonomy:        afk | hitl            # afk REQUIRES acceptance criteria
+#   fingerprint:     "<sha256>"            # per-requirement hash; "" for amendment (no requirement)
 #
 # Rules:
-#   - Every managed issue has a meta block with all six keys.
-#   - trace_req is the primary match key (issue <-> requirement). A malformed
-#     block is NOT auto-recovered (the reconciler does not parse the prose body);
-#     scripts/analyze.py treats it as BLOCKING drift and the gate fails -- a human
-#     reads the requirement id from the body's `## Traceability` table and
-#     re-stamps the block, then re-runs.
+#   - Every managed issue has a meta block. A spec issue carries all fields; an
+#     amendment carries provenance: amendment and a resolvable `feature` anchor,
+#     may have an empty trace_req, and has no requirement fingerprint.
+#   - provenance is the FIRST discriminant the reconciler reads (absent == spec,
+#     so pre-existing issues are unaffected). An amendment is never orphan-closed
+#     or refactored; the reconciler only checks its feature anchor still exists.
+#   - For a spec issue, trace_req is the primary match key (issue <-> requirement).
+#     A malformed block is NOT auto-recovered (the reconciler does not parse the
+#     prose body); scripts/analyze.py treats it as BLOCKING drift and the gate
+#     fails -- a human reads the requirement id from the body's `## Traceability`
+#     table and re-stamps the block, then re-runs. A spec issue with an empty/
+#     string trace_req is blocking drift; an amendment with no `feature` anchor is
+#     blocking drift.
 #   - fingerprint is compared against the live per-requirement hash to
 #     detect drift; on change, reconciliation acts by issue state (see analyze.py
-#     and references/reconciliation.md).
+#     and references/reconciliation.md). Amendments skip this comparison.
 # ═══════════════════════════════════════════════════════════════════

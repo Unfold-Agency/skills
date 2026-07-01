@@ -7,23 +7,32 @@ Checks, in order of dependency:
   1. auth          -- `gh auth status` succeeds
   2. gh_version    -- gh >= 2.94.0 (native dependency/type flags; below that the
                       blocked-by/blocking/type/parent features do not exist)
-  3. spec_integrity -- the FAIL-CLOSED fingerprint gate. Every spec's stored
-                      meta.fingerprint must equal a recompute over its CONTRACT
-                      content (overview.md, every features/*.md -- read from the
-                      frontmatter -- and arch-data.yaml if present). A single
-                      mismatch means the specs are mid-edit -- issues built now
-                      would be wrong -- so the gate FAILS and the skill must not
-                      proceed. Pure parsing; importable and testable without
+  3. spec_set      -- make-issues runs AFTER the planning layer: docs/specs must
+                      already hold an overview.md and >= 1 features/*.md (authored
+                      by /make-spec, ideally with /make-arch's ADRs). If the spec
+                      set is absent the gate STOPS and points the user upstream --
+                      make-issues never invents un-anchored issues; every issue it
+                      creates traces back to the spec set (a requirement, or an
+                      amendment's feature/goal/ADR anchor).
+  4. spec_integrity -- the fingerprint gate, now SCOPED (advisory + scoped, "a1").
+                      Every spec's stored meta.fingerprint must equal a recompute
+                      over its CONTRACT content. On a FULL run (no --scope) any
+                      mismatch FAILS the gate, exactly as before. On a SCOPED run
+                      a mismatch on a SELECTED feature still FAILS (never trace an
+                      issue to a half-saved requirement), but a mismatch on an
+                      unselected feature -- or on overview/arch -- is a WARNING,
+                      not a block. Pure parsing; importable and testable without
                       gh/network.
-  4. repo          -- inside a git work tree AND a resolvable owner/name remote
-  5. mode + labels -- existing make-issues-labelled issues -> generate|sync, and
+  5. repo          -- inside a git work tree AND a resolvable owner/name remote
+  6. mode + labels -- existing make-issues-labelled issues -> generate|sync, and
                       which static labels are missing (the skill creates them)
 
   python scripts/gh_preflight.py --spec-dir docs/specs
-  python scripts/gh_preflight.py                         # --spec-dir defaults to docs/specs
+  python scripts/gh_preflight.py --spec-dir docs/specs --scope checkout,cart
   python scripts/gh_preflight.py --spec-dir ... --repo owner/name --json
 
-Exit codes: 0 = gate passes, 1 = a check failed, 2 = the spec files can't be read.
+Exit codes: 0 = gate passes, 1 = a check failed, 2 = the spec set is absent or
+the spec files can't be read.
 """
 import argparse
 import glob
@@ -44,9 +53,15 @@ MIN_GH = (2, 94, 0)
 # Static labels make-issues always relies on (mirrors assets/labels.yaml).
 # This is the whole scheme -- no per-run dynamic labels. Traceability and source
 # versions live in the issue body (the ## Traceability table and the meta block),
-# so there are no trace: or src: labels.
-STATIC_LABELS = ["make-issues", "afk", "hitl", "needs-rebase", "spec-drift",
-                 "orphaned", "refactor", "refactor-tracking"]
+# so there are no trace: or src: labels. `amendment` is the provenance-mode label
+# (its absence means spec provenance -- see assets/labels.yaml).
+STATIC_LABELS = ["make-issues", "amendment", "afk", "hitl", "needs-rebase",
+                 "spec-drift", "orphaned", "refactor", "refactor-tracking"]
+
+# A requirement id, used to resolve --scope tokens that name a requirement rather
+# than a feature slug (so a feature file is in scope when a selected requirement
+# lives in it, even if its slug was not named directly).
+_REQ_ID_RE = re.compile(r"^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$")
 
 # ── The C1 fingerprint discipline, applied at the FILE level ─────────────────
 # A spec file's stored meta.fingerprint is computed over its CONTRACT content.
@@ -88,6 +103,23 @@ def _run(cmd, timeout=30):
         return 124, "", "timeout"
     except FileNotFoundError:
         return 127, "", f"{cmd[0]} not found"
+
+
+def parse_scope(spec):
+    """Parse a --scope string into {"features": set, "reqs": set}, or None for a
+    full (unscoped) run. Mirrors analyze.parse_scope so the two gates agree on
+    what a scope token means."""
+    if not spec:
+        return None
+    features, reqs = set(), set()
+    for tok in spec.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        (reqs if _REQ_ID_RE.match(tok) else features).add(tok)
+    if not features and not reqs:
+        return None
+    return {"features": features, "reqs": reqs}
 
 
 def _strip_out(value, out_keys):
@@ -153,63 +185,141 @@ def spec_files(spec_dir):
     return files
 
 
-def check_spec_integrity(spec_dir):
-    """FAIL-CLOSED fingerprint gate. For every spec data file, the stored
-    meta.fingerprint must equal compute_fingerprint(doc). A missing stored
-    fingerprint, an unreadable/missing required file, or any mismatch FAILS the
-    gate (and a read error is fatal -> exit 2). Pure YAML; no gh/network.
+def check_spec_set_present(spec_dir):
+    """The precondition gate: make-issues runs AFTER /make-spec (and /make-arch),
+    so a spec set must already exist. Absent -> STOP with guidance upstream (a
+    fatal that drives exit 2), never a half-built or un-anchored run."""
+    overview = os.path.join(spec_dir, "overview.md")
+    feats = sorted(glob.glob(os.path.join(spec_dir, "features", "*.md")))
+    if os.path.isfile(overview) and feats:
+        return {"name": "spec_set", "ok": True,
+                "detail": f"{len(feats)} feature spec(s) under {spec_dir}"}
+    return {"name": "spec_set", "ok": False, "fatal": True,
+            "detail":
+            f"no spec set under {spec_dir} -- make-issues runs AFTER the planning "
+            "layer. Run /make-spec to author overview.md + features/*.md (and "
+            "/make-arch for the ADRs), then re-run. make-issues never creates "
+            "un-anchored issues; for ad-hoc GitHub issues with no spec, use a "
+            "dedicated issues skill instead."}
 
-    Returns a verdict dict with `ok`, optional `fatal`, per-file `files`, and a
-    `detail` summary.
+
+def _feature_slug(label, doc):
+    """The slug for a feature file: prefer meta.slug, else the filename stem."""
+    meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
+    if meta.get("slug"):
+        return str(meta["slug"])
+    return label.split("feature:", 1)[1].replace(".md", "")
+
+
+def _feature_req_ids(doc):
+    """The requirement ids declared in a feature doc (for --scope-by-req)."""
+    ids = set()
+    for req in doc.get("requirements") or []:
+        if isinstance(req, dict) and req.get("id"):
+            ids.add(str(req["id"]))
+    return ids
+
+
+def check_spec_integrity(spec_dir, scope=None):
+    """The fingerprint gate, scoped ("a1"). For every spec data file, the stored
+    meta.fingerprint must equal compute_fingerprint(doc).
+
+    scope=None (a full run) preserves the original FAIL-CLOSED behavior: any
+    missing/mismatched fingerprint FAILS the gate. A scoped run downgrades to
+    advisory everywhere EXCEPT a selected feature: a dirty SELECTED feature still
+    FAILS (never project a half-saved requirement into an issue), while a dirty
+    unselected feature -- or a dirty overview/arch -- is a WARNING that does not
+    block. A read error is always fatal (-> exit 2).
+
+    Returns a verdict dict with `ok` (the gate: no fatal, no fail), optional
+    `fatal`, per-file `files` (each with `ok`/`level`/`scope_kind`/`detail`),
+    `warnings`, and a `detail` summary.
     """
     files = spec_files(spec_dir)
     results = []
     fatal = False
+    full_run = scope is None
     overview_path = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview_path):
         return {"name": "spec_integrity", "ok": False, "fatal": True,
-                "files": [], "detail":
+                "files": [], "warnings": [], "detail":
                 f"no overview.md under {spec_dir} -- specs must be in "
                 "docs/specs/ (overview.md, features/*.md, "
                 "arch-data.yaml)"}
     feature_count = 0
     for label, path in files:
-        if label.startswith("feature:"):
+        is_feature = label.startswith("feature:")
+        if is_feature:
             feature_count += 1
         doc, err = _load_doc(path)
         if err:
             fatal = True
-            results.append({"file": label, "ok": False, "detail": err})
+            results.append({"file": label, "ok": False, "level": "error",
+                            "scope_kind": "project", "detail": err})
             continue
+
+        # Where does this file sit relative to the scope?
+        if is_feature:
+            slug = _feature_slug(label, doc)
+            if full_run:
+                scope_kind = "in"
+            elif slug in scope["features"] or (_feature_req_ids(doc) & scope["reqs"]):
+                scope_kind = "in"
+            else:
+                scope_kind = "out"
+        else:
+            # overview / arch are project-level: gating on a full run, advisory
+            # on a scoped one (a scoped run reads feature_version from the feature
+            # file itself; overview/arch embeds are advisory context).
+            scope_kind = "in" if full_run else "project"
+
         meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
         stored = str(meta.get("fingerprint") or "")
         out_keys = ARCH_OUT_KEYS if label == "arch" else SPEC_OUT_KEYS
         recomputed = compute_fingerprint(doc, out_keys)
+
         if not stored:
-            results.append({"file": label, "ok": False,
-                            "detail": "no stored meta.fingerprint to verify"})
+            bad_detail = "no stored meta.fingerprint to verify"
+            clean = False
         elif stored == recomputed:
-            results.append({"file": label, "ok": True,
-                            "detail": "fingerprint matches recompute"})
+            bad_detail = "fingerprint matches recompute"
+            clean = True
         else:
-            results.append({"file": label, "ok": False,
-                            "detail": f"stored {stored[:12]} != recompute "
-                                      f"{recomputed[:12]} -- spec edited without "
-                                      "re-stamping (mid-edit)"})
+            bad_detail = (f"stored {stored[:12]} != recompute {recomputed[:12]} "
+                          "-- spec edited without re-stamping (mid-edit)")
+            clean = False
+
+        if clean:
+            level = "ok"
+        elif scope_kind == "in":
+            level = "fail"           # a selected/whole-run file must be clean
+        else:
+            level = "warn"           # out-of-scope / project file: advisory
+        results.append({"file": label, "ok": clean, "level": level,
+                        "scope_kind": scope_kind, "detail": bad_detail})
+
     if feature_count == 0:
-        results.append({"file": "features/", "ok": False,
+        results.append({"file": "features/", "ok": False, "level": "fail",
+                        "scope_kind": "in",
                         "detail": "no features/*.md found -- nothing to "
                                   "turn into issues"})
-    ok = all(r["ok"] for r in results) and not fatal
-    if ok:
+
+    warnings = [r for r in results if r["level"] == "warn"]
+    failed = [r for r in results if r["level"] == "fail"]
+    ok = not failed and not fatal
+    if ok and not warnings:
         detail = f"all {len(results)} spec file(s) fingerprint-clean"
+    elif ok and warnings:
+        detail = (f"selected specs clean; {len(warnings)} unselected/project "
+                  "file(s) are mid-edit (advisory -- re-stamp via /make-spec "
+                  "before acting on them)")
     else:
-        bad = [r["file"] for r in results if not r["ok"]]
+        bad = [r["file"] for r in failed]
         detail = ("spec integrity FAILED for: " + ", ".join(bad) +
-                  " -- the specs are mid-edit; re-run /make-spec (or /make-arch) "
-                  "to re-stamp before building issues")
+                  " -- a selected spec is mid-edit; re-run /make-spec (or "
+                  "/make-arch) to re-stamp before building its issues")
     verdict = {"name": "spec_integrity", "ok": ok, "files": results,
-               "detail": detail}
+               "warnings": warnings, "detail": detail}
     if fatal:
         verdict["fatal"] = True
     return verdict
@@ -307,18 +417,35 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--spec-dir", default="docs/specs",
                     help="the layered spec dir (default: docs/specs)")
+    ap.add_argument("--scope", default="",
+                    help="comma-separated feature slugs and/or requirement ids "
+                         "you will act on; a dirty SELECTED feature fails the "
+                         "gate, a dirty unselected/project file only warns. Empty "
+                         "= full run (any dirty spec fails).")
     ap.add_argument("--repo", help="owner/name; skip gh repo auto-detect")
     ap.add_argument("--json", action="store_true", help="emit the verdict as JSON")
     args = ap.parse_args()
+
+    scope = parse_scope(args.scope)
+
+    # Precondition: the spec set must exist (make-issues runs after /make-spec).
+    present = check_spec_set_present(args.spec_dir)
+    if not present["ok"]:
+        if args.json:
+            print(json.dumps({"ok": False, "checks": [present]}, indent=2))
+        else:
+            print(f"  [FAIL] spec_set: {present['detail']}")
+            print("\nFAIL -- no spec set; run /make-spec (and /make-arch) first (exit 2)")
+        sys.exit(2)
 
     checks = []
     auth = check_auth()
     checks.append(auth)
     checks.append(check_gh_version())
-    integrity = check_spec_integrity(args.spec_dir)
+    integrity = check_spec_integrity(args.spec_dir, scope)
     checks.append(integrity)
     if integrity.get("fatal"):            # the spec files themselves are unreadable
-        _report(checks, None, [], None, args.json)
+        _report(checks, None, [], None, args.json, scope)
         sys.exit(2)
 
     approval = check_approval(args.spec_dir)        # advisory; never gates
@@ -332,24 +459,33 @@ def main():
             checks.append(mode_chk)
 
     ok = all(c["ok"] for c in checks)
-    _report(checks, repo, missing, approval, args.json)
+    _report(checks, repo, missing, approval, args.json, scope)
     sys.exit(0 if ok else 1)
 
 
-def _report(checks, repo, missing, approval, as_json):
+def _report(checks, repo, missing, approval, as_json, scope=None):
     if as_json:
         verdict = {"ok": all(c["ok"] for c in checks), "repo": repo,
+                   "scope": (None if scope is None
+                             else {"features": sorted(scope["features"]),
+                                   "reqs": sorted(scope["reqs"])}),
                    "missing_labels": missing, "approval": approval,
                    "checks": checks}
         print(json.dumps(verdict, indent=2))
         return
+    if scope is not None:
+        toks = ", ".join(sorted(scope["features"]) + sorted(scope["reqs"]))
+        print(f"  scope  acting on: {toks} (dirty unselected/project specs warn, "
+              "not block)")
     for c in checks:
         mark = "ok  " if c["ok"] else "FAIL"
         print(f"  [{mark}] {c['name']}: {c['detail']}")
-        if c["name"] == "spec_integrity" and not c["ok"]:
+        if c["name"] == "spec_integrity":
             for fr in c.get("files", []):
-                if not fr["ok"]:
+                if fr["level"] in ("fail", "error"):
                     print(f"           - {fr['file']}: {fr['detail']}")
+            for fr in c.get("warnings", []):
+                print(f"    warn   - {fr['file']} ({fr['scope_kind']}): {fr['detail']}")
     if missing:
         print(f"  note   missing static labels (skill must create): {', '.join(missing)}")
     if approval and not approval["approved"]:

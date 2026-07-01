@@ -79,14 +79,38 @@ Born from feature <slug> v<feature_version>.
 
 <!-- make-issues:meta -->
 ```yaml
-trace_req: [FR-XXX-000]            # requirement id(s) this issue satisfies (^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$); >=1, required
+provenance: spec                   # spec | amendment (absent == spec). See the amendment note below.
+trace_req: [FR-XXX-000]            # requirement id(s) this issue satisfies (^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$); spec: >=1 required; amendment: may be []
 trace_adr: [ADR-0000]              # governing ADR ids, from the requirement's governed_by; may be empty
-feature: <slug>                    # the feature slug this requirement lives in
-source_version: "0.0"              # the feature_version this issue was born from
-autonomy: afk                      # afk | hitl  -- can the overnight loop own this unattended?
-fingerprint: "<item-hash>"         # per-requirement hash from scripts/item_fingerprint.py
+feature: <slug>                    # the feature slug this requirement/anchor lives in (REQUIRED -- it is the amendment anchor)
+source_version: "0.0"              # the feature_version this issue was born from ("" for an amendment)
+autonomy: afk                      # afk | hitl  -- afk REQUIRES acceptance criteria; can the overnight loop own this unattended?
+fingerprint: "<item-hash>"         # per-requirement hash from scripts/item_fingerprint.py ("" for an amendment -- no requirement to hash)
 ```
 <!-- /make-issues:meta -->
+
+<!--
+  AMENDMENT VARIANT (provenance: amendment)
+  An amendment is a "quick amendment, not a rewrite": work added on demand that is
+  not (yet) a requirement in the specs, but still anchored to the existing spec set.
+  make-issues never runs without a spec set, so an amendment always references real
+  features/goals/ADRs -- it is scoped and traceable, not a willy-nilly ticket.
+  For an amendment:
+    - set `provenance: amendment` and apply the `amendment` label;
+    - `feature` is the REQUIRED anchor (a real feature slug from the feature_index);
+      trace_adr / a goal may also anchor it; trace_req may be [] (or list the
+      requirement it will PROMOTE to, once one exists);
+    - leave `fingerprint: ""` and `source_version: ""` -- there is no requirement hash;
+    - AUTHOR the Requirement + Acceptance criteria yourself (they are not embedded from
+      a spec). afk REQUIRES checkable acceptance criteria; an amendment with none must
+      be `hitl` -- do-work refuses to auto-build a criteria-less issue.
+  Reconciliation leaves an amendment's body alone (it is human-owned, like the human
+  region), never orphan-closes or refactors it, and only flags it if its feature
+  anchor disappears. When a real requirement later covers it, PROMOTE it (see
+  references/reconciliation.md): trace_req is set, provenance flips to spec, and the
+  fingerprint is stamped -- in place, no duplicate.
+-->
+
 
 <!-- make-issues:changelog -->
 ## Change log

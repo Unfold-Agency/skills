@@ -24,14 +24,22 @@ Per requirement vs its matching issue (matched on the meta block's `trace_req`):
   requirement MODIFIED + issue completed/merged          -> REFACTOR (HITL)
   requirement governed by a SUPERSEDED ADR + issue merged -> REFACTOR (HITL)
 
-Plan scope: this engine is EXHAUSTIVE -- it walks every current requirement and
-compares its live item fingerprint against the matching issue's stamped one, on
-every run. That is the safe choice: a stale or missing CHANGELOG entry can never
-cause a real change to be skipped. The watermark
-(docs/specs/.make-issues-sync.json, the per-feature last-synced feature_version)
-is surfaced for the report and advanced by the EXECUTOR after a successful sync;
-it does NOT scope or short-circuit this plan. The CHANGELOG is the human/SKILL
-narrative of the delta, not read by this script.
+Detection is GLOBAL; writes are SCOPED. The census below ALWAYS loads the whole
+spec set and compares every requirement's live fingerprint against its issue's
+stamped one -- a stale/missing CHANGELOG can never hide a real change. `--scope`
+(feature slugs and/or requirement ids) bounds only which ops are ACTIONABLE:
+drift outside the scope is still detected and REPORTED (plan["out_of_scope"]),
+just not written. Because the whole spec set is always loaded, the orphan-close
+census is sound -- a scoped run can never mistake an unselected feature's
+requirements for "removed from specs" and mass-close them. STALE/CLOSE and
+REFACTOR only ever fire for an issue whose feature is IN scope.
+
+Provenance: an issue may be `provenance: spec` (absent == spec; projects a
+requirement, fingerprint-reconciled as above) or `provenance: amendment` (added
+on demand, anchored to a feature/goal/ADR, body human-owned). Amendments are
+HARD-EXEMPT from the orphan/stale/refactor/clobber paths: the planner leaves
+them alone (SKIP), FLAGS them only if their feature anchor vanished, and can
+PROMOTE one to a spec issue via --promote ISSUE=REQ-ID (operator-confirmed).
 
 Idempotency: every op carries a stable idempotency key (req id + action +
 fingerprint). A re-run with no spec change yields an all-SKIP plan and no
@@ -45,17 +53,20 @@ silently drop.
 Hard gate: exits NONZERO when there is BLOCKING drift --
   - a matched issue with a missing/malformed meta block (needs a human),
   - a refactor fan-out that overflowed the cap,
-  - a requirement whose stored item fingerprint can't be computed.
-Otherwise exits 0 and the plan is safe to execute.
+  - a requirement whose stored item fingerprint can't be computed,
+  - a --promote target that is not an active requirement.
+Otherwise exits 0 and the plan is safe to execute. Out-of-scope drift never
+blocks (it is reported for the operator, not acted on).
 
   python scripts/analyze.py --spec-dir docs/specs --issues issues.json
+  python scripts/analyze.py --spec-dir docs/specs --issues issues.json --scope checkout,cart
   gh issue list ... --json ... | python scripts/analyze.py --spec-dir docs/specs --issues -
+  python scripts/analyze.py --spec-dir docs/specs --issues issues.json --promote 42=FR-CHK-007
   python scripts/analyze.py --spec-dir docs/specs --issues issues.json --json
-  python scripts/analyze.py --spec-dir docs/specs --issues issues.json --max-refactors 5
 
 Exit codes: 0 = plan is clean and safe to execute,
             1 = BLOCKING drift -- a human must approve the remediation report,
-            2 = spec/issues files can't be read.
+            2 = spec/issues files can't be read (or bad --promote/--scope args).
 """
 import argparse
 import glob
@@ -84,6 +95,9 @@ _META_RE = re.compile(
     re.escape(META_OPEN) + r"\s*```ya?ml\s*(.*?)```\s*" + re.escape(META_CLOSE),
     re.DOTALL)
 
+# A requirement id, used to classify --scope tokens (id vs feature slug).
+_REQ_ID_RE = re.compile(r"^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$")
+
 # Action names (stable -- the plan's vocabulary).
 CREATE = "CREATE"
 SKIP = "SKIP"
@@ -92,6 +106,7 @@ COMMENT_AND_FLAG = "COMMENT-AND-FLAG"
 STALE_CLOSE = "STALE/CLOSE"
 REFACTOR = "REFACTOR"
 REFACTOR_TRACKING = "REFACTOR-TRACKING"
+PROMOTE = "PROMOTE"          # amendment -> spec issue (operator-confirmed)
 
 
 # ── Loading specs ────────────────────────────────────────────────────────────
@@ -103,7 +118,8 @@ def load_yaml(path):
 def load_requirements(spec_dir):
     """{req_id: {record, feature_slug, fingerprint, status, governed_by}} across
     every features/*.md (requirements live in the frontmatter). Raises ValueError
-    on a read error."""
+    on a read error. ALWAYS the whole spec set -- scope bounds writes, not this
+    load, so the orphan census is always computed against complete specs."""
     reqs = {}
     files = feature_files(spec_dir)
     if not files:
@@ -167,11 +183,62 @@ def load_watermark(spec_dir):
         return {}
 
 
+# ── Scope (bounds WRITES only; detection stays global) ───────────────────────
+def parse_scope(spec):
+    """Parse a --scope string into {"features": set, "reqs": set}, or None for a
+    full (unscoped) run. Tokens matching a requirement id go to `reqs`; everything
+    else is a feature slug."""
+    if not spec:
+        return None
+    features, reqs = set(), set()
+    for tok in spec.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        (reqs if _REQ_ID_RE.match(tok) else features).add(tok)
+    if not features and not reqs:
+        return None
+    return {"features": features, "reqs": reqs}
+
+
+def in_scope(feature, req_id, scope):
+    """True when this feature/requirement is ACTIONABLE this run. A None scope
+    means everything is actionable (full run)."""
+    if scope is None:
+        return True
+    if feature and feature in scope["features"]:
+        return True
+    return bool(req_id) and req_id in scope["reqs"]
+
+
+def parse_promote(pairs):
+    """['42=FR-CHK-007', ...] -> {42: 'FR-CHK-007'}. Raises ValueError on a
+    malformed pair so the caller can exit 2 (an explicit operator action must not
+    be silently dropped)."""
+    out = {}
+    for p in pairs or []:
+        if "=" not in p:
+            raise ValueError(f"--promote expects ISSUE=REQ-ID, got {p!r}")
+        num, rid = p.split("=", 1)
+        try:
+            out[int(num.strip())] = rid.strip()
+        except ValueError:
+            raise ValueError(f"--promote issue number is not an integer: {p!r}")
+    return out
+
+
 # ── Parsing the issues JSON ──────────────────────────────────────────────────
 def parse_meta(body):
     """Extract the YAML meta mapping from an issue body. Returns (meta, None) or
     (None, reason) when the block is missing or malformed -- which is BLOCKING
-    drift (a human must re-stamp; we never guess from the prose)."""
+    drift (a human must re-stamp; we never guess from the prose).
+
+    `provenance` is the first discriminant (absent == spec, so pre-existing
+    issues are unaffected). A spec issue requires a non-empty list `trace_req`;
+    an amendment may have an empty trace_req but requires a `feature` anchor. A
+    string trace_req (hand-edited `trace_req: FR-CHK-001`) is always blocking --
+    it must never be iterated character-by-character downstream. The returned
+    meta always carries a normalized `provenance`."""
     if not body:
         return None, "empty body"
     m = _META_RE.search(body)
@@ -183,11 +250,25 @@ def parse_meta(body):
         return None, f"meta block is not valid YAML: {e}"
     if not isinstance(meta, dict):
         return None, "meta block is not a YAML mapping"
+
+    provenance = str(meta.get("provenance") or "spec").strip().lower()
     trace_req = meta.get("trace_req")
+    if trace_req is not None and not isinstance(trace_req, list):
+        # e.g. `trace_req: FR-CHK-001` -- would iterate as characters. Fail closed.
+        return None, "meta block's trace_req is present but not a list"
+
+    if provenance == "amendment":
+        feature = meta.get("feature")
+        if not isinstance(feature, str) or not feature.strip():
+            return None, ("amendment issue has no feature anchor "
+                          "(provenance: amendment requires a feature)")
+        meta["provenance"] = "amendment"
+        return meta, None
+
+    # spec provenance (the default): a requirement trace is required
     if not isinstance(trace_req, list) or not trace_req:
-        # a hand-edited string (trace_req: "FR-CHK-001") would otherwise iterate
-        # character-by-character downstream -- require a real list, fail closed.
         return None, "meta block's trace_req is missing or not a list"
+    meta["provenance"] = "spec"
     return meta, None
 
 
@@ -216,10 +297,11 @@ def is_merged(issue):
 
 
 def index_issues(issues):
-    """Match issues to requirements. Returns (by_req, blocking) where
-    by_req[req_id] -> [issue, ...] (a req may be sliced into several) and
-    blocking is a list of {issue, reason} for issues with a bad meta block."""
-    by_req, blocking = {}, []
+    """Match issues to requirements. Returns (by_req, blocking, amendments) where
+    by_req[req_id] -> [issue, ...] (a req may be sliced into several), amendments
+    is the list of provenance: amendment issues (matched by feature anchor, not a
+    requirement), and blocking is a list of issues with a bad meta block."""
+    by_req, blocking, amendments = {}, [], []
     for issue in issues:
         meta, err = parse_meta(issue.get("body"))
         if err:
@@ -228,9 +310,12 @@ def index_issues(issues):
                              "title": issue.get("title"), "reason": err})
             continue
         issue["_meta"] = meta
+        if meta.get("provenance") == "amendment":
+            amendments.append(issue)
+            continue
         for rid in meta.get("trace_req") or []:
             by_req.setdefault(str(rid), []).append(issue)
-    return by_req, blocking
+    return by_req, blocking, amendments
 
 
 # ── The plan ─────────────────────────────────────────────────────────────────
@@ -255,28 +340,49 @@ def _refactor_reason(req_id, info, adr_status):
     return None
 
 
-def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors):
+def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
+               amendments=None, scope=None, promote=None):
     """Compute the bounded reconcile plan. Returns a dict with `ops`,
-    `blocking` (list of human-needed problems), `counts`, and `truncated`."""
-    ops = []
-    blocking = list(blocking_meta)        # bad meta blocks are already blocking
-    refactor_candidates = []              # (req_id, issue, reason) -- capped below
-    seen_issue_numbers = set()
+    `out_of_scope` (drift detected but not acted on -- report only), `blocking`
+    (human-needed problems), `counts`, `truncated`, and `scope`.
 
-    # 1) Walk every CURRENT requirement.
+    Detection is global (every requirement is examined); `scope` bounds only
+    which ops are ACTIONABLE. STALE/CLOSE and REFACTOR only fire for an issue
+    whose feature is in scope -- and, because `reqs` is always the complete spec
+    set, an out-of-scope feature can never be misread as 'removed from specs'."""
+    ops = []
+    out_of_scope = []
+    blocking = list(blocking_meta)        # bad meta blocks are already blocking
+    refactor_candidates = []              # (req_id, issue, reason, feature)
+    seen_issue_numbers = set()
+    amendments = amendments or []
+    promote = promote or {}
+    known_features = {info["feature"] for info in reqs.values()}
+
+    def route(op, feature, rid):
+        """Send an op to `ops` if actionable, else record non-SKIP drift in
+        `out_of_scope`. Out-of-scope no-ops (SKIP) are simply dropped."""
+        if in_scope(feature, rid, scope):
+            ops.append(op)
+        elif op["action"] != SKIP:
+            op["out_of_scope"] = True
+            out_of_scope.append(op)
+
+    # 1) Walk every CURRENT requirement (the whole spec set -- detection is global).
     for rid in sorted(reqs):
         info = reqs[rid]
         fp = info["fingerprint"]
+        feature = info["feature"]
         matched = issues_by_req.get(rid, [])
         active = info["status"] == "active"
 
         if not matched:
             if active:
-                ops.append({"action": CREATE, "req": rid,
-                            "feature": info["feature"], "autonomy": "tbd",
-                            "fingerprint": fp,
-                            "key": idempotency_key(rid, CREATE, fp),
-                            "why": "new requirement, no issue yet"})
+                route({"action": CREATE, "req": rid,
+                       "feature": feature, "autonomy": "tbd",
+                       "fingerprint": fp,
+                       "key": idempotency_key(rid, CREATE, fp),
+                       "why": "new requirement, no issue yet"}, feature, rid)
             # a non-active req with no issue is simply nothing to do
             continue
 
@@ -290,12 +396,12 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors):
             # it -- never re-open, re-flag, or re-close. SKIP (the decision tree's
             # won't-do row), whether or not the requirement still exists/changed.
             if state == "wont-do":
-                ops.append({"action": SKIP, "req": rid,
-                            "issue": issue.get("number"), "fingerprint": fp,
-                            "key": idempotency_key(rid, SKIP, fp,
-                                                   str(issue.get("number"))),
-                            "why": "issue closed as won't-do (NOT_PLANNED); "
-                                   "respecting the human decision"})
+                route({"action": SKIP, "req": rid,
+                       "issue": issue.get("number"), "fingerprint": fp,
+                       "key": idempotency_key(rid, SKIP, fp,
+                                              str(issue.get("number"))),
+                       "why": "issue closed as won't-do (NOT_PLANNED); "
+                              "respecting the human decision"}, feature, rid)
                 continue
 
             # superseded/deferred requirement -> orphan or refactor
@@ -303,15 +409,17 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors):
                 if is_merged(issue):
                     reason = _refactor_reason(rid, info, adr_status)
                     refactor_candidates.append((rid, issue,
-                                                reason or f"{rid} is {info['status']}"))
+                                                reason or f"{rid} is {info['status']}",
+                                                feature))
                 else:
-                    ops.append({"action": STALE_CLOSE, "req": rid,
-                                "issue": issue.get("number"),
-                                "fingerprint": fp,
-                                "key": idempotency_key(rid, STALE_CLOSE, fp,
-                                                       str(issue.get("number"))),
-                                "why": f"requirement {info['status']} in specs; "
-                                       "close not-started/started issue as orphan"})
+                    route({"action": STALE_CLOSE, "req": rid,
+                           "issue": issue.get("number"),
+                           "fingerprint": fp,
+                           "key": idempotency_key(rid, STALE_CLOSE, fp,
+                                                  str(issue.get("number"))),
+                           "why": f"requirement {info['status']} in specs; "
+                                  "close not-started/started issue as orphan"},
+                          feature, rid)
                 continue
 
             # active requirement: a governing-ADR supersede on a merged issue is a
@@ -326,79 +434,136 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors):
                 refactor_candidates.append(
                     (rid, issue,
                      f"governing {adr_super} is {adr_status[adr_super]}; "
-                     f"{rid}'s issue merged{suffix}"))
+                     f"{rid}'s issue merged{suffix}", feature))
                 continue
 
             if stamped == fp:
-                ops.append({"action": SKIP, "req": rid,
-                            "issue": issue.get("number"), "fingerprint": fp,
-                            "key": idempotency_key(rid, SKIP, fp,
-                                                   str(issue.get("number"))),
-                            "why": "fingerprint matches; no-op"})
+                route({"action": SKIP, "req": rid,
+                       "issue": issue.get("number"), "fingerprint": fp,
+                       "key": idempotency_key(rid, SKIP, fp,
+                                              str(issue.get("number"))),
+                       "why": "fingerprint matches; no-op"}, feature, rid)
                 continue
 
             # fingerprint changed
             if is_merged(issue) or state == "completed":
                 refactor_candidates.append(
                     (rid, issue,
-                     f"{rid} changed but its issue is completed/merged"))
+                     f"{rid} changed but its issue is completed/merged", feature))
             elif state == "not-started":
-                ops.append({"action": UPDATE, "req": rid,
-                            "issue": issue.get("number"), "fingerprint": fp,
-                            "key": idempotency_key(rid, UPDATE, fp,
-                                                   str(issue.get("number"))),
-                            "why": "fingerprint changed; issue not started -- "
-                                   "auto-update managed regions"})
+                route({"action": UPDATE, "req": rid,
+                       "issue": issue.get("number"), "fingerprint": fp,
+                       "key": idempotency_key(rid, UPDATE, fp,
+                                              str(issue.get("number"))),
+                       "why": "fingerprint changed; issue not started -- "
+                              "auto-update managed regions"}, feature, rid)
             else:  # started or HITL
                 autonomy = str(meta.get("autonomy") or "afk")
-                ops.append({"action": COMMENT_AND_FLAG, "req": rid,
-                            "issue": issue.get("number"), "fingerprint": fp,
-                            "autonomy": autonomy,
-                            "flag": "needs-rebase" if autonomy == "afk"
-                                    else "spec-drift",
-                            "key": idempotency_key(rid, COMMENT_AND_FLAG, fp,
-                                                   str(issue.get("number"))),
-                            "why": "fingerprint changed; issue started -- "
-                                   "comment and flag, do not auto-edit"})
+                route({"action": COMMENT_AND_FLAG, "req": rid,
+                       "issue": issue.get("number"), "fingerprint": fp,
+                       "autonomy": autonomy,
+                       "flag": "needs-rebase" if autonomy == "afk"
+                               else "spec-drift",
+                       "key": idempotency_key(rid, COMMENT_AND_FLAG, fp,
+                                              str(issue.get("number"))),
+                       "why": "fingerprint changed; issue started -- "
+                              "comment and flag, do not auto-edit"}, feature, rid)
 
     # 2) Issues whose requirement vanished entirely from the specs (orphans not
-    #    seen above because the req id is gone from `reqs`).
+    #    seen above because the req id is gone from `reqs`). `reqs` is the COMPLETE
+    #    spec set, so this is a true orphan -- never an out-of-scope false positive.
+    #    The issue's own meta `feature` decides whether the close is in scope.
     for rid, matched in sorted(issues_by_req.items()):
         if rid in reqs:
             continue
         for issue in matched:
             if issue.get("number") in seen_issue_numbers:
                 continue
+            ofeature = str((issue.get("_meta") or {}).get("feature") or "")
             if issue_state(issue) == "wont-do":
-                ops.append({"action": SKIP, "req": rid,
-                            "issue": issue.get("number"), "fingerprint": "",
-                            "key": idempotency_key(rid, SKIP, "",
-                                                   str(issue.get("number"))),
-                            "why": "issue closed as won't-do; respecting the "
-                                   "human decision (requirement gone from specs)"})
+                route({"action": SKIP, "req": rid,
+                       "issue": issue.get("number"), "fingerprint": "",
+                       "key": idempotency_key(rid, SKIP, "",
+                                              str(issue.get("number"))),
+                       "why": "issue closed as won't-do; respecting the "
+                              "human decision (requirement gone from specs)"},
+                      ofeature, rid)
                 continue
             if is_merged(issue):
                 refactor_candidates.append(
                     (rid, issue,
-                     f"requirement {rid} removed from specs but its issue merged"))
+                     f"requirement {rid} removed from specs but its issue merged",
+                     ofeature))
             else:
-                ops.append({"action": STALE_CLOSE, "req": rid,
-                            "issue": issue.get("number"),
-                            "fingerprint": "",
-                            "key": idempotency_key(rid, STALE_CLOSE, "",
-                                                   str(issue.get("number"))),
-                            "why": f"requirement {rid} no longer in specs; "
-                                   "close as orphan"})
+                route({"action": STALE_CLOSE, "req": rid,
+                       "issue": issue.get("number"),
+                       "fingerprint": "",
+                       "key": idempotency_key(rid, STALE_CLOSE, "",
+                                              str(issue.get("number"))),
+                       "why": f"requirement {rid} no longer in specs; "
+                              "close as orphan"}, ofeature, rid)
 
-    # 3) Apply the refactor fan-out cap. Plan up to N; if more, plan ONE tracking
-    #    issue and BLOCK the gate (a human triages the cascade).
+    # 3) Amendments: provenance-exempt. Never orphan-close or refactor; leave the
+    #    body alone (human-owned). Flag only if the feature anchor vanished; PROMOTE
+    #    when the operator confirms a requirement now covers it.
+    for issue in amendments:
+        ometa = issue.get("_meta", {})
+        feature = str(ometa.get("feature") or "")
+        num = issue.get("number")
+        akey = f"AMD{num}"
+
+        if num in promote:
+            target = promote[num]
+            tinfo = reqs.get(target)
+            if not tinfo or tinfo["status"] != "active":
+                blocking.append({"kind": "promote_target_invalid", "number": num,
+                                 "reason": f"--promote {num}={target}: {target} is "
+                                           "not an active requirement in the specs"})
+                continue
+            # An explicit operator action is always actionable (like do-work --issue).
+            ops.append({"action": PROMOTE, "req": target, "issue": num,
+                        "feature": tinfo["feature"],
+                        "fingerprint": tinfo["fingerprint"],
+                        "key": idempotency_key(target, PROMOTE,
+                                               tinfo["fingerprint"], str(num)),
+                        "why": f"promote amendment #{num} to {target} "
+                               "(operator-confirmed): set trace_req, flip "
+                               "provenance to spec, stamp fingerprint, in place"})
+            continue
+
+        if feature in known_features:
+            route({"action": SKIP, "req": None, "issue": num,
+                   "provenance": "amendment", "feature": feature,
+                   "key": idempotency_key(akey, SKIP, "", str(num)),
+                   "why": f"amendment (anchor '{feature}' valid); human-owned, "
+                          "left untouched"}, feature, None)
+        else:
+            route({"action": COMMENT_AND_FLAG, "req": None, "issue": num,
+                   "provenance": "amendment", "feature": feature,
+                   "autonomy": "hitl", "flag": "orphaned",
+                   "key": idempotency_key(akey, COMMENT_AND_FLAG, "", str(num)),
+                   "why": f"amendment anchor feature '{feature}' is gone from the "
+                          "specs; a human must re-anchor or close (never "
+                          "auto-closed)"}, feature, None)
+
+    # 4) Apply the refactor fan-out cap -- to the IN-SCOPE refactors only. Plan up
+    #    to N; if more, plan ONE tracking issue and BLOCK the gate (a human triages
+    #    the cascade). Out-of-scope refactors are reported, never counted vs the cap.
+    for rid, issue, reason, feature in refactor_candidates:
+        if not in_scope(feature, rid, scope):
+            out_of_scope.append({"action": REFACTOR, "req": rid,
+                                 "issue": issue.get("number"),
+                                 "out_of_scope": True, "why": reason})
+    in_scope_refs = [c for c in refactor_candidates
+                     if in_scope(c[3], c[0], scope)]
+    in_scope_refs.sort(key=lambda c: (c[0], c[1].get("number") or 0))
     truncated = 0
-    refactor_candidates.sort(key=lambda c: (c[0], c[1].get("number") or 0))
-    for i, (rid, issue, reason) in enumerate(refactor_candidates):
+    for i, (rid, issue, reason, feature) in enumerate(in_scope_refs):
         if i < max_refactors:
             ops.append({"action": REFACTOR, "req": rid,
                         "issue": issue.get("number"),
-                        "autonomy": "hitl", "fingerprint": reqs.get(rid, {}).get("fingerprint", ""),
+                        "autonomy": "hitl",
+                        "fingerprint": reqs.get(rid, {}).get("fingerprint", ""),
                         "key": idempotency_key(rid, REFACTOR,
                                                reqs.get(rid, {}).get("fingerprint", ""),
                                                str(issue.get("number"))),
@@ -422,8 +587,12 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors):
     for op in ops:
         counts[op["action"]] = counts.get(op["action"], 0) + 1
 
-    return {"ops": ops, "blocking": blocking, "counts": counts,
-            "truncated": truncated, "max_refactors": max_refactors}
+    return {"ops": ops, "out_of_scope": out_of_scope, "blocking": blocking,
+            "counts": counts, "truncated": truncated,
+            "max_refactors": max_refactors,
+            "scope": (None if scope is None
+                      else {"features": sorted(scope["features"]),
+                            "reqs": sorted(scope["reqs"])})}
 
 
 def read_issues(path):
@@ -446,11 +615,24 @@ def main():
                     help="the layered spec dir (default: docs/specs)")
     ap.add_argument("--issues", required=True,
                     help="path to the `gh issue list --json ...` output, or - for stdin")
+    ap.add_argument("--scope", default="",
+                    help="comma-separated feature slugs and/or requirement ids to "
+                         "ACT on; empty = full run (act on everything). Detection "
+                         "is always global; scope bounds only the writes.")
+    ap.add_argument("--promote", action="append", default=[], metavar="ISSUE=REQ",
+                    help="promote an amendment issue to a spec requirement "
+                         "(operator-confirmed; repeatable), e.g. 42=FR-CHK-007")
     ap.add_argument("--max-refactors", type=int, default=10,
                     help="cap on refactor issues opened in one run (default 10)")
     ap.add_argument("--json", action="store_true", help="emit the plan as JSON")
     args = ap.parse_args()
 
+    try:
+        scope = parse_scope(args.scope)
+        promote = parse_promote(args.promote)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(2)
     try:
         reqs = load_requirements(args.spec_dir)
     except ValueError as e:
@@ -463,9 +645,10 @@ def main():
         sys.exit(2)
 
     adr_status = load_adr_status(args.spec_dir)
-    issues_by_req, blocking_meta = index_issues(issues)
+    issues_by_req, blocking_meta, amendments = index_issues(issues)
     plan = build_plan(reqs, issues_by_req, adr_status, blocking_meta,
-                      args.max_refactors)
+                      args.max_refactors, amendments=amendments, scope=scope,
+                      promote=promote)
 
     # The watermark is read for context (and re-stamped by the executor after a
     # successful sync); analyze surfaces it but does not write it.
@@ -483,16 +666,29 @@ def _report(plan, as_json):
         return
     counts = plan["counts"]
     order = [CREATE, SKIP, UPDATE, COMMENT_AND_FLAG, STALE_CLOSE, REFACTOR,
-             REFACTOR_TRACKING]
-    print("Reconcile plan:")
+             REFACTOR_TRACKING, PROMOTE]
+    scope = plan.get("scope")
+    if scope is None:
+        print("Reconcile plan (scope: ALL -- full run):")
+    else:
+        toks = ", ".join(scope["features"] + scope["reqs"]) or "(none)"
+        print(f"Reconcile plan (scope: {toks} -- writes bounded; "
+              "detection is global):")
     for action in order:
         if action in counts:
             print(f"  {action:18s} {counts[action]}")
     for op in plan["ops"]:
         if op["action"] in (REFACTOR, REFACTOR_TRACKING, STALE_CLOSE,
-                            COMMENT_AND_FLAG):
+                            COMMENT_AND_FLAG, PROMOTE):
             tgt = op.get("issue") or op.get("req") or "all"
             print(f"    - {op['action']} ({tgt}): {op['why']}")
+    out = plan.get("out_of_scope") or []
+    if out:
+        print(f"\nOUT-OF-SCOPE DRIFT ({len(out)}) -- detected, NOT acted on this "
+              "run (widen --scope or run without --scope to act):")
+        for op in out:
+            tgt = op.get("issue") or op.get("req") or "?"
+            print(f"    - would {op['action']} ({tgt}): {op['why']}")
     if plan["blocking"]:
         print("\nBLOCKING DRIFT -- a human must approve remediation:")
         for b in plan["blocking"]:
@@ -502,7 +698,9 @@ def _report(plan, as_json):
                 print(f"  - {b.get('kind', 'blocked')}: {b['reason']}")
         print("\nFAIL -- no GitHub write until this is resolved (exit 1)")
     else:
-        print("\nPASS -- plan is clean and safe to execute (exit 0)")
+        tail = (" (partial coverage: out-of-scope drift above is unchecked-by-"
+                "action this run)") if out else ""
+        print(f"\nPASS -- plan is clean and safe to execute (exit 0){tail}")
 
 
 if __name__ == "__main__":

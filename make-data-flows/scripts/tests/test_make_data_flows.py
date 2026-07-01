@@ -7,7 +7,8 @@ import yaml
 import embed_flows
 import flow_status
 import validate_flows
-from flowlib import find_regions, parse_stamp, split_frontmatter
+from flowlib import (find_regions, mermaid_kind, parse_attrs, parse_stamp,
+                     split_frontmatter)
 from validate_spec import compute_fingerprint  # make-spec, via conftest sys.path
 
 
@@ -256,6 +257,37 @@ def test_df006_skipped_when_no_region_even_if_fingerprint_stale(spec_dir):
     compute_fp = validate_flows._load_compute_fingerprint()
     fails, _ = validate_flows.validate_feature(cart, compute_fp)
     assert fails == []  # no region -> DF-006 does not fire
+
+
+def test_parse_attrs_tolerates_quotes_and_whitespace():
+    a = parse_attrs('id="DF-CHK-01" kind=data covers="FR-CHK-001,IR-CHK-001"')
+    assert a["id"] == "DF-CHK-01" and a["kind"] == "data"
+    assert a["covers"] == ["FR-CHK-001", "IR-CHK-001"]
+
+
+def test_mermaid_kind_skips_init_directive_and_comments():
+    src = "%%{init: {'theme':'dark'}}%%\n%% a comment\nflowchart TD\n  A --> B"
+    assert mermaid_kind(src) == "flowchart"
+    assert mermaid_kind("sequenceDiagram\n  A->>B: x") == "sequencediagram"
+
+
+def test_bom_is_preserved_byte_for_byte(tmp_path):
+    # A feature file that begins with a UTF-8 BOM must keep it across an embed.
+    feats = tmp_path / "docs" / "specs" / "features"
+    path, _ = make_feature(str(feats), "checkout", "CHK", [_req("FR-CHK-001")])
+    raw = open(path, encoding="utf-8").read()
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("﻿" + raw)
+    head_before = split_frontmatter(open(path, encoding="utf-8").read())[0]
+    assert head_before.startswith("﻿")
+
+    embed_flows.embed_feature(path, [DATA_FLOW], "2026-07-01T00:00:00Z")
+    after = open(path, encoding="utf-8").read()
+    assert after.startswith("﻿")  # BOM survived
+    head_after = split_frontmatter(after)[0]
+    assert head_after == head_before  # frontmatter (incl. BOM) byte-identical
+    # And a no-op re-embed stays byte-identical.
+    assert embed_flows.embed_feature(path, [DATA_FLOW], "2099-01-01T00:00:00Z") == "noop"
 
 
 def test_df006_fails_when_region_present_and_fingerprint_stale(spec_dir):

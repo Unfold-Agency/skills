@@ -97,12 +97,16 @@ def split_frontmatter(text):
 
     A file with no frontmatter returns ("", text, {}).
     """
+    # Preserve a UTF-8 BOM in `head` so the frontmatter is written back
+    # BYTE-FOR-BYTE (dropping it would churn the file on an otherwise no-op run).
+    bom = ""
     if text.startswith("﻿"):
+        bom = "﻿"
         text = text[1:]
     m = FRONTMATTER_RE.match(text)
     if not m:
-        return "", text, {}
-    head = text[: m.end()]
+        return "", bom + text, {}
+    head = bom + text[: m.end()]
     body = text[m.end():]
     try:
         doc = yaml.safe_load(m.group(1))
@@ -172,9 +176,10 @@ def parse_attrs(attr_str):
         if "=" not in tok:
             continue
         key, _, val = tok.partition("=")
-        attrs[key.strip()] = val.strip()
+        # Tolerate quoted values (id="DF-CHK-01") a human or sub-agent might write.
+        attrs[key.strip()] = val.strip().strip("'\"")
     if "covers" in attrs:
-        attrs["covers"] = [c for c in attrs["covers"].split(",") if c]
+        attrs["covers"] = [c.strip() for c in attrs["covers"].split(",") if c.strip()]
     return attrs
 
 
@@ -217,7 +222,9 @@ def mermaid_kind(src):
         return ""
     for line in src.splitlines():
         line = line.strip()
-        if line:
+        # Skip mermaid comments / init directives (%% ... , %%{init: ...}%%) so the
+        # kind is the real diagram keyword, not '%%'.
+        if line and not line.startswith("%%"):
             # 'flowchart TD' -> 'flowchart'; 'stateDiagram-v2' stays whole.
             return line.split()[0].lower()
     return ""

@@ -443,6 +443,16 @@ p_promo_bad = plan_for(reqs_chk_only, [amd_promo], promote={60: "FR-NOPE-001"})
 check("promote to a non-active requirement -> blocking drift",
       any(b.get("kind") == "promote_target_invalid" for b in p_promo_bad["blocking"]))
 
+# promote targeting an issue that is NOT an amendment must never be silently
+# dropped: a spec issue, or a number not in the set, blocks the gate.
+spec_iss_60 = issue(60, ["FR-CHK-001"], compute_item_fingerprint(r_chk))
+p_promo_spec = plan_for(reqs_chk_only, [spec_iss_60], promote={60: "FR-CHK-001"})
+check("promote targeting a spec issue -> blocking (promote_issue_invalid)",
+      any(b.get("kind") == "promote_issue_invalid" for b in p_promo_spec["blocking"]))
+p_promo_missing = plan_for(reqs_chk_only, [amd_promo], promote={999: "FR-CHK-001"})
+check("promote targeting a nonexistent issue -> blocking (promote_issue_invalid)",
+      any(b.get("kind") == "promote_issue_invalid" for b in p_promo_missing["blocking"]))
+
 # ── parse_scope / parse_promote unit behavior ───────────────────────────────
 check("parse_scope('') -> None (full run)", analyze.parse_scope("") is None)
 sc = analyze.parse_scope("checkout, FR-CART-001 ,cart")

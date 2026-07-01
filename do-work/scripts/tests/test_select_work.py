@@ -14,7 +14,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from select_work import (  # noqa: E402
     parse_meta, parse_dependencies, autonomy_of, issue_state, select,
-    milestone_phase, priority_of, DEFAULT_PRIORITY)
+    milestone_phase, priority_of, has_acceptance_criteria, provenance_of,
+    DEFAULT_PRIORITY)
 
 failures = []
 
@@ -25,13 +26,19 @@ def check(name, cond):
         failures.append(name)
 
 
-def body(autonomy="afk", deps="None", trace="FR-CHK-001", priority=None):
+def body(autonomy="afk", deps="None", trace="FR-CHK-001", priority=None,
+         criteria=True, provenance=None):
     prio_line = f"priority: {priority}\n" if priority is not None else ""
+    prov_line = f"provenance: {provenance}\n" if provenance is not None else ""
+    ac = ("## Acceptance criteria\n- [ ] does the thing\n"
+          "- [ ] Typecheck / lint / tests pass\n\n") if criteria else ""
     return (
         f"## What to build\nstuff per {trace}\n\n"
+        f"{ac}"
         f"## Dependencies\n\n{deps}\n\n"
         "<!-- make-issues:meta -->\n"
         "```yaml\n"
+        f"{prov_line}"
         f"trace_req: [{trace}]\n"
         "trace_adr: [ADR-0001]\n"
         "feature: checkout\n"
@@ -261,6 +268,55 @@ ok_dep = [
 ]
 check("dependent on a clean merged blocker is actionable",
       [a["number"] for a in select(ok_dep, ME)["actionable"]] == [90])
+
+# ── afk REQUIRES acceptance criteria (the Sentinel/Witness safety gate) ──────
+check("has_acceptance_criteria True when the section has a checkbox",
+      has_acceptance_criteria(body(criteria=True)) is True)
+check("has_acceptance_criteria False when the section is absent",
+      has_acceptance_criteria(body(criteria=False)) is False)
+check("has_acceptance_criteria False for an empty section (no checkboxes)",
+      has_acceptance_criteria("## Acceptance criteria\n\n## Next\n") is False)
+
+# An afk-labelled issue with NO acceptance criteria must be treated as hitl, so the
+# unattended afk drain never picks it -- even though its label says afk.
+no_ac = [issue(200, labels=("make-issues", "afk"),
+               body_text=body(autonomy="afk", criteria=False))]
+res_no_ac = select(no_ac, ME, autonomy="afk")
+exc_no_ac = {e["number"]: e["reason"] for e in res_no_ac["excluded"]}
+check("afk issue with no acceptance criteria -> excluded under the afk filter",
+      not res_no_ac["actionable"]
+      and "no acceptance criteria" in exc_no_ac.get(200, ""))
+# ...and the same issue targeted explicitly is surfaced with has_criteria=False so
+# the executor's build/merge gate can refuse to auto-build it.
+r_only = select(no_ac, ME, only=200)
+check("targeted criteria-less issue is surfaced with has_criteria=False",
+      r_only["actionable"] and r_only["actionable"][0]["has_criteria"] is False)
+
+# A criteria-less issue is still buildable when a human drives it (autonomy=any),
+# but it is flagged has_criteria=False so the merge gate stays honest.
+res_any_noac = select(no_ac, ME, autonomy="any")
+check("criteria-less issue under autonomy=any is surfaced (human-driven), flagged",
+      [a["number"] for a in res_any_noac["actionable"]] == [200]
+      and res_any_noac["actionable"][0]["has_criteria"] is False)
+
+# ── provenance (amendment vs spec) ──────────────────────────────────────────
+check("provenance_of default is spec", provenance_of({}) == "spec")
+check("provenance_of reads amendment", provenance_of({"provenance": "amendment"}) == "amendment")
+
+# An amendment WITH authored acceptance criteria and afk is a normal actionable
+# build; its provenance rides along so the executor uses the amendment contract.
+amd_ok = [issue(210, labels=("make-issues", "afk", "amendment"),
+                body_text=body(autonomy="afk", criteria=True, provenance="amendment"))]
+res_amd = select(amd_ok, ME, autonomy="afk")
+check("amendment + criteria + afk -> actionable, provenance surfaced",
+      [a["number"] for a in res_amd["actionable"]] == [210]
+      and res_amd["actionable"][0]["provenance"] == "amendment")
+
+# An amendment marked afk but with NO criteria is still gated to hitl.
+amd_no_ac = [issue(211, labels=("make-issues", "afk", "amendment"),
+                   body_text=body(autonomy="afk", criteria=False, provenance="amendment"))]
+check("amendment afk without criteria -> excluded (treated hitl)",
+      not select(amd_no_ac, ME, autonomy="afk")["actionable"])
 
 print()
 if failures:

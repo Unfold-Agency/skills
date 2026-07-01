@@ -8,6 +8,7 @@ criterion mutated without re-stamping).
   python scripts/tests/test_preflight.py
 Exit 0 = the gate accepts a clean fixture and rejects every drift.
 """
+import copy
 import os
 import shutil
 import sys
@@ -18,7 +19,8 @@ import yaml
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from gh_preflight import (  # noqa: E402
-    check_spec_integrity, compute_fingerprint, SPEC_OUT_KEYS, ARCH_OUT_KEYS)
+    check_spec_integrity, check_spec_set_present, parse_scope,
+    compute_fingerprint, SPEC_OUT_KEYS, ARCH_OUT_KEYS)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 failures = []
@@ -177,6 +179,96 @@ if os.path.isdir(UPSTREAM):
           r["ok"] is True and not r.get("fatal"))
 else:
     check("golden upstream fixtures present", False)
+
+# ── SCOPED gate ("a1"): a dirty SELECTED feature FAILS ───────────────────────
+# Two clean features + a dirty checkout. Scoped to checkout -> FAIL (never trace
+# an issue to a half-saved requirement).
+CART = {
+    "meta": {"slug": "cart", "prefix": "CART", "status": "active",
+             "feature_version": "1.0"},
+    "requirements": [
+        {"id": "FR-CART-001", "name": "Add item", "kind": "functional",
+         "description": "Add an item to the cart.",
+         "acceptance_criteria": ["WHEN add THE SYSTEM SHALL append."],
+         "governed_by": [], "depends_on": [], "interface": "add(id)",
+         "priority": "must", "status": "active"},
+    ],
+}
+
+
+def two_feature_tree(dirty_slug=None):
+    """checkout + cart, both stamped clean; if dirty_slug is given, that feature's
+    stored fingerprint is left stale (an IN edit without re-stamp). Deep-copies the
+    module fixtures so mutating one tree never leaks into another via shared refs."""
+    root = tempfile.mkdtemp(prefix="mkissues-specs-")
+    chk = stamped(copy.deepcopy(CHECKOUT))
+    crt = stamped(copy.deepcopy(CART))
+    if dirty_slug == "checkout":
+        chk["requirements"][0]["acceptance_criteria"] = ["WHEN dirty THE SYSTEM SHALL drift."]
+    if dirty_slug == "cart":
+        crt["requirements"][0]["acceptance_criteria"] = ["WHEN dirty THE SYSTEM SHALL drift."]
+    write_specs(root, stamped(copy.deepcopy(OVERVIEW)), {"checkout": chk, "cart": crt},
+                stamped(copy.deepcopy(ARCH), ARCH_OUT_KEYS))
+    return root
+
+
+root = two_feature_tree(dirty_slug="checkout")
+r = check_spec_integrity(root, parse_scope("checkout"))
+check("scoped run: dirty SELECTED feature -> gate FAILS", r["ok"] is False)
+shutil.rmtree(root)
+
+# ── SCOPED gate: a dirty UNSELECTED feature only WARNS (gate passes) ──────────
+root = two_feature_tree(dirty_slug="cart")
+r = check_spec_integrity(root, parse_scope("checkout"))
+check("scoped run: dirty UNSELECTED feature -> gate passes (advisory)",
+      r["ok"] is True)
+check("scoped run: the dirty unselected feature is a WARNING",
+      any("cart" in w["file"] for w in r.get("warnings", [])))
+shutil.rmtree(root)
+
+# ── same dirty-cart tree on a FULL run -> FAILS (preserves the old guarantee) ─
+root = two_feature_tree(dirty_slug="cart")
+r = check_spec_integrity(root)          # no scope == full run
+check("full run: any dirty feature -> gate FAILS (unchanged)", r["ok"] is False)
+shutil.rmtree(root)
+
+# ── SCOPED gate: scope by requirement id resolves to its feature ─────────────
+root = two_feature_tree(dirty_slug="checkout")
+r = check_spec_integrity(root, parse_scope("FR-CHK-001"))
+check("scoped-by-req-id: dirty feature owning the selected req -> FAILS",
+      r["ok"] is False)
+shutil.rmtree(root)
+
+# ── SCOPED gate: dirty overview is advisory on a scoped run ───────────────────
+root = tempfile.mkdtemp(prefix="mkissues-specs-")
+ov = stamped(copy.deepcopy(OVERVIEW))
+ov["goals"][0]["text"] = "Ship checkout fast"    # IN edit, no re-stamp
+write_specs(root, ov, {"checkout": stamped(copy.deepcopy(CHECKOUT))},
+            stamped(copy.deepcopy(ARCH), ARCH_OUT_KEYS))
+r = check_spec_integrity(root, parse_scope("checkout"))
+check("scoped run: dirty overview only warns (project-level, advisory)",
+      r["ok"] is True and any("overview" in w["file"] for w in r.get("warnings", [])))
+shutil.rmtree(root)
+
+# ── spec_set precondition ────────────────────────────────────────────────────
+root = fresh_tree()
+check("spec_set present when overview + features exist",
+      check_spec_set_present(root)["ok"] is True)
+shutil.rmtree(root)
+
+root = tempfile.mkdtemp(prefix="mkissues-specs-")     # empty dir, no specs
+p = check_spec_set_present(root)
+check("spec_set absent -> not ok and fatal (drives exit 2)",
+      p["ok"] is False and p.get("fatal") is True)
+check("spec_set absence message points the user to /make-spec",
+      "/make-spec" in p["detail"])
+shutil.rmtree(root)
+
+# ── parse_scope ──────────────────────────────────────────────────────────────
+check("parse_scope('') -> None", parse_scope("") is None)
+sc = parse_scope("checkout, FR-CART-001")
+check("parse_scope classifies feature vs req id",
+      sc["features"] == {"checkout"} and sc["reqs"] == {"FR-CART-001"})
 
 print()
 if failures:

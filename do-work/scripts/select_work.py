@@ -13,7 +13,11 @@ An issue is ACTIONABLE when all of these hold:
     mirror -- GitHub does not expose the native blocked-by edges through
     `gh ... --json`, see SKILL.md, Honest limits;
   - its autonomy matches the filter (default: afk only -- hitl items stop for a
-    human and are surfaced separately);
+    human and are surfaced separately). afk REQUIRES checkable acceptance
+    criteria: an afk issue whose body has no "## Acceptance criteria" checklist
+    (a criteria-less amendment, or a corrupted body) is treated as hitl, so the
+    unattended drain never auto-builds work it cannot verify as done -- the
+    `afk` label alone can never override a missing acceptance gate;
   - when --phase=N is given, its GitHub milestone is that phase ("Phase N: ...",
     set by make-issues from the overview's optional phasing block);
   - it is not already in flight under someone else's name.
@@ -84,6 +88,10 @@ _META_RE = re.compile(
     re.DOTALL)
 _DEPS_RE = re.compile(
     r"##\s*Dependencies\s*(.*?)(?=\n<!--|\n##\s|\Z)", re.DOTALL | re.IGNORECASE)
+_AC_RE = re.compile(
+    r"##\s*Acceptance criteria\s*(.*?)(?=\n<!--|\n##\s|\Z)",
+    re.DOTALL | re.IGNORECASE)
+_CHECKBOX_RE = re.compile(r"^\s*[-*]\s*\[[ xX]\]", re.MULTILINE)
 _ISSUE_NUM_RE = re.compile(r"#(\d+)")
 _PHASE_TITLE_RE = re.compile(r"^Phase\s+(\d+)\b")
 
@@ -128,6 +136,24 @@ def parse_dependencies(body):
         return []
     text = m.group(1)
     return sorted({int(n) for n in _ISSUE_NUM_RE.findall(text)})
+
+
+def has_acceptance_criteria(body):
+    """True when the body has an '## Acceptance criteria' section with at least one
+    task-list checkbox (`- [ ]` / `- [x]`). This is the checkable "done" an afk
+    build is verified against; an issue with none must not be built unattended,
+    whatever its label says. Spec issues always carry this section (embedded EARS
+    criteria); an amendment must author it to earn afk."""
+    m = _AC_RE.search(body or "")
+    if not m:
+        return False
+    return bool(_CHECKBOX_RE.search(m.group(1)))
+
+
+def provenance_of(meta):
+    """spec | amendment. Absent == spec (pre-existing issues are unaffected)."""
+    val = str((meta or {}).get("provenance") or "spec").strip().lower()
+    return "amendment" if val == "amendment" else "spec"
 
 
 def milestone_phase(issue):
@@ -219,10 +245,19 @@ def select(issues, me, autonomy="afk", phase=None, only=None):
 
         meta = parse_meta(issue.get("body", ""))
         item_autonomy = autonomy_of(issue, meta)
-        if only is None and autonomy != "any" and item_autonomy != autonomy:
-            excluded.append({"number": num,
-                             "reason": f"autonomy {item_autonomy or 'unset'} "
-                                       f"(filter: {autonomy})"})
+        provenance = provenance_of(meta)
+        criteria = has_acceptance_criteria(issue.get("body", ""))
+        # afk REQUIRES checkable acceptance criteria. An afk issue with none is
+        # treated as hitl for selection, so the unattended drain never picks work
+        # it cannot verify as done -- the `afk` label alone cannot override this.
+        effective_autonomy = "hitl" if (item_autonomy == "afk" and not criteria) \
+            else item_autonomy
+        if only is None and autonomy != "any" and effective_autonomy != autonomy:
+            reason = (f"autonomy {item_autonomy or 'unset'} (filter: {autonomy})")
+            if item_autonomy == "afk" and not criteria:
+                reason = ("afk but no acceptance criteria -- treated as hitl "
+                          "(needs a human; do-work will not auto-build it)")
+            excluded.append({"number": num, "reason": reason})
             continue
 
         if only is None and phase is not None:
@@ -271,6 +306,8 @@ def select(issues, me, autonomy="afk", phase=None, only=None):
             "number": num,
             "title": issue.get("title", ""),
             "autonomy": item_autonomy,
+            "provenance": provenance,
+            "has_criteria": criteria,
             "state": state,
             "resumable": resumable,
             "priority": priority_of(meta),

@@ -82,10 +82,41 @@ def issue(number, trace_req, fingerprint, state="OPEN", reason=None,
     }
 
 
-def plan_for(reqs_map, issues, adr_status=None, max_refactors=10):
-    by_req, blocking_meta = analyze.index_issues(issues)
+def plan_for(reqs_map, issues, adr_status=None, max_refactors=10, scope=None,
+             promote=None):
+    by_req, blocking_meta, amendments = analyze.index_issues(issues)
     return analyze.build_plan(reqs_map, by_req, adr_status or {}, blocking_meta,
-                              max_refactors)
+                              max_refactors, amendments=amendments,
+                              scope=scope, promote=promote)
+
+
+def amendment_body(feature, trace_req=None, autonomy="hitl"):
+    """A well-formed amendment issue body (provenance: amendment, feature anchor,
+    empty fingerprint)."""
+    reqs = "[" + ", ".join(trace_req or []) + "]"
+    return (
+        "## Goal\nAn on-demand add.\n\n"
+        f"{analyze.META_OPEN}\n```yaml\n"
+        "provenance: amendment\n"
+        f"trace_req: {reqs}\n"
+        "trace_adr: []\n"
+        f"feature: {feature}\n"
+        'source_version: ""\n'
+        f"autonomy: {autonomy}\n"
+        'fingerprint: ""\n'
+        f"```\n{analyze.META_CLOSE}\n"
+    )
+
+
+def amendment_issue(number, feature, trace_req=None, state="OPEN", reason=None):
+    return {
+        "number": number, "title": f"amendment {number}", "state": state,
+        "stateReason": reason, "labels": [{"name": "amendment"}],
+        "assignees": [], "closedByPullRequestsReferences": [],
+        "milestone": None, "updatedAt": "2026-06-01T00:00:00Z",
+        "url": f"https://example/{number}",
+        "body": amendment_body(feature, trace_req),
+    }
 
 
 def actions(plan):
@@ -205,7 +236,7 @@ check("string trace_req -> parse_meta blocks (not a list)",
 str_issue = issue(13, ["FR-CHK-001"], fp1)
 str_issue["body"] = str_issue["body"].replace("trace_req: [FR-CHK-001]",
                                               "trace_req: FR-CHK-001")
-by_req_s, blocking_s = analyze.index_issues([str_issue])
+by_req_s, blocking_s, _amd_s = analyze.index_issues([str_issue])
 check("string trace_req -> issue is blocking, not character-iterated into by_req",
       bool(blocking_s) and not any(len(k) == 1 for k in by_req_s))
 
@@ -308,6 +339,123 @@ with tempfile.TemporaryDirectory() as tmp:
         crashed = type(e).__name__
     check("non-dict meta -> no crash; slug falls back to the filename",
           crashed is None and out.get("FR-CHK-001", {}).get("feature") == "checkout")
+
+# ── SCOPE: writes are bounded, detection stays global ───────────────────────
+# Two features, each with one changed (not-started) requirement. A scoped run on
+# 'checkout' must UPDATE only checkout's issue and report cart's drift as
+# out-of-scope -- never act on it.
+r_chk = make_req("FR-CHK-001")
+r_crt = make_req("FR-CART-001")
+reqs_two = {"FR-CHK-001": req_info(r_chk, feature="checkout"),
+            "FR-CART-001": req_info(r_crt, feature="cart")}
+iss_two = [issue(30, ["FR-CHK-001"], "STALEHASH"),
+           issue(31, ["FR-CART-001"], "STALEHASH")]
+
+p_full = plan_for(reqs_two, iss_two)
+check("unscoped run acts on both features",
+      {o["action"] for o in p_full["ops"] if o["action"] == analyze.UPDATE} == {analyze.UPDATE}
+      and len([o for o in p_full["ops"] if o["action"] == analyze.UPDATE]) == 2)
+
+scope_chk = analyze.parse_scope("checkout")
+p_scoped = plan_for(reqs_two, iss_two, scope=scope_chk)
+upd = [o for o in p_scoped["ops"] if o["action"] == analyze.UPDATE]
+check("scoped run UPDATEs only the in-scope feature's issue",
+      len(upd) == 1 and op_for(p_scoped, "FR-CHK-001")["action"] == analyze.UPDATE)
+check("scoped run reports the out-of-scope drift (not acted on)",
+      any(o.get("req") == "FR-CART-001" for o in p_scoped["out_of_scope"]))
+check("scoped run does not act on the out-of-scope feature",
+      op_for(p_scoped, "FR-CART-001") is None)
+check("scoped run with only report-only drift does not block",
+      not p_scoped["blocking"])
+
+# scope by requirement id works too
+p_by_id = plan_for(reqs_two, iss_two, scope=analyze.parse_scope("FR-CART-001"))
+check("scope by requirement id acts on just that requirement",
+      op_for(p_by_id, "FR-CART-001")["action"] == analyze.UPDATE
+      and op_for(p_by_id, "FR-CHK-001") is None)
+
+# ── ORPHAN-CLOSE SCOPE GUARD: a removed req in an UNSELECTED feature is detected
+#    but never mass-closed by a scoped run. This is the mass-close hazard, fenced.
+# checkout req exists; an orphan issue traces a removed cart requirement.
+orphan_iss = issue(40, ["FR-CART-999"], "GONEHASH")
+orphan_iss["body"] = orphan_iss["body"].replace("feature: checkout",
+                                                "feature: cart")
+reqs_chk_only = {"FR-CHK-001": req_info(r_chk, feature="checkout")}
+p_guard = plan_for(reqs_chk_only, [orphan_iss], scope=analyze.parse_scope("checkout"))
+check("orphan in an out-of-scope feature is NOT closed by a scoped run",
+      not any(o["action"] == analyze.STALE_CLOSE for o in p_guard["ops"]))
+check("orphan in an out-of-scope feature is reported as out-of-scope drift",
+      any(o.get("req") == "FR-CART-999" for o in p_guard["out_of_scope"]))
+# but a full run (or a run scoped to cart) DOES close it
+p_close = plan_for(reqs_chk_only, [orphan_iss])
+op = next((o for o in p_close["ops"] if o.get("req") == "FR-CART-999"), None)
+check("orphan IS closed by a full run (detection global, action in scope)",
+      op and op["action"] == analyze.STALE_CLOSE)
+
+# ── AMENDMENTS: provenance-exempt from orphan/stale/refactor ─────────────────
+amd = amendment_issue(50, "checkout")
+by_req_a, blk_a, amd_list = analyze.index_issues([amd])
+check("amendment is indexed as an amendment, not a spec req match",
+      len(amd_list) == 1 and not by_req_a and not blk_a)
+
+# a valid-anchor amendment is left untouched (SKIP), never closed
+p_amd = plan_for(reqs_chk_only, [amd])
+amd_ops = [o for o in p_amd["ops"] if o.get("issue") == 50]
+check("amendment with a valid anchor -> SKIP (left untouched)",
+      len(amd_ops) == 1 and amd_ops[0]["action"] == analyze.SKIP)
+check("amendment is never STALE/CLOSE or REFACTOR",
+      not any(o.get("issue") == 50 and o["action"] in
+              (analyze.STALE_CLOSE, analyze.REFACTOR) for o in p_amd["ops"]))
+check("amendment does not block the gate", not p_amd["blocking"])
+
+# an amendment whose feature anchor vanished -> FLAG (never auto-close)
+amd_lost = amendment_issue(51, "ghost-feature")
+p_lost = plan_for(reqs_chk_only, [amd_lost])
+op = next((o for o in p_lost["ops"] if o.get("issue") == 51), None)
+check("amendment with a lost anchor -> COMMENT-AND-FLAG (orphaned), not closed",
+      op and op["action"] == analyze.COMMENT_AND_FLAG and op.get("flag") == "orphaned")
+
+# an amendment with no feature anchor at all -> blocking drift (malformed)
+amd_bad = amendment_issue(52, "checkout")
+amd_bad["body"] = amd_bad["body"].replace("feature: checkout", "feature: ''")
+_by, blk_bad, _amd = analyze.index_issues([amd_bad])
+check("amendment with no feature anchor -> blocking drift", bool(blk_bad))
+
+# absent provenance defaults to spec (backward compat: existing issues unaffected)
+legacy = issue(53, ["FR-CHK-001"], fp1)   # no provenance field in issue_body()
+meta_legacy, err_legacy = analyze.parse_meta(legacy["body"])
+check("absent provenance defaults to spec",
+      err_legacy is None and meta_legacy.get("provenance") == "spec")
+
+# ── PROMOTE: operator-confirmed amendment -> spec issue ─────────────────────
+amd_promo = amendment_issue(60, "checkout")
+# promote #60 to a real active requirement
+p_promo = plan_for(reqs_chk_only, [amd_promo], promote={60: "FR-CHK-001"})
+op = next((o for o in p_promo["ops"] if o.get("issue") == 60), None)
+check("promote to an active requirement -> PROMOTE op",
+      op and op["action"] == analyze.PROMOTE and op["req"] == "FR-CHK-001")
+check("PROMOTE stamps the target requirement's fingerprint",
+      op["fingerprint"] == compute_item_fingerprint(r_chk))
+check("valid promote does not block", not p_promo["blocking"])
+
+# promote to a non-existent / non-active requirement -> blocking drift
+p_promo_bad = plan_for(reqs_chk_only, [amd_promo], promote={60: "FR-NOPE-001"})
+check("promote to a non-active requirement -> blocking drift",
+      any(b.get("kind") == "promote_target_invalid" for b in p_promo_bad["blocking"]))
+
+# ── parse_scope / parse_promote unit behavior ───────────────────────────────
+check("parse_scope('') -> None (full run)", analyze.parse_scope("") is None)
+sc = analyze.parse_scope("checkout, FR-CART-001 ,cart")
+check("parse_scope splits features vs requirement ids",
+      sc["features"] == {"checkout", "cart"} and sc["reqs"] == {"FR-CART-001"})
+check("parse_promote parses ISSUE=REQ pairs",
+      analyze.parse_promote(["42=FR-CHK-007"]) == {42: "FR-CHK-007"})
+_raised = None
+try:
+    analyze.parse_promote(["not-a-pair"])
+except ValueError:
+    _raised = "ValueError"
+check("parse_promote rejects a malformed pair (-> exit 2)", _raised == "ValueError")
 
 print()
 if failures:

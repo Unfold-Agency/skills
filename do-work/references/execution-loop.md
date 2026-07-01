@@ -20,7 +20,7 @@ A worker gets a **pointer** -- the issue number and repo -- not shared context. 
 5. **Review and fix each built PR** (every run, not behind a flag). For each `built` verdict run the review -> fix loop (below): a fresh reviewer (`do-pr-review`) posts findings and returns a count of open Critical/Major findings; if any, a fixer (`do-pr-fix`) addresses them and replies in-thread; re-review repeats until clean or `maxReviewRounds` is spent. A PR that can't be cleared is parked for a human (`review_unresolved`), never merged.
 6. **Apply the terminal acceptance gate** (every review-clean PR -- see *Acceptance gate* below). Read the worker's **as-built ledger**: an issue is **acceptance-clean** only when every acceptance criterion is `met`. Any `deferred`/`mocked` entry (or a missing ledger) means the code does not yet satisfy the issue -- park it like an unconverged review (`review_unresolved`), never merging it as if done. Under `--dangerously` it may still merge, but each deferred/mocked entry gets a `needs-human-review` follow-up.
 7. **Merge** (only under `--auto-merge`, and only for `built` verdicts that came back **review-clean AND acceptance-clean**): merge each green PR **serially** (autonomy + CI guards in the merge step, including a wait for the post-fix CI). A merge closes the issue COMPLETED and unblocks its dependents.
-8. **Re-select and repeat** (the default): a fresh `select_work.py` pass surfaces issues a merge just unblocked. Keep an **attempted set** -- never re-dispatch an issue already tried this run -- so the loop terminates instead of rebuilding the same item. Stop when the queue is dry, when `--limit=<N>` issues have been processed, or when only HITL / blocked / flagged items remain.
+8. **Re-select and repeat** (under `--no-limit`): a fresh `select_work.py` pass surfaces issues a merge just unblocked. Keep an **attempted set** -- never re-dispatch an issue already tried this run -- so the loop terminates instead of rebuilding the same item. Stop when the limit is reached (**the default is one issue** -- a bare run does not loop; `--limit=<N>` caps at N; `--no-limit` runs until dry), when the queue is dry, or when only HITL / blocked / flagged items remain.
 9. **Report** (every run): built, reviewed/fixed, the **acceptance summary** (fully met as-spec vs deferred/mocked), merged, parked-for-review, escalated, failed, still-blocked, and the remaining queue.
 
 ## The worker's job (one issue)
@@ -96,4 +96,39 @@ A run killed mid-build leaves a branch and an assignment. Because `select_work.p
 
 ## Draining the whole backlog
 
-For an unattended drain, the orchestration above is encoded deterministically in `workflows/drain-queue.js` (run via the Workflow tool): preflight, then a loop of select -> parallel build workers -> review -> fix loop -> terminal acceptance gate -> serial auto-merge -> re-select, until the queue is dry. It takes `args.repo` and `args.skillDir`, plus `autoMerge`, `parallel` (1-3), `limit` (0 = unlimited), `maxReviewRounds`, an optional `reviewToken` (the bot review identity; defaults to env `GH_REVIEW_TOKEN`), and optional `reviewSkillDir` / `fixSkillDir` (default: siblings of `skillDir`). The script holds the loop and the verdicts; each build, review, and fix is still a fresh worker, and the run summary includes the **acceptance summary** (issues fully met vs with deferred/mocked criteria). See SKILL.md, *Execution model*.
+For an unattended drain, the orchestration above is encoded deterministically in `workflows/drain-queue.js` (run via the Workflow tool): preflight, then a loop of select -> parallel build workers -> review -> fix loop -> terminal acceptance gate -> serial auto-merge -> re-select, until the queue is dry (or the limit is hit). It takes `args.repo` and `args.skillDir`, plus `autoMerge`, `parallel` (1-3), `noLimit` (true = drain the whole queue) / `limit` (absent = **1**, the default bounded run; `0` = unlimited, same as `noLimit`; `N` = cap at N), `maxReviewRounds`, an optional `reviewToken` (the bot review identity; defaults to env `GH_REVIEW_TOKEN`), and optional `reviewSkillDir` / `fixSkillDir` (default: siblings of `skillDir`). There is no `dryRun` arg -- `--dry-run` is an interactive-only gate (below); the workflow builds without pausing. The script holds the loop and the verdicts; each build, review, and fix is still a fresh worker, and the run summary includes the **acceptance summary** (issues fully met vs with deferred/mocked criteria). See SKILL.md, *Execution model*.
+
+## Dry run (`--dry-run`, interactive only)
+
+`--dry-run` inserts a preview-and-approve gate before any build worker runs. The orchestrator does its read-only steps -- preflight and `select_work.py` -- to fix the in-scope set (honoring `--limit` / `--no-limit` / `--phase` / `--issue` / autonomy), dispatches a **planning worker** per in-scope issue, presents the consolidated plan, and **waits for the user to approve** before dispatching the real build workers. Nothing on GitHub or disk changes until then. This gate exists only in the interactive `/do-work` session; a headless run or the drain workflow builds straight through, because no one is there to approve.
+
+### The planning worker's job (one issue, read-only)
+
+A planning worker gets the same pointer a build worker gets -- the issue number and repo -- and the same reading list, but it **writes nothing**. It produces a plan, not a PR.
+
+1. **Read, in order** -- the issue (`gh issue view <N>`: Goal, What to build, the requirement + its EARS Acceptance criteria, Test plan, and the `make-issues:meta` block), the governing ADR in `docs/specs/decisions/` by its `trace_adr` when the rationale matters, and the **relevant existing code** so the outline is grounded in what is really there.
+2. **Do not mutate anything** -- no `gh issue edit` (no assignment, no `status:doing`, no labels), no `git switch`/branch, no edits or commits, no `git push`, no PR. It is the strict read-only counterpart of the build worker; the whole point of `--dry-run` is that approval comes *before* the first side effect.
+3. **Return a build outline** and stop -- this is the planning worker's entire handoff:
+
+```yaml
+issue:      <number>
+title:      <issue title>
+branch:     <type>/issue-<N>-<slug>     # the branch it WOULD create
+approach:   <a few lines: how it would build this slice>
+files:                                  # files it expects to create or change
+  - <path> -- <why>
+verify:     <the build gate it would run + the issue's Test plan>
+acceptance:                             # the criteria it must meet, from the issue
+  - <criterion>
+risks:                                  # ambiguities, gaps, or likely escalations
+  - <e.g. "governing ADR is silent on X" / "criterion C may be unsatisfiable -> would escalate">
+```
+
+### The orchestrator's dry-run job
+
+1. Preflight + select (read-only), as above, to get the ordered in-scope queue.
+2. Dispatch a planning worker per in-scope issue (serial, or parallel like a build round) and collect the outlines. A worker that finds a likely escalation reports it in `risks` -- it still does not touch the issue.
+3. **Present the plan and stop.** Show the run posture -- the in-scope issues in order; the review -> fix -> acceptance-gate pipeline; the merge posture under `--auto-merge` / `--dangerously`, including the **HITL auto-merge manifest** when `--dangerously` is set -- then each issue's outline. Ask the user to approve.
+4. **On approval**, dispatch ordinary build workers for the same issues (the normal orchestrator loop). If the user declines or narrows scope, stop; a `risks` entry that flags a spec/design defect is a cue to hand back upstream (`/make-spec` / `/make-arch` / `/make-issues`) before re-running.
+
+The outline covers only the **currently-actionable** in-scope issues; it cannot foresee issues that only unblock after a merge later in the run (the forward-only cascade), so with `--no-limit` the plan is the first tier, not the full eventual cascade.

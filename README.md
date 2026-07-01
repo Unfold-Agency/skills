@@ -43,7 +43,7 @@ These four chain end to end -- see [How these skills chain](#how-these-skills-ch
 | [`make-spec`](./make-spec) | Turns discovery material into a layered spec set under `docs/specs/`: a lean `overview` (problem, users, goals `G-NNN`, scope, a `feature_index`) plus one WHAT-only `features/<slug>` file per feature, each with EARS acceptance criteria and pinned requirement IDs (`FR`/`IR`/`NFR`/`CR`). A fail-closed fingerprint gate detects and blocks internal drift, and an `origin/main` no-vanishing check stops accidental deletions. |
 | [`make-arch`](./make-arch) | Derives the architecture from the spec set: an `architecture.md` (C4 / arc42-lite with mermaid) plus an append-only ADR log under `docs/specs/decisions/`. Recommend-then-refine, with each decision typed by confidence (`known` vs `assumption`). |
 | [`make-issues`](./make-issues) | Projects the spec set (overview + features + ADRs) into traceable GitHub Issues and keeps them in sync as the specs change -- per-requirement item fingerprints, a fail-closed spec-integrity preflight, a bounded reconcile engine, and issue meta stamping `trace_req` / `trace_adr` / `feature` / `source_version`. |
-| [`do-work`](./do-work) | Builds the project from those GitHub Issues, drains the actionable backlog by default (cap with `--limit=<N>`, scope to one implementation phase with `--phase=<N>`, target one ticket with `--issue=<N>`, get a morning-after status with `--status`, or go fully autonomous with `--dangerously`), implements each issue on a branch, runs the build gate, opens a PR that closes it, then **reviews and fixes that PR** (via `do-pr-review` / `do-pr-fix`) and applies a **terminal acceptance gate** before optionally merging (`--auto-merge`). Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
+| [`do-work`](./do-work) | Builds the project from those GitHub Issues, one actionable issue per run by default (drain the whole backlog with `--no-limit`, cap at N with `--limit=<N>`, preview the plan and approve before building with `--dry-run`, scope to one implementation phase with `--phase=<N>`, target one ticket with `--issue=<N>`, get a morning-after status with `--status`, or go fully autonomous with `--dangerously`), implements each issue on a branch, runs the build gate, opens a PR that closes it, then **reviews and fixes that PR** (via `do-pr-review` / `do-pr-fix`) and applies a **terminal acceptance gate** before optionally merging (`--auto-merge`). Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
 
 ### Utility skills
 
@@ -113,7 +113,7 @@ Change `FR-CHK-001`'s acceptance criteria with `/make-spec` and re-run `/make-is
 
 ### The build loop: build → review → fix → acceptance gate → merge
 
-`do-work` doesn't just open a PR and stop. It **drains the backlog by default** (no flag = work every actionable issue; `--limit=<N>` caps the run, `--limit=1` does a single issue), and every PR it opens runs through an automatic **review → fix loop** and then a **terminal acceptance gate** before the run is done with it:
+`do-work` doesn't just open a PR and stop. It **builds one actionable issue by default** (a bounded, observable run; `--no-limit` drains the whole backlog, `--limit=<N>` caps at N), and every PR it opens runs through an automatic **review → fix loop** and then a **terminal acceptance gate** before the run is done with it:
 
 ```
 select next issue
@@ -152,7 +152,7 @@ This whole loop is encoded deterministically in `do-work/workflows/drain-queue.j
 ```js
 Workflow({ scriptPath: "<do-work>/workflows/drain-queue.js",
            args: { repo: "owner/name", skillDir: "<do-work>",
-                   autoMerge: true, limit: 0, parallel: 2,
+                   autoMerge: true, noLimit: true, parallel: 2,  // omit noLimit -> one issue
                    reviewToken: process.env.GH_REVIEW_TOKEN,  // bot review identity (optional)
                    modelBuild: "opus", modelFix: "sonnet", effortReview: "high" } })
 ```
@@ -161,21 +161,23 @@ The script locates `do-pr-review` and `do-pr-fix` as siblings of `skillDir` auto
 
 ### Driving do-work: flags and modes
 
-Invoke `do-work` as `/do-work [flags]` (or headless: `claude -p "/do-work [flags]"`). With no flags it drains the whole **AFK** queue and leaves clean PRs ready for a human to merge. The flags compose:
+Invoke `do-work` as `/do-work [flags]` (or headless: `claude -p "/do-work [flags]"`). With no flags it builds the next single **AFK** issue and leaves the clean PR ready for a human to merge. The flags compose:
 
 | Flag | What it does |
 |---|---|
-| *(none)* | Drain every actionable **AFK** issue: build → review → fix each PR, apply the acceptance gate, then re-select until the queue is dry or only HITL / blocked work remains. Clean PRs are left **ready-for-review**; a human merges. |
-| `--limit=<N>` | Cap the run at N issues (`--limit=1` builds a single issue then stops; `0` or omitted = unlimited). |
+| *(none)* | Build the next single actionable **AFK** issue: build → review → fix the PR, apply the acceptance gate, then stop. The clean PR is left **ready-for-review**; a human merges. A bare run is bounded -- one issue -- so nothing runs away before you look. |
+| `--no-limit` | Drain every actionable **AFK** issue: re-select after each until the queue is dry or only HITL / blocked work remains (the old default). Pair with `--auto-merge` to drain a full dependency chain in one pass. |
+| `--limit=<N>` | Cap the run at N issues (the default is `--limit=1`; `--limit=0` is the same as `--no-limit`). |
+| `--dry-run` | Outline **what it plans to do** -- a per-issue build outline for each in-scope issue -- and **wait for approval** before building anything. Composes with the scope flags and with `--auto-merge` / `--dangerously`. Interactive `/do-work` only. |
 | `--phase=<N>` | Drain only issues in **implementation phase N** -- the GitHub milestone `Phase N: …` that `make-issues` creates from the overview's optional `phasing` block. Composes with `--limit`. |
 | `--issue=<N>` | Build exactly issue **#N**, then stop. Bypasses the phase/autonomy filters (you picked it explicitly), but still skips a flagged, blocked, or in-flight target. Takes precedence over `--phase`. |
 | `--auto-merge` | After a PR's review loop is clean, it is acceptance-clean, and CI is green, merge it -- closing the issue and unblocking its dependents -- then continue. The full overnight loop. |
 | `--status` | Report and exit; build nothing. Prints the **morning-after surface** -- what merged, what is parked for a human, what is dangling (a branch/PR left open, not yours), what is safe to resume, and what is ready to build next. Run it first thing after an overnight or `--dangerously` run. |
-| `--dangerously` | **Full autonomy, accept the risk.** Build **and merge every** issue (AFK **and** HITL) with no human prompts. See below. |
+| `--dangerously` | **Full autonomy, accept the risk.** Build **and merge** issues (AFK **and** HITL) with no human prompts -- one issue by default; add `--no-limit` to power through the whole backlog. See below. |
 
 **`--phase` and the implementation plan.** A project's `overview` (from `/make-spec`) can carry a `phasing` block (e.g. *Phase 1: Foundation*, *Phase 2: Checkout*). `/make-issues` turns each phase into a GitHub **milestone** and files every issue under its phase. `/do-work --phase=1` then builds only that phase's issues -- so you can ship the foundation, review it, and only then drain phase 2. The dependency gate still applies: a phase-2 issue blocked by an unmerged phase-1 issue waits, so a clean phase-by-phase drive usually pairs `--phase` with `--auto-merge`.
 
-**`--dangerously` -- maximum throughput, you own the risk.** It iterates over **every** buildable issue, AFK and HITL alike, and never stops for input:
+**`--dangerously` -- maximum throughput, you own the risk.** It builds and merges without stopping for input -- one issue by default, or **every** buildable issue (AFK and HITL alike) when paired with `--no-limit`:
 
 - It **builds and merges HITL** issues like any other (the one mode where the HITL gate is lifted).
 - For an **implementation** gap it **resolves** with a best-practice default and **mocks** any missing external (an API, seed data, a credential) so work keeps moving -- **but an unsatisfiable acceptance criterion is a spec defect, not an implementation choice, and it ALWAYS escalates and stops that issue**, even here.
@@ -187,16 +189,17 @@ It still **skips** issues `make-issues` flagged stale (the spec is known out of 
 **Examples**
 
 ```bash
-/do-work                          # drain the AFK queue; humans merge
-/do-work --limit=1                # build just the next issue
+/do-work                          # build just the next AFK issue; a human merges
+/do-work --dry-run                # outline the next issue's plan, then wait for approval
+/do-work --no-limit               # drain the whole AFK queue; humans merge
 /do-work --phase=1 --auto-merge   # ship implementation phase 1 end to end
 /do-work --issue=42               # build one specific issue
-/do-work --auto-merge             # overnight loop: build, review, fix, gate, merge
+/do-work --no-limit --auto-merge  # overnight loop: build, review, fix, gate, merge the backlog
 /do-work --status                 # morning-after surface: what merged / parked / resumable
-/do-work --dangerously            # full autonomy over the whole backlog
+/do-work --no-limit --dangerously # full autonomy over the whole backlog
 ```
 
-The same loop runs deterministically via the drain workflow (above) for long backlogs -- pass `phase`, `issue`, or `dangerously: true` as args alongside `repo` and `skillDir`.
+The same loop runs deterministically via the drain workflow (above) for long backlogs -- pass `noLimit: true` (or `limit: <N>`), `phase`, `issue`, or `dangerously: true` as args alongside `repo` and `skillDir`. The workflow builds one issue by default too; there is no `dryRun` arg (that gate is interactive-only).
 
 ## Use these skills in Claude Code
 

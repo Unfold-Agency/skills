@@ -506,6 +506,7 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
     # 3) Amendments: provenance-exempt. Never orphan-close or refactor; leave the
     #    body alone (human-owned). Flag only if the feature anchor vanished; PROMOTE
     #    when the operator confirms a requirement now covers it.
+    amendment_nums = {issue.get("number") for issue in amendments}
     for issue in amendments:
         ometa = issue.get("_meta", {})
         feature = str(ometa.get("feature") or "")
@@ -545,6 +546,15 @@ def build_plan(reqs, issues_by_req, adr_status, blocking_meta, max_refactors,
                    "why": f"amendment anchor feature '{feature}' is gone from the "
                           "specs; a human must re-anchor or close (never "
                           "auto-closed)"}, feature, None)
+
+    # A --promote target that is not an amendment issue (a spec issue, a malformed
+    # one, or a number that does not exist) is an explicit operator action that must
+    # never be silently dropped -- block the gate so the operator sees it.
+    for num, target in promote.items():
+        if num not in amendment_nums:
+            blocking.append({"kind": "promote_issue_invalid", "number": num,
+                             "reason": f"--promote {num}={target}: issue #{num} is "
+                                       "not an amendment issue (or does not exist)"})
 
     # 4) Apply the refactor fan-out cap -- to the IN-SCOPE refactors only. Plan up
     #    to N; if more, plan ONE tracking issue and BLOCK the gate (a human triages

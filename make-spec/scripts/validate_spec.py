@@ -420,7 +420,14 @@ def main():
         meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
         if meta.get("status") not in (None, "active"):
             continue
-        for gid in doc.get("supports") or []:
+        supports = doc.get("supports")
+        if supports is not None and not isinstance(supports, list):
+            # A bare scalar (supports: G-001) would otherwise iterate char-by-char
+            # or, for a non-iterable, crash the validator with a traceback.
+            fail("S-013", f"{dpath}: supports must be a list of goal ids "
+                          "(e.g. [G-001]), not a bare value")
+            continue
+        for gid in supports or []:
             if not GOAL_ID_RE.match(str(gid)):
                 fail("S-013", f"{dpath}: supports '{gid}' is not a goal id "
                               "(want ^G-\\d{3,}$)")

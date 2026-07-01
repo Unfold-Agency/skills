@@ -1,7 +1,7 @@
 export const meta = {
   name: 'do-work-drain',
   description: 'Drain the make-issues backlog: build each actionable issue in its own isolated worker, then ALWAYS review and fix the PR (do-pr-review -> do-pr-fix loop) until no blocking findings remain, apply the terminal acceptance gate (every acceptance criterion in the worker as-built ledger must be met -- consistency != correctness), optionally auto-merge on green, and re-select until the queue is dry. The orchestrator (this script) holds only the queue and one verdict per issue; every build/review/fix runs in a fresh worker context.',
-  whenToUse: 'Run do-work over a backlog (drain-by-default). Each PR is reviewed and fixed automatically; pass autoMerge:true to also merge clean green PRs, or dangerously:true for full autonomy (build AND merge every issue incl. hitl, mock blockers, never stop -- flags follow-ups). Pass args.repo and args.skillDir; cap with args.limit, scope to one phase with args.phase, or target a single issue with args.issue.',
+  whenToUse: 'Run do-work over the backlog. Builds ONE issue by default (a bounded run); pass noLimit:true (or limit:0) to drain every actionable issue, or limit:N to cap at N. Each PR is reviewed and fixed automatically; pass autoMerge:true to also merge clean green PRs, or dangerously:true for full autonomy (build AND merge every issue incl. hitl, mock blockers, never stop -- flags follow-ups). Pass args.repo and args.skillDir; scope to one phase with args.phase, or target a single issue with args.issue. (--dry-run is an interactive /do-work feature, not a workflow arg.)',
   phases: [
     { title: 'Preflight', model: 'haiku' },
     { title: 'Select', model: 'haiku' },
@@ -29,7 +29,13 @@ export const meta = {
 //                  open a needs-human-review follow-up issue for anything decided, and
 //                  never stop for a human. Forces autonomy=any + autoMerge. Still skips
 //                  make-issues stale/escalated issues. Red CI is never merged.
-// limit:           max issues processed this run; <=0 / absent = unlimited (drain all)
+// limit:           max issues processed this run; absent = 1 (the default -- a single
+//                  bounded issue); a positive N caps at N. limit:0 = unlimited (drain).
+// noLimit:         true = drain the whole actionable queue (equivalent to limit:0).
+//                  This is the explicit opt-in for the old drain-by-default behavior.
+// dryRun:          NOT a workflow arg -- --dry-run is an interactive /do-work feature
+//                  (it pauses for a human to approve the plan). A headless drain has no
+//                  one to approve, so this script ignores it and always builds.
 // phase:           drain only issues in implementation phase N (the milestone
 //                  "Phase N: ..."); absent = all phases. Composes with limit.
 // issue:           build only this one issue number; bypasses the phase/autonomy
@@ -55,7 +61,21 @@ const DANGEROUS = !!A.dangerously
 const AUTO_MERGE = DANGEROUS || !!A.autoMerge
 const PARALLEL = Math.max(1, Math.min(3, parseInt(A.parallel, 10) || 1))
 const ISO = PARALLEL > 1 ? { isolation: 'worktree' } : {}
-const LIMIT = parseInt(A.limit, 10) > 0 ? parseInt(A.limit, 10) : Infinity
+// Resolve the per-run issue cap. The default is ONE issue -- a bounded, observable
+// run -- so a bare invocation never runs away over the whole backlog. Draining is an
+// explicit opt-in in any form a caller might reach for: noLimit:true, limit:0, or an
+// explicit limit:Infinity ("Infinity"). A positive limit caps at exactly N; junk /
+// negative falls to the default 1. (parseInt(Infinity) is NaN, so the unlimited forms
+// are matched BEFORE parsing, or an explicit Infinity would wrongly collapse to 1.)
+// Kept pure so it is unit-tested against the source (see scripts/tests).
+function resolveLimit(a) {
+  const raw = (a || {}).limit
+  if ((a || {}).noLimit === true || raw === Infinity || raw === 'Infinity') return Infinity
+  const n = parseInt(raw, 10)
+  if (n === 0) return Infinity   // limit:0 (or "0") == --no-limit / drain
+  return n > 0 ? n : 1           // N, else the default 1
+}
+const LIMIT = resolveLimit(A)
 const PHASE = parseInt(A.phase, 10) > 0 ? parseInt(A.phase, 10) : null
 const ISSUE = parseInt(A.issue, 10) > 0 ? parseInt(A.issue, 10) : null
 const MAX_ROUNDS = parseInt(A.maxRounds, 10) || 100

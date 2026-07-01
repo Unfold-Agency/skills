@@ -53,6 +53,14 @@ A `make-` skill that produces an observability artifact over the whole pipeline 
 |---|---|
 | [`make-trace`](./make-trace) | Renders a single self-contained traceability map -- Objectives (`G-NNN`) -> Requirements (`FR`/`IR`/`NFR`/`CR`) -> Architecture (components / integrations / ADRs) -> GitHub Issues -- with every edge **derived from the specs + issue meta** (no hand-mapping) and a **live roll-up** coloring each parent by the status of the issues beneath it. The map is **additive**: it accumulates a ledger and **tombstones** anything deleted (an issue or requirement that disappears is shown struck-through as `deleted`, never dropped), while adds, edits, and renumbers flow through normally. Output is a private, self-contained `docs/traceability/index.html` opened locally (nothing is published, no GitHub Action); a byte-identical no-op guard means an unchanged map produces no diff. Flags: `--repo`, `--spec-dir`, `--out`, `--allow-empty`, `--open`. |
 
+### The feature-level engineering aids
+
+Two more `make-` companions that sit after `make-arch`. They are **advisory** -- like `make-trace`, they refresh engineering artifacts and never gate `make-issues`/`do-work`, and each keeps its own fail-closed fingerprint + byte-identical no-op guards so it never self-corrupts. Run them on demand, targetable per-feature:
+
+| Skill | What it does |
+|---|---|
+| [`make-data-flows`](./make-data-flows) | Generates and maintains per-feature **data-flow and user-flow diagrams** (Mermaid) embedded in each `features/<slug>.md` **body**, so an engineer can see how one feature moves data and walks a user. Because the diagrams live in the body they are **out of make-spec's fingerprint** (which hashes only the frontmatter), so embedding never moves a feature version or trips the S-006 gate. It fans out one worker sub-agent per feature, uses the stamped `feature_version` as the SKIP-vs-REGENERATE oracle (an advisory edit never regenerates), preserves the human narrative byte-for-byte, and is byte-identical on a no-op. `--feature`, `--all`, `--check`, `--force`. |
+
 ### Utility skills
 
 Standalone skills that run on their own rather than as a lane in the planning-and-build chain. Most are `do-` skills that perform actions, like the pipeline's `do-work`; `summon-council` is the deliberation exception noted above:

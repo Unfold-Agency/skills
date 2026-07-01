@@ -101,6 +101,11 @@ genuine HOW decision shows up.
 `trace_adr` (its governing decision); `/do-work` builds from those issues. Change
 flows forward: add/supersede an ADR here -> re-run `/make-issues` to reconcile.
 
+Optionally, once the architecture is settled, `/make-data-flows` embeds per-feature
+data-flow and user-flow diagrams (Mermaid) into the feature specs. It is **advisory**
+(it never gates the build) and references this layer's component/ADR names rather than
+redrawing the system.
+
 ## Writing rules
 
 Plain words, short sentences, no marketing language. One decision per ADR. Never use

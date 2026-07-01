@@ -45,7 +45,7 @@ and **never argues a seat in its own context.** It runs the room:
 2. **Premise check.** Before anyone argues the merits, ask whether this is even the right question.
    The Oracle leads this; the Chair owns it. The premise gate always runs.
 3. **Convene.** Seat the core trio, then run the type map plus the concern scan to summon the bench
-   seats the decision actually needs. Record who was seated, who was benched, and why.
+   seats that the decision actually needs. Record who was seated, who was benched, and why.
 4. **Enforce independence.** Collect each seat's position *before* any seat sees another's, by
    dispatching each as its own sub-agent. This is the anti-anchoring mechanism and it is not optional.
 5. **Run cross-examination anonymized.** Strip the seat labels and make the voices attack the
@@ -100,8 +100,8 @@ summoned specialists lead the discussion of their domain.
 - **Artifact review** (PRD / TDD / RFP / spec / proposal): summon **Scribe, Witness, Hierophant**.
   Output centers on what the document actually says vs. intends.
 - **Path selection** (A vs B vs C): summon **Architect, Reckoner**. **Produce a tradeoff matrix.**
-- **Go / no-go**: **core trio only** by default; summon **Reckoner** if feasibility is the crux. The
-  Harbinger and Zealot carry the spine, and the verdict must land on a clear call.
+- **Go / no-go**: **Oracle + core trio only** by default; summon **Reckoner** if feasibility is the
+  crux. The Harbinger and Zealot carry the spine, and the verdict must land on a clear call.
 - **Security / edge-case review**: summon **Sentinel, Witness**; the Adversary (core) red-teams the
   assumptions.
 

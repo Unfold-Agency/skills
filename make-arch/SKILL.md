@@ -102,9 +102,10 @@ genuine HOW decision shows up.
 flows forward: add/supersede an ADR here -> re-run `/make-issues` to reconcile.
 
 Optionally, once the architecture is settled, `/make-data-flows` embeds per-feature
-data-flow and user-flow diagrams (Mermaid) into the feature specs. It is **advisory**
-(it never gates the build) and references this layer's component/ADR names rather than
-redrawing the system.
+data-flow and user-flow diagrams (Mermaid) into the feature specs, and
+`/make-api-contracts` derives a mock-ready OpenAPI contract from them (referencing this
+layer's integrations/ADRs by id via `x-integration` / `x-trace-adr`, never redefining an
+external provider). Both are **advisory** -- they never gate the build.
 
 ## Writing rules
 

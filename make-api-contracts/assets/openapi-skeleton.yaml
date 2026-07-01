@@ -1,0 +1,64 @@
+# ═══════════════════════════════════════════════════════════════════
+# openapi.yaml -- ILLUSTRATIVE SKELETON (make-api-contracts)
+#
+# GENERATED FILE. The real docs/specs/api/openapi.yaml is built and
+# re-stamped by scripts/build_contracts.py on every run from the authored
+# operations payload. Never hand-edit it -- edit the specs/flows and
+# re-run, exactly like make-arch's arch-data.yaml. (Human-owned fields --
+# summary, description, x-notes -- ARE preserved across a rebuild.)
+#
+# This file documents the shape and the provenance vendor extensions. It
+# is NOT loaded at runtime; build_contracts.py seeds a fresh doc itself.
+# See api-contracts-schema.md for the full contract and the AC- rules.
+# Never an em dash; use ` -- `.
+# ═══════════════════════════════════════════════════════════════════
+openapi: "3.1.0"
+info:
+  title: "<project> API"
+  version: "0.1"
+  x-contract-version: ""          # first 12 hex of the doc fingerprint (STAMPED, OUT)
+  x-fingerprint: ""               # sha256 over the doc minus the volatile info keys (STAMPED)
+  x-generated: ""                 # ISO-8601; reused on a no-op so an unchanged run is byte-identical
+servers:
+  - url: /api
+tags:
+  - name: checkout                # one tag per feature slug -- the per-feature write boundary
+paths:
+  /orders:
+    post:
+      operationId: checkout.createOrder   # STABLE upsert key: <feature-slug>.<verbResource>
+      tags: [checkout]
+      summary: Record a paid order          # human-owned: preserved across a rebuild
+      x-trace-req: [IR-CHK-001]             # requirement id(s) -- provenance (mirrors make-issues)
+      x-feature: checkout
+      x-source-version: ""                  # the feature_version this op was born from (STAMPED)
+      x-trace-adr: [ADR-0001]               # governing decision -> make-arch
+      x-integration: INTG-stripe            # external system -> make-arch (referenced, NOT redefined)
+      x-op-fingerprint: ""                  # per-op hash over the derived shape (STAMPED)
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OrderInput" }
+      responses:
+        "201":
+          description: Order recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+              example: { id: "ord_1", status: "paid" }
+        "4XX":
+          description: Declined or invalid    # from the requirement's EARS IF...THEN clause
+components:
+  schemas:
+    OrderInput:
+      type: object
+      properties:
+        items: { type: array, items: { type: object } }
+        total: { type: number }
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        items: { type: array, items: { type: object } }
+        total: { type: number }
+        status: { type: string }

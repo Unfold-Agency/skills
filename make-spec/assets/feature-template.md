@@ -73,7 +73,11 @@ requirements:
 
 <!-- HUMAN NARRATIVE. The frontmatter above is the signed contract; this body
 helps a reviewer understand it. Summarize and reference requirements by id; do
-not restate acceptance criteria here (they live, authoritatively, above). -->
+not restate acceptance criteria here (they live, authoritatively, above).
+The optional make-data-flows skill may append one machine-managed
+`<!-- make-data-flows:flows -->` region to this body (Mermaid data/user-flow
+diagrams). It lives in the body, so it is OUT of the fingerprint and never
+affects the contract; leave it to that skill and do not hand-edit it. -->
 
 **Story.** [Restate the user story/stories in prose.]
 

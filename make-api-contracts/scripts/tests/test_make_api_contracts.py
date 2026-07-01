@@ -86,6 +86,24 @@ CART_OP = _op("cart.getCart", "get", "/cart", "cart", ["FR-CART-001"], summary="
 
 
 # ── fingerprints ─────────────────────────────────────────────────────────────
+def test_op_fingerprint_string_and_list_trace_req_match():
+    a = {X_TRACE_REQ: "IR-CHK-001", "responses": {"201": {"description": "ok"}}}
+    b = {X_TRACE_REQ: ["IR-CHK-001"], "responses": {"201": {"description": "ok"}}}
+    assert cf.compute_op_fingerprint(a, "post", "/orders") == cf.compute_op_fingerprint(b, "post", "/orders")
+
+
+def test_string_trace_req_not_falsely_tombstoned(spec_dir):
+    doc, _ = _build(spec_dir, [CK_OP])
+    # A scalar x-trace-req in stored YAML must resolve as one active id, not be
+    # shredded into inactive single-char ids (which would falsely tombstone it).
+    doc["paths"]["/orders"]["post"][X_TRACE_REQ] = "IR-CHK-001"
+    features = read_features(spec_dir)
+    tomb, _ = bc.tombstone_orphans(doc, features, set())
+    assert "checkout.createOrder" not in tomb
+    det = bc.detect(doc, features)
+    assert not any(o["operationId"] == "checkout.createOrder" for o in det["orphan"])
+
+
 def test_op_fingerprint_ignores_summary_but_not_shape():
     a = {X_TRACE_REQ: ["IR-CHK-001"], "responses": {"201": {"description": "ok"}}, "summary": "A"}
     b = dict(a, summary="B totally different")

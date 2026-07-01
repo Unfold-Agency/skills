@@ -43,6 +43,10 @@ Worked examples:
 ^G-\d{3,}$
 ```
 - `G-001`, `G-002`, ... Goals carry the measurable success metrics in the overview.
+- A feature links to the goal(s) it serves with a top-level `supports: [G-NNN]`
+  list in its frontmatter. Every entry must be goal-format and resolve to a real
+  overview goal (S-013); it is the feature -> objective edge that make-trace reads.
+  Optional, but never invent a goal id to fill it.
 
 ## Traceability chains
 
@@ -55,6 +59,9 @@ Worked examples:
   IDs (within or across features). The validator resolves every entry against the
   union of all features (S-004); a cross-feature dependency is a **seam** and is
   governed by the home feature's version (see make-issues / do-work).
+- **Feature -> objective:** a feature's `supports: [G-NNN]` names the overview
+  goal(s) it advances. The validator resolves every entry against the overview
+  goals (S-013); make-trace rolls issue status up this edge to the objectives.
 - **Requirement -> issue:** downstream, make-issues stamps each issue with
   `trace_req` (the requirement id), `trace_adr` (its governing ADR), and `feature`
   (the slug), so the affected set of any change is a query, not a hunt.

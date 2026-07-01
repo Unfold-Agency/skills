@@ -409,6 +409,24 @@ def main():
                               "criterion (IF ... THEN the system shall ...) -- the "
                               "failure/edge path")
 
+    # ---- S-013: feature supports -> overview goals resolve --------------
+    # A feature may declare the overview goal(s) it serves in a top-level
+    # `supports` list (feature -> goal, the objective wiring make-trace reads).
+    # It is optional (absent/[] passes); when present every entry must be a
+    # goal-format id AND resolve to a real goal in overview.md. Superseded/
+    # deferred features are kept but not enforced (mirrors S-004).
+    goal_ids = set(filter(None, overview_ids(overview)))
+    for slug, dpath, doc in feats:
+        if (doc.get("meta") or {}).get("status") not in (None, "active"):
+            continue
+        for gid in doc.get("supports") or []:
+            if not GOAL_ID_RE.match(str(gid)):
+                fail("S-013", f"{dpath}: supports '{gid}' is not a goal id "
+                              "(want ^G-\\d{3,}$)")
+            elif str(gid) not in goal_ids:
+                fail("S-013", f"{dpath}: supports references missing goal '{gid}' "
+                              "(declare it in overview.md goals, or drop the link)")
+
     # ---- S-009: goals measurable ---------------------------------------
     for g in overview.get("goals") or []:
         if not isinstance(g, dict) or g.get("status") not in (None, "active"):

@@ -33,8 +33,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from contract_fingerprint import compute_doc_fingerprint, iter_operations  # noqa: E402
 from contractlib import (  # noqa: E402
     OPENAPI_VERSION, OPERATION_ID_RE, X_FEATURE, X_INTEGRATION, X_OP_FP,
-    X_SOURCE_VERSION, X_STATUS, X_TRACE_ADR, X_TRACE_REQ, dump_doc, read_arch,
-    read_features,
+    X_SOURCE_VERSION, X_STATUS, X_TRACE_ADR, X_TRACE_REQ, as_list, dump_doc,
+    read_arch, read_features,
 )
 
 try:
@@ -121,7 +121,7 @@ def validate(doc, features, adr_ids):
         for key in (X_TRACE_REQ, X_FEATURE, X_SOURCE_VERSION, X_OP_FP):
             if not op.get(key):
                 fails.append(f"AC-003: {oid or loc} missing {key}")
-        reqs = [str(x) for x in (op.get(X_TRACE_REQ) or [])]
+        reqs = [str(x) for x in as_list(op.get(X_TRACE_REQ))]
         # AC-004
         if not tombstoned:
             if reqs and not (set(reqs) & active):
@@ -130,7 +130,7 @@ def validate(doc, features, adr_ids):
             for cid in reqs:
                 if cid not in known:
                     fails.append(f"AC-004: {oid} x-trace-req '{cid}' resolves to no requirement")
-            for adr in (op.get(X_TRACE_ADR) or []):
+            for adr in as_list(op.get(X_TRACE_ADR)):
                 if adr_ids and adr not in adr_ids:
                     fails.append(f"AC-004: {oid} x-trace-adr '{adr}' resolves to no ADR")
         # AC-005

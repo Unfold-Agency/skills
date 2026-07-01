@@ -48,6 +48,18 @@ X_STATUS = "x-status"
 # make-issues "never clobber the human region" doctrine, at operation altitude).
 HUMAN_OP_FIELDS = ("summary", "description", "x-notes")
 
+
+def as_list(value):
+    """Coerce a value into a list. None -> []; a bare scalar (e.g. a string a
+    payload/YAML author wrote instead of a list) -> [value]; a list/tuple ->
+    list(value). Guards against iterating a string character-by-character, which
+    would shred `trace_req: IR-CHK-001` into single-character ids."""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return list(value)
+    return [value]
+
 # ── Frontmatter split (mirror make-spec / make-data-flows) ───────────────────
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 
@@ -106,14 +118,19 @@ def read_features(spec_dir):
         with open(path, encoding="utf-8") as f:
             text = f.read()
         _head, body, doc = split_frontmatter(text)
-        meta = doc.get("meta") or {}
+        meta = doc.get("meta")
+        if not isinstance(meta, dict):
+            meta = {}
+        requirements = doc.get("requirements")
+        if not isinstance(requirements, list):
+            requirements = []
         reqs = {}
-        for r in doc.get("requirements") or []:
+        for r in requirements:
             if isinstance(r, dict) and r.get("id"):
                 reqs[str(r["id"])] = {
                     "kind": r.get("kind"),
                     "interface": r.get("interface") or "",
-                    "governed_by": list(r.get("governed_by") or []),
+                    "governed_by": [str(x) for x in as_list(r.get("governed_by"))],
                     "status": r.get("status") or "active",
                 }
         out[meta.get("slug") or slug] = {
@@ -139,9 +156,15 @@ def read_arch(spec_dir):
             data = yaml.safe_load(f) or {}
     except (OSError, yaml.YAMLError):
         return set(), set()
-    adrs = {str(d.get("id")) for d in (data.get("decisions") or []) if isinstance(d, dict) and d.get("id")}
+    if not isinstance(data, dict):
+        return set(), set()
+    decisions = data.get("decisions")
+    integrations = data.get("integrations")
+    decisions = decisions if isinstance(decisions, list) else []
+    integrations = integrations if isinstance(integrations, list) else []
+    adrs = {str(d.get("id")) for d in decisions if isinstance(d, dict) and d.get("id")}
     intgs = set()
-    for i in data.get("integrations") or []:
+    for i in integrations:
         if isinstance(i, dict) and i.get("name"):
             norm = re.sub(r"[^a-z0-9]+", "-", str(i["name"]).lower()).strip("-")
             intgs.add(f"INTG-{norm}")
@@ -190,7 +213,9 @@ def canonical_doc(doc):
     paths sorted by path then method, operations key-ordered, schemas sorted.
     Byte-stable output across runs (safe_dump sort_keys=False on this)."""
     out = _ordered(doc, _TOP_ORDER)
-    paths = out.get("paths") or {}
+    paths = out.get("paths")
+    if not isinstance(paths, dict):
+        paths = {}
     out["paths"] = {
         p: {m: _ordered(paths[p][m], _OP_ORDER) if isinstance(paths[p][m], dict) else paths[p][m]
             for m in sorted(paths[p])}

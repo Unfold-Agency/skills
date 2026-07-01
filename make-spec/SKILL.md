@@ -67,7 +67,7 @@ And two flags that compose with the modes:
 - `assets/changelog-entry-template.md` -- the structured CHANGELOG entry; its
   Added/Modified/Removed id lists are what `make-issues` reconciles against.
 - `assets/spec-data-schema.yaml` -- the schema for both frontmatter shapes, the
-  fingerprint **IN/OUT contract**, and validator rules S-001..S-012. Read before
+  fingerprint **IN/OUT contract**, and validator rules S-001..S-013. Read before
   authoring any spec.
 - `references/kickoff.md` -- greenfield: scope the corpus, consolidate the
   overview, distill features, author + stamp + validate.
@@ -112,7 +112,9 @@ prior version, read it from git.
 
 1. Author or edit the single Markdown file -- the structured contract in the
    frontmatter (per the schema), the human narrative in the body. The template
-   comments are the rules. There is no separate data file to derive.
+   comments are the rules. There is no separate data file to derive. Set each
+   feature's `supports: [G-NNN]` to the overview goal(s) it advances (the
+   feature -> objective link the validator resolves and make-trace maps).
 2. `python scripts/stamp_fingerprint.py docs/specs` -- stamps the fingerprint and
    content version into each frontmatter (your body is preserved) and syncs the
    Feature Index.

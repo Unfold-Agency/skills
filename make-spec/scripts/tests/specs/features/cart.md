@@ -7,13 +7,15 @@ meta:
   title: Cart management
   status: active
   appetite: 1 week
-  feature_version: a9484e48eda4
+  feature_version: 14e31bef10f8
   generated_at: '2026-06-29T00:00:00Z'
-  fingerprint: a9484e48eda495907a5d714f2b1f979867b6d565c3724cb3bd28bb708bed1589
+  fingerprint: 14e31bef10f8da0a586590759f82fe73a3712d3067fa9b9cdf2a86b56d9167d6
 user_stories:
 - As a shopper, I want to add and remove items, so that I can assemble an order.
 no_gos:
 - No saved carts across devices in this phase.
+supports:
+- G-001
 requirements:
 - id: FR-CART-001
   name: Add to cart

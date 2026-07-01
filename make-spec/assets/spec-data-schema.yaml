@@ -11,7 +11,7 @@
 # stamped by scripts/stamp_fingerprint.py; everything else is
 # hand-authored (never hand-edit the stamps). The validator
 # (scripts/validate_spec.py) enforces the rules at the bottom
-# (S-001 .. S-012) and fails on any violation.
+# (S-001 .. S-013) and fails on any violation.
 #
 # Two doc SHAPES live under docs/specs/, each in the frontmatter of:
 #   overview.md            -- one per project (the lean PRD layer)
@@ -118,6 +118,11 @@ feature_example:
   user_stories:
     - "As a <role>, I want <capability>, so that <benefit>."
   no_gos: []                     # Shape Up no-gos -- explicit out-of-bounds
+  supports: []                   # overview goal ids this feature serves, e.g.
+                                  #   [G-001]. Optional (absent/[] ok); the
+                                  #   feature -> objective wiring make-trace reads.
+                                  #   Every entry must resolve to a real goal
+                                  #   (S-013). IN the fingerprint.
 
   # The requirements. ID = <kind>-<PREFIX>-<NNN>, e.g. FR-CHK-001.
   #   FR  functional   IR  integration   NFR  non-functional   CR  content
@@ -150,12 +155,13 @@ feature_example:
 #
 #   IN  (changing these flips the fingerprint):
 #       description, acceptance_criteria, governed_by, depends_on,
-#       interface, id, name, kind, status  (and, for the overview,
+#       interface, id, name, kind, status, supports  (and, for the overview,
 #       goals/scope/non_goals/feature_index identity (slug/prefix/title/status))
 #   OUT (changing these does NOT flip the fingerprint), stripped wherever
 #       they appear -- including inside overview feature_index rows, so the
 #       index can be re-synced without invalidating the overview's own stamp:
 #       priority, architecture_hints, related_files, notes, appetite,
+#       (note: `supports` is NOT here -- it is IN the fingerprint)
 #       meta.fingerprint, meta.feature_version, meta.generated_at,
 #       meta.project_version
 #
@@ -204,6 +210,9 @@ feature_example:
 #   S-011  Every active functional (FR) requirement has >=1 acceptance
 #          criterion in the EARS unwanted-behavior form (IF ... THEN ...)
 #          -- the failure/edge path
+#   S-013  Every entry in an active feature's `supports` list is a goal-format
+#          id (^G-\d{3,}$) that resolves to a real goal in overview.md. Absent
+#          or empty passes -- the feature -> objective link is optional.
 #
 # Budget (warning, not failure)
 #   S-012  A feature exceeding the lean budget (req count or word count)

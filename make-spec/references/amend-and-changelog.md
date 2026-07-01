@@ -52,6 +52,12 @@ will not let a meaning change masquerade as trivial.
 - Adding a requirement that another feature will depend on is a **seam** -- give it
   one home feature; dependents reference it by id. Note the seam in the
   CHANGELOG's cross-feature impact.
+- **`supports` is contract content.** Introducing or changing a feature's
+  `supports: [G-NNN]` (the feature -> objective link) flips its fingerprint, so the
+  feature re-stamps and a re-sync is owed. A feature spec authored before this field
+  existed simply gets `supports: []` and re-stamps once on the next make-spec run --
+  no meaning change, so it is a `--trivial`/`minor`-shaped edit unless you also set
+  real goal ids. Every entry must resolve to an overview goal (S-013).
 
 ## 4. Write the CHANGELOG entry
 

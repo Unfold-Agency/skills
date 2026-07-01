@@ -45,13 +45,13 @@ feature_index:
 - slug: cart
   prefix: CART
   title: Cart management
-  feature_version: a9484e48eda4
+  feature_version: 14e31bef10f8
   status: active
   appetite: 1 week
 - slug: checkout
   prefix: CHK
   title: Checkout and payment
-  feature_version: 4e462b08a5ee
+  feature_version: ab13cf7fc0d4
   status: active
   appetite: 2 weeks
 ---

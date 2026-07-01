@@ -48,6 +48,7 @@ meta:
 user_stories:
   - "As a <role>, I want <capability>, so that <benefit>."
 no_gos: []                  # Shape Up no-gos: explicit out-of-bounds for THIS feature
+supports: []                # overview goal ids this feature serves, e.g. [G-001] -- IN the fingerprint (S-013)
 requirements:
   - id: "FR-<PREFIX>-001"
     name: "<short name>"

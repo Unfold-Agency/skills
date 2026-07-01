@@ -172,6 +172,11 @@ def m_s002_req(d):
 def m_s002_goal(d):
     edit_yaml(overview(d),
               lambda doc: doc["goals"][0].__setitem__("id", "GOAL-1"))
+    # G-001 is referenced by the features' `supports`; clear those so the
+    # malformed-goal-id S-002 is the ONLY rule that trips (a now-dangling
+    # supports entry would otherwise also fire S-013 -- the real cascade).
+    for slug in ("cart", "checkout"):
+        edit_yaml(feat(d, slug), lambda doc: doc.__setitem__("supports", []))
 
 def m_s003_dup_id(d):
     def fn(doc):
@@ -272,6 +277,13 @@ def m_s004_adr_emptydir(d):
                                                              ["ADR-0001"]))
 
 
+def m_s013_dangling_supports(d):
+    # a well-formed but dangling goal id in `supports` (IN the fingerprint, so
+    # restamp to keep S-006 silent -- only the missing-goal S-013 should fire)
+    edit_yaml(feat(d, "checkout"),
+              lambda doc: doc.__setitem__("supports", ["G-999"]))
+
+
 # (rule, mutate_fn, restamp?) -- restamp so only the intended rule trips
 MUTATIONS = [
     ("S-001", m_s001, True),
@@ -291,6 +303,7 @@ MUTATIONS = [
     ("S-009", m_s009_unmeasurable, True),
     ("S-010", m_s010_non_ears, True),
     ("S-011", m_s011_no_unwanted, True),
+    ("S-013", m_s013_dangling_supports, True),
 ]
 
 for rule, mut, restamp in MUTATIONS:

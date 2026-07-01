@@ -7,13 +7,16 @@ meta:
   title: Checkout and payment
   status: active
   appetite: 2 weeks
-  feature_version: 4e462b08a5ee
+  feature_version: ab13cf7fc0d4
   generated_at: '2026-06-29T00:00:00Z'
-  fingerprint: 4e462b08a5ee332d2dd912425c9ce56b07f1a8e463b0e33d9accae6d77ae6697
+  fingerprint: ab13cf7fc0d45e1e0fdd31efd49e250ef1e8229186ee3cbf329ac5aaa8c9a7f1
 user_stories:
 - As a shopper, I want to pay quickly, so that I can complete my order.
 no_gos:
 - No stored payment methods in this phase.
+supports:
+- G-001
+- G-002
 requirements:
 - id: FR-CHK-001
   name: Place order

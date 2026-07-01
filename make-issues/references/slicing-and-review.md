@@ -1,10 +1,12 @@
-# Slicing & Review (Generate / new items)
+# Slicing & Review (new items)
 
-How to turn an approved, fingerprint-clean spec set into a set of thin GitHub work items. The prime directive: **slice for an agent's single loop, then review before you write.** A work item that an agent can build, test, verify, and merge in one pass is worth ten that need a meeting to start. Nothing reaches GitHub before the human approves the breakdown.
+How to turn the selected slice of a spec set into thin GitHub work items. The prime directive: **slice for an agent's single loop, then review before you write.** A work item that an agent can build, test, verify, and merge in one pass is worth ten that need a meeting to start. Nothing reaches GitHub before the human approves the breakdown.
+
+This covers the **selected scope** only -- the feature(s)/requirement(s) (or the amendment) the run is scoped to; see `references/scoping-and-modes.md` for how a run is scoped and for the spec-set precondition. Two kinds of item are cut here: a **spec** item (projects a requirement -- most of this reference) and an **amendment** item (added on demand, authored against a feature anchor -- see step 4b). Detection is global but you only slice/create within scope.
 
 ## 1. Read the specs, in order
 
-The preflight gate has already confirmed the fail-closed fingerprint gate (every spec file's stored `meta.fingerprint` equals a recompute over its CONTRACT content); if it had not, you would not be here. Now read for content:
+The preflight gate has already run the scoped fingerprint gate: every **selected** feature's stored `meta.fingerprint` equals a recompute over its CONTRACT content (a dirty selected feature would have failed the gate; a dirty unselected or project file only warned, since this run will not build from it). So the specs you are about to slice are clean. Now read for content:
 
 1. **`features/<slug>.md`** -- the `requirements` you will slice. **The requirement is the work item.** Each carries `id` (e.g. `FR-CHK-001`), `name`, `kind`, `description`, EARS `acceptance_criteria` (order-significant), `governed_by` (ADR ids), `depends_on` (requirement ids, may cross features), `interface`, advisory fields, and `status`.
 2. **`overview.md`** -- the `goals` (G-NNN) each feature serves, the `feature_index`, and the OPTIONAL `phasing` list. The issue's *Goal* comes from here, in the user's terms.
@@ -40,6 +42,19 @@ Every item carries one autonomy flag -- the signal the overnight loop reads to d
 
 When unsure, ask what would happen if an agent finished it at 3am with no one watching. If that's fine, it's AFK.
 
+**AFK REQUIRES CHECKABLE ACCEPTANCE CRITERIA.** An item with no acceptance criteria a build could verify against cannot be AFK -- there is nothing to prove it done. Spec items always embed the requirement's EARS criteria, so this is automatic; an **amendment** must have criteria you authored, or it must be `hitl`. `do-work` enforces this too: it refuses to auto-build an issue with no `## Acceptance criteria` checklist, whatever the label says. Do not mark an item AFK to move it faster -- write the criteria, or mark it HITL.
+
+### 4b. Authoring an amendment item
+
+An amendment is on-demand work not (yet) a requirement, still anchored to the spec set (a "quick amendment, not a rewrite"). When the run is authoring one (see `references/scoping-and-modes.md` for the description disambiguation that decides select-vs-author):
+
+- Anchor it: name the real `feature` slug it belongs to (required), plus any goal it serves and governing ADRs.
+- **Author** the Goal, Requirement, and Acceptance criteria yourself -- there is no spec to embed from. Make the criteria checkable.
+- Set `provenance: amendment`, `trace_req: []` (or the requirement you intend to promote to), `fingerprint: ""`, `source_version: ""`; apply the `amendment` label.
+- Autonomy per the rule above: AFK only with authored checkable criteria, else HITL.
+
+Everything downstream (dependencies, the review gate, creation order) is the same as a spec item.
+
 ## 5. Assemble each item's fields
 
 Fill the template (`assets/issue-body-template.md`) from the specs:
@@ -59,7 +74,7 @@ Fill the template (`assets/issue-body-template.md`) from the specs:
 | `autonomy` | AFK or HITL, from step 4 |
 | `## Traceability` table | one row per `trace_req` / `trace_adr` ID with its title from the source spec, plus a feature row; close with "Born from feature <slug> v<feature_version>". The human-readable mirror of the trace fields -- it replaces the old per-ID `trace:` labels |
 
-**No item without a trace.** Every issue stamps at least one `trace_req` requirement -- that is the required trace. `trace_adr` lists the governing ADRs; it may be empty when a requirement names none. An empty `trace_adr` is allowed; an empty `trace_req` is not. An item you cannot trace to a requirement is an item the specs do not justify -- cut it or fix the feature spec.
+**No item without a trace.** Every issue traces back to the spec set. A **spec** item stamps at least one `trace_req` requirement -- that is its required trace; an empty `trace_req` is not allowed for a spec item. An **amendment** item may have an empty `trace_req` but must name a real `feature` **anchor** (that is its trace). `trace_adr` lists the governing ADRs and may be empty either way. A spec item you cannot trace to a requirement is one the specs do not justify -- cut it, fix the feature spec, or make it an amendment anchored to the right feature.
 
 **Place each item in its phase (when the overview has a plan).** Phasing is OPTIONAL. If `overview.md` declares a `phasing` list, every issue rolls up to the phase its **feature** belongs to -- the grouping `do-work --phase=N` drains. Get the mapping once: `python scripts/phase_milestones.py docs/specs/overview.md --json` returns `feature_to_phase` (slug -> phase number) and `phase_title` (number -> milestone title `Phase <N>: <name>`). An item's phase is the phase of its `feature`. Phase is **sequencing, not contract** -- it is carried by the GitHub **milestone**, never written into the issue body or meta block, so re-phasing later never churns the fingerprint. An overview with no `phasing` plan skips milestones entirely; nothing else about slicing changes.
 
@@ -69,16 +84,17 @@ Express what-blocks-what as native GitHub dependencies (`--blocked-by`), not a p
 
 ## 7. Run analyze, then the review pass -- the human gate
 
-Before creating or changing **anything**, run the planner and present the breakdown:
+Before creating or changing **anything**, run the planner and present the breakdown. Pass the run's `--scope` so writes are bounded to the selected slice (detection stays global):
 
 ```
-python scripts/analyze.py --spec-dir docs/specs --issues <gh-json>
+python scripts/analyze.py --spec-dir docs/specs --issues <gh-json> --scope <tokens>
 ```
 
-In Generate mode the issues JSON is `[]`, so analyze should produce a clean all-CREATE plan and exit 0. In Sync mode it must exit 0 (or a human approves its remediation report) before any write -- it is the hard gate. Then show:
+With no existing issues the plan is a clean all-CREATE within scope; on a re-run it must exit 0 (or a human approves its remediation report) before any write -- it is the hard gate. Then show:
 
 - The work items, **grouped by phase** when the overview has a plan (a phase header per `Phase N: name`, its items beneath). For each item: **title · AFK/HITL · blocked-by · trace IDs**.
-- The **coverage check**: every `active` requirement has at least one item, or the gap is named. Every overview `goal` traces through to an item, or it is listed as unmapped. With a plan, also: every active phase has at least one item, every item maps to a phase, and any phase-spanning feature is flagged.
-- For a sync, the **reconciliation plan** from analyze: what will be created, updated, flagged, closed, or refactored (see `reconciliation.md`), plus any milestone re-assignments and the watermark window.
+- The **coverage check**, honest about scope: every in-scope `active` requirement has at least one item, or the gap is named. On a scoped run say **PARTIAL** -- name the in-scope features and note how many requirements elsewhere were not acted on. Every in-scope overview `goal` traces through to an item, or it is listed as unmapped. With a plan, also: every active in-scope phase has at least one item and any phase-spanning feature is flagged.
+- The **out-of-scope drift** from `plan["out_of_scope"]`: drift the global census found outside the scope, detected but not written. Show it so the operator knows what a wider run would touch.
+- The **reconciliation plan** from analyze: what will be created, updated, flagged, closed, refactored, or promoted within scope (see `reconciliation.md`), plus any milestone re-assignments and the watermark window.
 
-Iterate until the human approves. Then, when the overview has a plan, **ensure the milestones exist first** -- `python scripts/phase_milestones.py docs/specs/overview.md --ensure --repo <owner/name>` creates one milestone per phase (idempotent). Now create issues -- in dependency order, blockers first, so each `--blocked-by` references an issue number that already exists. Stamp every issue per the template, apply its labels (just `make-issues` and `afk`/`hitl`), and assign its phase milestone: `gh issue create ... --milestone "Phase <N>: <name>"`. Traceability and source version are carried in the body (`## Traceability` table) and the meta block; the phase is carried by the milestone -- neither is a label. After the create run, **write the watermark** (`docs/specs/.make-issues-sync.json`) at each feature's current `feature_version` and commit it (see reconciliation.md §2).
+Iterate until the human approves. Then, when the overview has a plan, **ensure the milestones exist first** -- `python scripts/phase_milestones.py docs/specs/overview.md --ensure --repo <owner/name>` creates one milestone per phase (idempotent). Now create issues -- in dependency order, blockers first, so each `--blocked-by` references an issue number that already exists. Stamp every issue per the template, apply its labels (`make-issues` and `afk`/`hitl`, plus `amendment` for an amendment item), and assign its phase milestone: `gh issue create ... --milestone "Phase <N>: <name>"`. Traceability and source version are carried in the body (`## Traceability` table) and the meta block; the phase is carried by the milestone -- neither is a label. After the create run, **write the watermark** (`docs/specs/.make-issues-sync.json`) at each feature's current `feature_version` and commit it (see reconciliation.md §2).

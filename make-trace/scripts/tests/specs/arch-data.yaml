@@ -1,0 +1,41 @@
+meta:
+  doc_type: spec-arch
+  schema_version: '1.0'
+  project_id: proj-fixture
+  project_name: Fixture Storefront
+  arch_version: abc123def456
+  status: draft
+  fingerprint: fixture
+context: A storefront where shoppers build a cart and pay.
+components:
+- id: C-001
+  name: Storefront web app
+  responsibility: Render the catalog, cart, and checkout.
+  tech: Next.js
+  confidence: known
+  governed_by:
+  - ADR-0001
+integrations:
+- name: Payment gateway
+  external_system: Stripe
+  direction: outbound
+  data: payment intents, webhooks
+  confidence: known
+  governed_by:
+  - ADR-0001
+decisions:
+- id: ADR-0001
+  title: Use Stripe for payments
+  status: accepted
+  scope: feature
+  superseded_by: ''
+  confidence: known
+  governs:
+  - FR-CHK-001
+- id: ADR-0002
+  title: Use a self-hosted payment form
+  status: superseded
+  scope: feature
+  superseded_by: ADR-0003
+  confidence: known
+  governs: []

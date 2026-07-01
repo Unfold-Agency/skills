@@ -159,6 +159,14 @@ REFACTOR only fire for an issue whose feature is in scope.
    For a `phasing` plan, ensure milestones first, then assign each issue its phase.
 7. **Report + ledger.** Print the receipt and append it to
    `docs/specs/ISSUES-CHANGELOG.md`; advance the watermark.
+8. **Refresh the traceability map (if make-trace is present).** After a successful
+   sync, regenerate the traceability map so it reflects the issues you just created
+   or updated -- run `/make-trace`, or call its generator directly
+   (`python <make-trace>/scripts/build_trace.py`, locating `make-trace/` as a sibling
+   skill directory). It reads `docs/specs/` + the live issues and rewrites the
+   self-contained `docs/traceability/` artifact; a no-op regeneration is byte-identical,
+   so an unchanged map produces no diff. This step is **non-fatal**: if make-trace is
+   not installed, skip it with a one-line note (the sync itself is already complete).
 
 ## Report + the dedicated issues log (every run)
 

@@ -746,8 +746,12 @@ def main():
     try:
         data = generate(args.spec_dir, args.out, issues, resolve_repo(args.repo),
                         now, allow_empty=args.allow_empty)
-    except (FileNotFoundError, OSError, yaml.YAMLError) as e:
+    except (FileNotFoundError, yaml.YAMLError) as e:
         print(f"ERROR: cannot read specs under {args.spec_dir}: {e}", file=sys.stderr)
+        sys.exit(2)
+    except OSError as e:
+        print(f"ERROR: filesystem error reading specs or writing to {args.out}: {e}",
+              file=sys.stderr)
         sys.exit(2)
     except EmptySourceError as e:
         print(f"ABORT: {e} went from non-empty to empty -- almost certainly a bad "

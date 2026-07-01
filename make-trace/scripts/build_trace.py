@@ -645,9 +645,12 @@ def resolve_generated_at(data, prior_data, now):
     candidate = _canonical(data)
     if prior_data and isinstance(prior_data.get("meta"), dict):
         prev_at = prior_data["meta"].get("generatedAt")
-        prev = copy.deepcopy(prior_data)
-        prev["meta"]["generatedAt"] = None
-        if prev_at and _canonical(prev) == candidate:
+        # Compare without copying: null the timestamp in place, then restore it.
+        # prior_data is not used after this, but restoring keeps the function pure.
+        prior_data["meta"]["generatedAt"] = None
+        is_match = _canonical(prior_data) == candidate
+        prior_data["meta"]["generatedAt"] = prev_at
+        if prev_at and is_match:
             return prev_at
     return now
 
@@ -697,8 +700,8 @@ def write_outputs(data, out_dir):
 
 
 def generate(spec_dir, out_dir, issues, repo_display, now, allow_empty=False):
-    """The full run minus IO side-channels (gh / clock): load -> guard -> merge ->
-    assemble -> resolve timestamp -> write. Returns the written data dict. Raises
+    """The full run minus IO side-channels (gh / clock): load -> assemble -> guard
+    -> resolve timestamp -> write. Returns the written data dict. Raises
     FileNotFoundError/yaml errors on a bad spec source, EmptySourceError on the
     fail-closed guard -- in either case nothing is written."""
     overview, features, arch = load_specs(spec_dir)
@@ -706,12 +709,14 @@ def generate(spec_dir, out_dir, issues, repo_display, now, allow_empty=False):
     prior_data = load_prior(out_json)
     prior_nodes = prior_data.get("nodes") if prior_data else None
 
-    current_nodes, _ = build_current_nodes(overview, features, arch, issues)
+    # assemble already builds current_nodes; reuse them for the guard rather than
+    # re-parsing every frontmatter/issue body a second time. assemble writes
+    # nothing, so raising below still leaves the output untouched.
+    data, current_nodes, _ = assemble(overview, features, arch, issues, prior_nodes)
     bad = emptiness_violations(current_nodes, prior_nodes, arch_present=arch is not None)
     if bad and not allow_empty:
         raise EmptySourceError(bad)
 
-    data, _, _ = assemble(overview, features, arch, issues, prior_nodes)
     data["meta"]["repo"] = repo_display
     data["meta"]["generatedAt"] = resolve_generated_at(data, prior_data, now)
     write_outputs(data, out_dir)

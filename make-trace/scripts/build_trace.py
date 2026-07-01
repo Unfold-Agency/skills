@@ -125,7 +125,10 @@ def _split_frontmatter(text):
 
 
 def load_spec_doc(path):
-    """Parse a single-file spec's frontmatter into a dict ({} if none/malformed)."""
+    """Parse a single-file spec's frontmatter into a dict. Returns {} when there is
+    no frontmatter or it is not a mapping; RAISES yaml.YAMLError on malformed
+    frontmatter so the run fails closed (main aborts, exit 2, tombstoning nothing)
+    rather than silently reading a corrupt spec as empty and dropping its nodes."""
     with open(path, encoding="utf-8") as f:
         fm, _ = _split_frontmatter(f.read())
     if fm is None:

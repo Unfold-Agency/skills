@@ -8,7 +8,7 @@ This covers the **selected scope** only -- the feature(s)/requirement(s) (or the
 
 The preflight gate has already run the scoped fingerprint gate: every **selected** feature's stored `meta.fingerprint` equals a recompute over its CONTRACT content (a dirty selected feature would have failed the gate; a dirty unselected or project file only warned, since this run will not build from it). So the specs you are about to slice are clean. Now read for content:
 
-1. **`features/<slug>.md`** -- the `requirements` you will slice. **The requirement is the work item.** Each carries `id` (e.g. `FR-CHK-001`), `name`, `kind`, `description`, EARS `acceptance_criteria` (order-significant), `governed_by` (ADR ids), `depends_on` (requirement ids, may cross features), `interface`, advisory fields, and `status`.
+1. **`features/<slug>.md`** -- the `requirements` you will slice. **The requirement is the work item.** Each carries `id` (e.g. `FR-CHK-001`), `name`, `kind`, `description`, EARS `acceptance_criteria` (order-significant), `verification` (schema 1.1+: the `{method, check, covers}` proof plan), `governed_by` (ADR ids), `depends_on` (requirement ids, may cross features), `interface`, advisory fields, and `status`.
 2. **`overview.md`** -- the `goals` (G-NNN) each feature serves, the `feature_index`, and the OPTIONAL `phasing` list. The issue's *Goal* comes from here, in the user's terms.
 3. **`arch-data.yaml`** -- the `decisions` index. For each governing ADR a requirement names in `governed_by`, pull the id, title, and a one-line decision snippet to embed in the issue. Full prose is in `decisions/ADR-NNNN-*.md` (back-link it; do not copy the whole ADR).
 
@@ -28,6 +28,7 @@ Each issue is a vertical slice a builder can act on **without opening the specs*
 
 - the **requirement text** (`description`), verbatim;
 - the **EARS acceptance criteria** (`acceptance_criteria`), verbatim and **in order** -- the order is part of the contract;
+- the **verification entries** (`verification`, schema 1.1+) -- the proof plan the builder executes and cites as as-built evidence (`## Verification` section; omit only for a 1.0 requirement that predates the field);
 - the **interface** (`interface`), if any;
 - a **one-line snippet of each governing ADR** (id, title, decision), from `arch-data.yaml`, with a back-link to its `decisions/ADR-NNNN-*.md` file.
 
@@ -39,6 +40,15 @@ Every item carries one autonomy flag -- the signal the overnight loop reads to d
 
 - **AFK** -- the acceptance criteria are checkable by tests/lint/build; the slice has no irreversible side effect and no judgment call an agent can't make from the requirement.
 - **HITL** -- the item needs a human decision (a visual/brand judgment, a security or data-migration sign-off, anything that touches production data or money, or a back-out of shipped work -- every REFACTOR is HITL).
+
+**The verification methods are the machine-provability signal.** When the
+requirement carries `verification` (schema 1.1+), read the methods: `test` /
+`analysis` / `monitor` entries are proofs an unattended worker can run or cite,
+while `demo` / `inspection` entries are human-judgment proofs it cannot claim.
+An item whose criteria are provable **only** by demo/inspection defaults to
+**HITL** -- an AFK worker would just build it and park it `deferred` at the
+acceptance gate, so mark the human in from the start. A mixed plan can stay AFK;
+the worker meets what it can prove and honestly defers the judgment rows.
 
 When unsure, ask what would happen if an agent finished it at 3am with no one watching. If that's fine, it's AFK.
 
@@ -64,6 +74,7 @@ Fill the template (`assets/issue-body-template.md`) from the specs:
 | Goal | the overview `goal` (G-NNN) the feature serves |
 | Requirement | the requirement `description`, embedded verbatim (reference its id) |
 | Acceptance criteria | the requirement `acceptance_criteria`, embedded verbatim and in order; last box is always the build gate |
+| Verification | the requirement `verification` entries (schema 1.1+), embedded as `method (covers) -- check` lines; omit for a 1.0 requirement |
 | Interface | the requirement `interface`, if any |
 | Governing decisions | one line per `governed_by` ADR (id, title, decision snippet) from `arch-data.yaml`, with a back-link |
 | `trace_req` | the requirement id this item satisfies (>=1, required) |

@@ -5,7 +5,8 @@ that keeps issues from churning on rewording/re-prioritising while still catchin
 real spec drift.
 
 IN  (must flip the hash):  id, kind, description, acceptance_criteria (and its
-                           ORDER), governed_by, depends_on, interface.
+                           ORDER), verification entries (order-insensitive),
+                           governed_by, depends_on, interface.
 OUT (must NOT flip):       priority, architecture_hints, related_files, notes,
                            name, status.
 
@@ -114,6 +115,33 @@ for out_key in ("priority", "architecture_hints", "related_files", "notes",
 for in_key in ("id", "kind", "description", "acceptance_criteria",
                "governed_by", "depends_on", "interface"):
     check(f"projection includes {in_key}", in_key in proj)
+
+# ── verification (schema 1.1): IN, order-insensitive, legacy-stable ──────────
+VER = [
+    {"method": "test", "covers": "negative",
+     "check": "integration test forces an out-of-stock item and asserts the block"},
+    {"method": "test", "covers": "positive",
+     "check": "integration test checks out an in-stock cart to payment"},
+]
+REQ_V = copy.deepcopy(REQ); REQ_V["verification"] = copy.deepcopy(VER)
+base_v = fp(REQ_V)
+
+check("a 1.0 requirement (no verification key) hashes as before (legacy-stable)",
+      base == fp(REQ))
+check("add verification -> changes (IN)", base_v != base)
+m = copy.deepcopy(REQ_V); m["verification"] = list(reversed(m["verification"]))
+check("REORDER verification -> stable (proof plan is a set)", fp(m) == base_v)
+m = copy.deepcopy(REQ_V); m["verification"][0]["check"] = "a different exercise"
+check("edit a verification check -> changes (IN)", fp(m) != base_v)
+m = copy.deepcopy(REQ_V); m["verification"][0]["method"] = "monitor"
+check("change a verification method -> changes (IN)", fp(m) != base_v)
+m = copy.deepcopy(REQ_V); m["verification"] = m["verification"][:1]
+check("drop a verification entry -> changes (IN)", fp(m) != base_v)
+m = copy.deepcopy(REQ_V); m["verification"][0]["notes"] = "advisory aside"
+check("an unlisted key inside an entry -> stable (entry allow-list)",
+      fp(m) == base_v)
+check("projection includes verification when present",
+      "verification" in project_in_fields(REQ_V))
 
 print()
 if failures:

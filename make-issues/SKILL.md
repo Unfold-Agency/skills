@@ -26,10 +26,10 @@ never edit the requirement inside an issue. Every issue traces back to the spec 
 a **spec** issue to the feature requirement it serves (and its governing ADRs); an
 **amendment** issue -- work added on demand -- to a feature/goal/ADR **anchor**. No
 issue without a trace. Each issue is a **self-contained vertical slice** -- it embeds
-(or, for an amendment, authors) the requirement text, its acceptance criteria, and
-a one-line snippet of each governing ADR, so a builder need not open the specs to
-act. Engineers may still add notes in the issue's human region, which sync never
-overwrites.
+(or, for an amendment, authors) the requirement text, its acceptance criteria, its
+verification entries (the proof plan, schema 1.1+), and a one-line snippet of each
+governing ADR, so a builder need not open the specs to act. Engineers may still add
+notes in the issue's human region, which sync never overwrites.
 
 ## The precondition: this skill runs after make-spec
 
@@ -47,7 +47,7 @@ emits one file per document -- there is no separate `*-data.yaml`); `arch-data.y
 is make-arch's own plain-YAML file:
 
 - `overview.md` -- the lean PRD: `meta` (project_version, mode, status, fingerprint), `goals` (G-NNN), `scope`, `non_goals`, a `feature_index` (rows `{slug, prefix, title, feature_version, status, appetite}`), and an OPTIONAL `phasing` list.
-- `features/<slug>.md` -- one per feature: `meta` (slug, prefix, status, feature_version, fingerprint) plus a `requirements` list. **The requirement is the work item.** Each carries `id` (e.g. `FR-CHK-001`), `name`, `kind`, `description`, EARS `acceptance_criteria` (order-significant), `governed_by` (ADR ids), `depends_on` (requirement ids, may cross features), `interface`, advisory `priority`/`architecture_hints`/`related_files`/`notes`, and a lifecycle `status`.
+- `features/<slug>.md` -- one per feature: `meta` (slug, prefix, status, feature_version, fingerprint) plus a `requirements` list. **The requirement is the work item.** Each carries `id` (e.g. `FR-CHK-001`), `name`, `kind`, `description`, EARS `acceptance_criteria` (order-significant), `verification` (schema 1.1+: `{method, check, covers}` proof entries -- `demo`/`inspection` methods signal HITL, see slicing-and-review.md), `governed_by` (ADR ids), `depends_on` (requirement ids, may cross features), `interface`, advisory `priority`/`architecture_hints`/`related_files`/`notes`, and a lifecycle `status`.
 - `arch-data.yaml` -- architecture plus a `decisions` index (ADR rows `{id, title, status, scope, superseded_by, confidence}`); full prose in `decisions/ADR-NNNN-*.md`.
 - `CHANGELOG.md` -- make-spec's Keep-a-Changelog ledger of **spec** changes (Added/Modified/Removed id lists). make-issues reads it as the human narrative of the delta; it does not write it.
 

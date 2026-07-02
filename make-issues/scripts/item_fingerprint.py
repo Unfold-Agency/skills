@@ -13,6 +13,7 @@ This is the C1 keystone. The IN/OUT split MUST match the make-spec/make-arch
 `compute_fingerprint` discipline exactly:
 
   IN  (hashed): id, kind, description, acceptance_criteria (order PRESERVED),
+                verification (order-INSENSITIVE {method, check, covers} entries),
                 governed_by (sorted set), depends_on (sorted set), interface.
   OUT (never):  priority, architecture_hints, related_files, notes -- plus the
                 meta-level OUT keys (fingerprint, feature_version, generated_at,
@@ -54,12 +55,16 @@ except ImportError:
 
 
 # ── The C1 contract: the IN fields, and how each normalizes ──────────────────
-# scalars -- free-text/enum fields; whitespace-collapsed.
-# sets    -- order-INSENSITIVE lists of ids; sorted before hashing.
-# seqs    -- order-SENSITIVE lists; order preserved (it is meaning).
+# scalars    -- free-text/enum fields; whitespace-collapsed.
+# sets       -- order-INSENSITIVE lists of ids; sorted before hashing.
+# seqs       -- order-SENSITIVE lists; order preserved (it is meaning).
+# entry sets -- order-INSENSITIVE lists of structured entries; each entry is
+#               projected to its contract keys, then the list is sorted.
 IN_SCALARS = ["id", "kind", "description", "interface"]
 IN_SEQS = ["acceptance_criteria"]            # EARS strings; order is contract
 IN_SETS = ["governed_by", "depends_on"]      # ADR ids / requirement ids
+IN_ENTRY_SETS = ["verification"]             # {method, check, covers} (schema 1.1);
+ENTRY_KEYS = ("method", "check", "covers")   #   absent on 1.0 specs -> hash unchanged
 
 # Explicitly OUT -- listed only for documentation; the projection is allow-list,
 # so anything not named above is already excluded. priority/architecture_hints/
@@ -98,6 +103,23 @@ def project_in_fields(req):
             # order-INSENSITIVE -- sort so reordering governed_by/depends_on is
             # cosmetic, but adding/removing an id flips the hash.
             out[f] = sorted(_norm_text(x) for x in req[f] if x is not None)
+    for f in IN_ENTRY_SETS:
+        if req.get(f) and isinstance(req[f], list):
+            entries = []
+            for e in req[f]:
+                if not isinstance(e, dict):
+                    continue
+                # allow-list inside each entry too -- an unlisted key cannot leak in
+                proj = {k: _norm_text(e[k]) for k in ENTRY_KEYS
+                        if e.get(k) not in (None, "")}
+                if proj:
+                    entries.append(proj)
+            if entries:
+                # order-INSENSITIVE -- reordering the proof plan is cosmetic, but
+                # adding, removing, or editing an entry flips the hash.
+                out[f] = sorted(entries, key=lambda p: (p.get("method", ""),
+                                                        p.get("covers", ""),
+                                                        p.get("check", "")))
     return out
 
 

@@ -12,9 +12,10 @@
 
   An issue is a self-contained vertical slice. Embed everything a builder needs
   to act WITHOUT opening the specs: the requirement text, its EARS acceptance
-  criteria, a one-line snippet of each governing ADR, and back-links. The specs
-  stay canonical -- to change scope you change the feature spec and re-sync, you
-  never edit the requirement here.
+  criteria, its verification entries (the proof plan), a one-line snippet of
+  each governing ADR, and back-links. The specs stay canonical -- to change
+  scope you change the feature spec and re-sync, you never edit the requirement
+  here.
 
   Fill the angle-bracket placeholders, strip these authoring comments, then
   create the issue. One work item = one issue = one thin, end-to-end slice.
@@ -42,6 +43,18 @@
 - [ ] <EARS criterion 1, embedded from the requirement>
 - [ ] <EARS criterion 2, embedded from the requirement>
 - [ ] Typecheck / lint / tests pass
+
+## Verification
+
+<!-- The requirement's `verification` entries (schema 1.1+), embedded from the
+     feature spec: HOW the criteria above will be PROVEN. The builder executes
+     the machine-runnable entries (test / analysis / monitor) and cites them as
+     as-built evidence; a demo / inspection entry is a human-judgment proof an
+     unattended worker cannot claim as met -- it records the steps and defers.
+     Omit the section only when the source requirement predates verification
+     (schema 1.0); the criteria above are then the only acceptance surface. -->
+- `test` (negative) -- <check, embedded from the requirement>
+- `test` (positive) -- <check, embedded from the requirement>
 
 ## Interface
 

@@ -7,7 +7,7 @@ Checks, in order of dependency:
   1. auth          -- `gh auth status` succeeds
   2. gh_version    -- gh >= 2.94.0 (native dependency/type flags; below that the
                       blocked-by/blocking/type/parent features do not exist)
-  3. spec_set      -- make-issues runs AFTER the planning layer: docs/specs must
+  3. spec_set      -- make-issues runs AFTER the planning layer: docs/product must
                       already hold an overview.md and >= 1 features/*.md (authored
                       by /make-spec, ideally with /make-arch's ADRs). If the spec
                       set is absent the gate STOPS and points the user upstream --
@@ -27,8 +27,8 @@ Checks, in order of dependency:
   6. mode + labels -- existing make-issues-labelled issues -> generate|sync, and
                       which static labels are missing (the skill creates them)
 
-  python scripts/gh_preflight.py --spec-dir docs/specs
-  python scripts/gh_preflight.py --spec-dir docs/specs --scope checkout,cart
+  python scripts/gh_preflight.py --spec-dir docs/product
+  python scripts/gh_preflight.py --spec-dir docs/product --scope checkout,cart
   python scripts/gh_preflight.py --spec-dir ... --repo owner/name --json
 
 Exit codes: 0 = gate passes, 1 = a check failed, 2 = the spec set is absent or
@@ -241,11 +241,14 @@ def check_spec_integrity(spec_dir, scope=None):
     full_run = scope is None
     overview_path = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview_path):
+        legacy = os.path.join(os.path.dirname(os.path.normpath(spec_dir)), "specs")
+        hint = (f" -- legacy layout detected at {legacy}/: migrate with "
+                f"'git mv {legacy} {os.path.normpath(spec_dir)}' "
+                f"(or pass --spec-dir {legacy})") if os.path.isdir(legacy) else ""
         return {"name": "spec_integrity", "ok": False, "fatal": True,
                 "files": [], "warnings": [], "detail":
                 f"no overview.md under {spec_dir} -- specs must be in "
-                "docs/specs/ (overview.md, features/*.md, "
-                "arch-data.yaml)"}
+                f"docs/product/ (overview.md, features/*.md, arch-data.yaml){hint}"}
     feature_count = 0
     for label, path in files:
         is_feature = label.startswith("feature:")
@@ -415,8 +418,8 @@ def detect_mode_and_labels(repo):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--spec-dir", default="docs/specs",
-                    help="the layered spec dir (default: docs/specs)")
+    ap.add_argument("--spec-dir", default="docs/product",
+                    help="the layered spec dir (default: docs/product)")
     ap.add_argument("--scope", default="",
                     help="comma-separated feature slugs and/or requirement ids "
                          "you will act on; a dirty SELECTED feature fails the "

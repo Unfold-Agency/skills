@@ -1,6 +1,6 @@
 # The make-api-contracts contract (schema, provenance, rules)
 
-The primary artifact is `docs/specs/api/openapi.yaml` -- an OpenAPI 3.1 document a
+The primary artifact is `docs/product/api/openapi.yaml` -- an OpenAPI 3.1 document a
 mock server ingests directly. `API-CONTRACTS.md` is a read-only human index rendered
 from it, and `.make-api-sync.json` is the sidecar ledger. This file is the reference
 the schema, the provenance keys, the operationId grammar, the fingerprint IN/OUT

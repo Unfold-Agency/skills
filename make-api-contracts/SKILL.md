@@ -1,7 +1,7 @@
 ---
 name: make-api-contracts
-description: Derive and maintain an OpenAPI 3.1 contract for the project's OWN API surface from the docs/specs requirements, the make-data-flows diagrams, and the make-arch decisions -- a mock-ready openapi.yaml plus a generated API-CONTRACTS.md index. Use this skill after make-data-flows, whenever the user wants API contracts, endpoint definitions, request/response shapes, or a mock backend to build against. Trigger it for "define the API", "what are the endpoints", "generate an OpenAPI spec", "stand up a mock API", or "update the contract after requirements changed". It targets a specific feature (--feature) and is ADVISORY -- it never gates the build. It describes the project's OWN endpoints; external providers (Stripe, Shopify) are referenced via ADR/integration, never redefined. Do NOT use it to author requirements (make-spec) or record architecture decisions (make-arch).
-argument-hint: "[--feature=<slug>]... [--all] [--check] [--allow-empty] [--out docs/specs/api] [--spec-dir docs/specs]"
+description: Derive and maintain an OpenAPI 3.1 contract for the project's OWN API surface from the docs/product requirements, the make-data-flows diagrams, and the make-arch decisions -- a mock-ready openapi.yaml plus a generated API-CONTRACTS.md index. Use this skill after make-data-flows, whenever the user wants API contracts, endpoint definitions, request/response shapes, or a mock backend to build against. Trigger it for "define the API", "what are the endpoints", "generate an OpenAPI spec", "stand up a mock API", or "update the contract after requirements changed". It targets a specific feature (--feature) and is ADVISORY -- it never gates the build. It describes the project's OWN endpoints; external providers (Stripe, Shopify) are referenced via ADR/integration, never redefined. Do NOT use it to author requirements (make-spec) or record architecture decisions (make-arch).
+argument-hint: "[--feature=<slug>]... [--all] [--check] [--allow-empty] [--out docs/product/api] [--spec-dir docs/product]"
 ---
 
 # Make API contracts
@@ -11,7 +11,7 @@ own backend. The primary artifact is an OpenAPI 3.1 document a mock server inges
 directly; a human index is rendered beside it.
 
 ```
-docs/specs/api/
+docs/product/api/
   openapi.yaml          # PRIMARY -- OpenAPI 3.1, mock-ready, the source of truth
   API-CONTRACTS.md      # GENERATED human index (read-only), rendered from openapi.yaml
   .make-api-sync.json   # sidecar ledger (per-operation fingerprint / version / state)
@@ -32,7 +32,7 @@ self-corrupts.
 After `make-data-flows` (which shows which calls a feature makes) and, normally, after
 `make-arch` (whose integrations/ADRs it references). It reads the requirements'
 `interface` sketches and `IR-*` integration reqs, the make-data-flows diagrams, and the
-ADR index; it writes only under `docs/specs/api/`. It is not part of the build gate.
+ADR index; it writes only under `docs/product/api/`. It is not part of the build gate.
 
 ## Files in this skill
 
@@ -53,11 +53,11 @@ ADR index; it writes only under `docs/specs/api/`. It is not part of the build g
 
 ## The status -> author -> build -> validate loop
 
-1. **Preflight.** Confirm a spec set exists under `--spec-dir` (default `docs/specs`).
+1. **Preflight.** Confirm a spec set exists under `--spec-dir` (default `docs/product`).
    None -> stop and point at `/make-spec`. make-data-flows should have run first (its
    diagrams tell you which calls exist); if it has not, operations are still emitted but
    marked `x-flow: unconfirmed`.
-2. **Status (read-only).** `python scripts/build_contracts.py docs/specs --check`. It
+2. **Status (read-only).** `python scripts/build_contracts.py docs/product --check`. It
    reports **stale** operations (a feature moved since its ops were stamped), **coverage
    gaps** (active requirements with an HTTP-shaped `interface` but no operation yet), and
    **tombstone candidates** (operations whose requirements went inactive). Detection is
@@ -70,16 +70,16 @@ ADR index; it writes only under `docs/specs/api/`. It is not part of the build g
    (they are what makes the mock useful) -- into a JSON payload. For a large run, fan out
    one worker sub-agent per feature; the write stays central. Reference make-arch
    integrations; never redefine an external provider's API (see `references/boundary-with-arch.md`).
-4. **Build (deterministic).** `python scripts/build_contracts.py docs/specs payload.json
+4. **Build (deterministic).** `python scripts/build_contracts.py docs/product payload.json
    [--feature <slug>]...`. It upserts by `operationId` (preserving human-edited
    `summary`/`description`/`x-notes`), stamps provenance + fingerprints, tombstones
    orphans, renders `API-CONTRACTS.md`, updates the ledger, and is byte-identical on a
    no-op. `--feature` bounds writes; drift elsewhere is reported.
-5. **Validate.** `python scripts/validate_contracts.py docs/specs`. Fix every FAIL. If
+5. **Validate.** `python scripts/validate_contracts.py docs/product`. Fix every FAIL. If
    `openapi-spec-validator` is installed it runs the full 3.1 check; otherwise a structural
    check runs with a warning. Staleness/boundary/canonical-form warn (advisory).
 6. **Report + mock.** Point a mock server at the artifact:
-   `npx @stoplight/prism-cli mock docs/specs/api/openapi.yaml`. See `references/mock-serving.md`.
+   `npx @stoplight/prism-cli mock docs/product/api/openapi.yaml`. See `references/mock-serving.md`.
 
 ## Validation rules (`validate_contracts.py`, prefix AC-)
 

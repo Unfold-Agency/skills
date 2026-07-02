@@ -17,16 +17,16 @@ gh issue list --repo <owner/name> --label make-issues --state all --limit 1000 \
 Then run the planner -- this is the gate. Pass `--scope` for a just-in-time run (empty = act on everything); `--promote` to promote an amendment (below):
 
 ```
-python scripts/analyze.py --spec-dir docs/specs --issues issues.json --scope checkout,cart --max-refactors 10
+python scripts/analyze.py --spec-dir docs/product --issues issues.json --scope checkout,cart --max-refactors 10
 ```
 
 It exits **0** when the plan is clean and safe to execute, or **1** on **blocking drift** (a malformed meta block, a refactor fan-out over the cap, or an invalid `--promote` target). On exit 1, **do not write anything**: present its remediation report and get a human to resolve or approve it first. The plan is also available as JSON (`--json`) for the review pass.
 
-Internally analyze reads the `provenance` first (absent == spec) and builds two views: the **match map** `by_req[req_id] -> [issue, ...]` for spec issues (matched on the meta block's `trace_req` between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`), and a separate **amendments** list (matched by feature anchor, not a requirement). If the meta block is missing or malformed, it does **not** auto-recover from the prose body -- the `## Traceability` table is free prose, not a machine contract. It records the issue as **blocking drift**; a human re-stamps the meta block and re-runs. A spec issue with an empty/string `trace_req`, or an amendment with no `feature` anchor, is blocking drift. One requirement may map to more than one issue (sliced into several) -- all are kept. The per-requirement fingerprint comes from `item_fingerprint.py docs/specs`; the ADR statuses (for the refactor trigger) from `arch-data.yaml`.
+Internally analyze reads the `provenance` first (absent == spec) and builds two views: the **match map** `by_req[req_id] -> [issue, ...]` for spec issues (matched on the meta block's `trace_req` between `<!-- make-issues:meta -->` and `<!-- /make-issues:meta -->` in `body`), and a separate **amendments** list (matched by feature anchor, not a requirement). If the meta block is missing or malformed, it does **not** auto-recover from the prose body -- the `## Traceability` table is free prose, not a machine contract. It records the issue as **blocking drift**; a human re-stamps the meta block and re-runs. A spec issue with an empty/string `trace_req`, or an amendment with no `feature` anchor, is blocking drift. One requirement may map to more than one issue (sliced into several) -- all are kept. The per-requirement fingerprint comes from `item_fingerprint.py docs/product`; the ADR statuses (for the refactor trigger) from `arch-data.yaml`.
 
 ## 2. The watermark and the CHANGELOG delta
 
-`docs/specs/.make-issues-sync.json` is a committed, per-feature watermark -- the marker that makes "since the last sync" a fact, not a vibe:
+`docs/product/.make-issues-sync.json` is a committed, per-feature watermark -- the marker that makes "since the last sync" a fact, not a vibe:
 
 ```json
 {
@@ -109,7 +109,7 @@ An amendment is never STALE/CLOSE'd, never REFACTOR'd, and its body (authored, n
 When a requirement later covers an amendment, promote it in place instead of creating a duplicate -- **operator-confirmed**, never a silent fuzzy match:
 
 ```
-python scripts/analyze.py --spec-dir docs/specs --issues issues.json --promote <N>=<REQ-ID>
+python scripts/analyze.py --spec-dir docs/product --issues issues.json --promote <N>=<REQ-ID>
 ```
 
 analyze validates `<REQ-ID>` is an **active** requirement (else blocking drift) and plans a `PROMOTE` op. The executor rewrites the issue's managed regions to the spec form -- set `trace_req: [<REQ-ID>]`, flip `provenance` to `spec`, drop the `amendment` label, embed the requirement text + EARS criteria + ADR snippets, stamp the fingerprint -- while preserving the human region. Thereafter it reconciles like any spec issue. This closes the mode overlap: the same work never lives as both an amendment and a fresh traced issue.
@@ -148,14 +148,14 @@ GitHub dependency edges (`--blocked-by`/`--blocking`) **cannot be read back** th
 
 Phasing is **optional** in the new overview. When `overview.md` carries a `phasing` list, each issue belongs to a GitHub milestone -- one per phase, title `Phase <N>: <name>`. This is a **separate axis from the fingerprint decision tree** (§4), and it runs on every sync regardless of fingerprint, exactly like the dependency-edge re-assertion in §7. Phase is sequencing, not contract -- it lives only in the overview's `phasing`, keyed by feature slug, never on a requirement, so a re-phase never changes a per-requirement fingerprint and never trips `needs-rebase`/`spec-drift`.
 
-1. **Ensure the milestones exist:** `phase_milestones.py docs/specs/overview.md --ensure --repo <owner/name>`. Idempotent; it creates missing milestones and patches a renamed/relabelled one in place (matched on the leading `Phase <N>`), so re-sequencing never orphans a milestone its issues still hang off.
+1. **Ensure the milestones exist:** `phase_milestones.py docs/product/overview.md --ensure --repo <owner/name>`. Idempotent; it creates missing milestones and patches a renamed/relabelled one in place (matched on the leading `Phase <N>`), so re-sequencing never orphans a milestone its issues still hang off.
 2. **For each managed issue**, compute its intended phase from `feature_to_phase` and its meta `feature` slug. Compare to the issue's live `milestone` (from the JSON above).
 3. **If they differ, re-assign silently** -- `gh issue edit <N> --repo <owner/name> --milestone "Phase <N>: <name>"` -- and record it in the report. Do **not** add a flag: a moved feature is a re-sequence, not a scope change. An issue whose feature is not in the plan keeps whatever milestone it has and is reported.
 4. An overview with **no `phasing` plan** skips this pass entirely; existing milestones are left untouched.
 
 ## 9. The report and the dedicated issues log (every run)
 
-Print the receipt AND append it to `docs/specs/ISSUES-CHANGELOG.md`. The printed receipt is the coverage check that stands in for a validator; the ledger is the durable, honest record of what make-issues did over time. It is a **separate** file from make-spec's spec `CHANGELOG.md` (which records spec changes): this one records **issue operations**.
+Print the receipt AND append it to `docs/product/ISSUES-CHANGELOG.md`. The printed receipt is the coverage check that stands in for a validator; the ledger is the durable, honest record of what make-issues did over time. It is a **separate** file from make-spec's spec `CHANGELOG.md` (which records spec changes): this one records **issue operations**.
 
 The receipt must be **honest about scope**. A scoped or dirty run never prints an unqualified green:
 
@@ -173,7 +173,7 @@ Summarize counts: created, updated, flagged, closed, refactors, refactor-trackin
 
 ### The dedicated ledger format
 
-`docs/specs/ISSUES-CHANGELOG.md` is a Keep-a-Changelog-style ledger, newest entry on top; never rewrite old entries. Append one dated entry per run:
+`docs/product/ISSUES-CHANGELOG.md` is a Keep-a-Changelog-style ledger, newest entry on top; never rewrite old entries. Append one dated entry per run:
 
 ```markdown
 ## <YYYY-MM-DD> -- scope: <features/reqs, or ALL> -- coverage: <FULL | PARTIAL> -- integrity: <CLEAN | PARTIAL>

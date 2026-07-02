@@ -319,7 +319,7 @@ const MERGE_SCHEMA = {
 // ── prompts ─────────────────────────────────────────────────────────────
 const preflightPrompt = () =>
   `Run the do-work preflight gate for ${REPO} and report the verdict.\n` +
-  `Execute: python ${SKILL}/scripts/work_preflight.py --spec-dir docs/specs --repo ${REPO} --json\n` +
+  `Execute: python ${SKILL}/scripts/work_preflight.py --spec-dir docs/product --repo ${REPO} --json\n` +
   `Ensure the do-work lifecycle labels exist (create any the advisory lists as missing): ` +
   `gh label create status:doing --color 1d76db --force; gh label create escalated --color d93f0b --force; ` +
   `gh label create needs-human-review --color fbca04 --force.\n` +
@@ -343,7 +343,7 @@ const workerPrompt = (item, dangerous) =>
     : ``) +
   `Follow the do-work execution loop -- full detail in ${SKILL}/references/execution-loop.md:\n` +
   `1. Claim: gh issue edit ${item.number} --repo ${REPO} --add-assignee @me --add-label status:doing\n` +
-  `2. Read: gh issue view ${item.number} --repo ${REPO} (Goal, What to build, Acceptance criteria, the "## Verification" proof plan when present, Test plan, and the make-issues:meta block). The issue is self-contained -- the requirement, its EARS acceptance criteria, its verification entries, and a governing-ADR snippet are embedded. Read the full ADR in docs/specs/decisions/ by its trace_adr only if you need the rationale; do NOT re-derive or edit the spec.\n` +
+  `2. Read: gh issue view ${item.number} --repo ${REPO} (Goal, What to build, Acceptance criteria, the "## Verification" proof plan when present, Test plan, and the make-issues:meta block). The issue is self-contained -- the requirement, its EARS acceptance criteria, its verification entries, and a governing-ADR snippet are embedded. Read the full ADR in docs/product/decisions/ by its trace_adr only if you need the rationale; do NOT re-derive or edit the spec.\n` +
   `3. Build ONLY this slice on a new branch <type>/issue-${item.number}-<slug> off the default branch. Conventional Commits + GitMoji, one logical change per commit.\n` +
   `4. Verify: detect and run the repo's build gate (typecheck / lint / tests -- check package.json, Makefile, pyproject.toml, CI config, CLAUDE.md) AND the issue's Test plan. When the issue carries a "## Verification" section, execute its machine-runnable entries too: a "test" entry means that test exists and passes (write it if missing); "analysis" means the reasoning is recorded; "monitor" means the signal is wired. A "demo"/"inspection" entry is a human-judgment proof -- do NOT fake it; it goes in the ledger as deferred. Do NOT open a PR on a red gate.\n` +
   `5. git push -u origin <branch>, then open a PR using ${SKILL}/assets/pr-body-template.md: include "Closes #${item.number}", the trace mirrored from the issue meta, the acceptance checklist, and the "## As-built" ledger (one row per acceptance criterion: met / deferred / mocked, with evidence). Open it ready-for-review (not draft).\n` +

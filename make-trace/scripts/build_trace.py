@@ -6,9 +6,9 @@ Reads three sources and renders ONE self-contained HTML map that answers, at a
 glance: which objectives and requirements are not-started / in-progress / done,
 and how every live issue rolls up through the spec.
 
-  Objectives    docs/specs/overview.md      goals (G-NNN, kind business|user)
-  Requirements  docs/specs/features/*.md     requirements (FR/IR/NFR/CR)
-  Architecture  docs/specs/arch-data.yaml    components (C), integrations, ADRs
+  Objectives    docs/product/overview.md      goals (G-NNN, kind business|user)
+  Requirements  docs/product/features/*.md     requirements (FR/IR/NFR/CR)
+  Architecture  docs/product/arch-data.yaml    components (C), integrations, ADRs
   Issues        gh issue list --state all    make-issues:meta -> trace_req/trace_adr
 
 Every edge is DERIVED from the spec itself (zero manual mapping):
@@ -31,8 +31,8 @@ NO-OP GUARD. When nothing substantive changed, the previous run's generated_at i
 reused so the bytes are identical -- an unchanged regen makes no git diff, so
 issue events do not spam commits.
 
-  python build_trace.py [--repo owner/name] [--spec-dir docs/specs]
-                        [--out docs/traceability] [--allow-empty] [--open]
+  python build_trace.py [--repo owner/name] [--spec-dir docs/product]
+                        [--out docs/product/traceability] [--allow-empty] [--open]
 
 Exit codes: 0 = wrote (or byte-identical no-op), 2 = aborted (bad source /
 fail-closed guard / gh error). Read-only against the specs; writes only under
@@ -148,7 +148,11 @@ def load_specs(spec_dir):
     [(slug, doc)]; `arch` is the arch-data.yaml dict or None (lite mode)."""
     overview_path = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview_path):
-        raise FileNotFoundError(f"no overview.md under {spec_dir}")
+        legacy = os.path.join(os.path.dirname(os.path.normpath(spec_dir)), "specs")
+        hint = (f" -- legacy layout detected at {legacy}/: migrate with "
+                f"'git mv {legacy} {os.path.normpath(spec_dir)}' "
+                f"(or pass --spec-dir {legacy})") if os.path.isdir(legacy) else ""
+        raise FileNotFoundError(f"no overview.md under {spec_dir}{hint}")
     overview = load_spec_doc(overview_path)
 
     features = []
@@ -730,8 +734,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", help="owner/name (default: inferred by gh from cwd)")
-    ap.add_argument("--spec-dir", default="docs/specs", help="default docs/specs")
-    ap.add_argument("--out", default="docs/traceability", help="default docs/traceability")
+    ap.add_argument("--spec-dir", default="docs/product", help="default docs/product")
+    ap.add_argument("--out", default="docs/product/traceability", help="default docs/product/traceability")
     ap.add_argument("--allow-empty", action="store_true",
                     help="permit a source that previously had nodes to be empty now "
                          "(confirms a real emptying; defeats the fail-closed guard)")

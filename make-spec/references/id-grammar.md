@@ -52,7 +52,7 @@ Worked examples:
 
 - **Requirement -> decision:** `governed_by` points a requirement at the ADR(s)
   that decide its HOW. The validator checks the format, and -- once
-  `docs/specs/decisions/` exists -- that each ADR id resolves to a real file
+  `docs/product/decisions/` exists -- that each ADR id resolves to a real file
   (S-004). Find the governing decision for any feature in ≤ 2 hops: feature spec
   -> its `governed_by` ADR.
 - **Requirement -> requirement:** `depends_on` points at prerequisite requirement

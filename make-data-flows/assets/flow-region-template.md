@@ -1,7 +1,7 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
 FLOW REGION TEMPLATE -- the make-data-flows:flows managed region
-(embedded in docs/specs/features/<slug>.md, in the BODY)
+(embedded in docs/product/features/<slug>.md, in the BODY)
 
 This is the ONE region make-data-flows owns. It is written by
 scripts/embed_flows.py, never by hand. It lives in the body, so it is

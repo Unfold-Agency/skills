@@ -101,7 +101,7 @@ diagrams:
 
 # ═══════════════════════════════════════════════════════════════════
 # VALIDATOR RULES -- run fails (exit 1) on any violation.
-# Run: python scripts/validate_arch.py [docs/specs] [--baseline-ref origin/main | --no-baseline]
+# Run: python scripts/validate_arch.py [docs/product] [--baseline-ref origin/main | --no-baseline]
 #
 #   A-001  Well-formed: required meta fields + top-level keys present
 #   A-002  Every decisions[].id matches ^ADR-\d{4}$, is unique, and has a

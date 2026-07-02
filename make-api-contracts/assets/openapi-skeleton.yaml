@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════════════
 # openapi.yaml -- ILLUSTRATIVE SKELETON (make-api-contracts)
 #
-# GENERATED FILE. The real docs/specs/api/openapi.yaml is built and
+# GENERATED FILE. The real docs/product/api/openapi.yaml is built and
 # re-stamped by scripts/build_contracts.py on every run from the authored
 # operations payload. Never hand-edit it -- edit the specs/flows and
 # re-run, exactly like make-arch's arch-data.yaml. (Human-owned fields --

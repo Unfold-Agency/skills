@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validate_arch.py -- enforce validator rules A-001..A-008 across docs/specs/
+validate_arch.py -- enforce validator rules A-001..A-008 across docs/product/
 
 Validates the architecture layer: arch-data.yaml + decisions/ADR-*.md +
 architecture.md, and cross-checks the ADR index against the make-spec feature
@@ -8,7 +8,7 @@ files (no-orphan). Reuses the make-spec discipline: a fail-closed fingerprint
 gate (A-007) and an origin/main append-only baseline (A-008).
 
 Usage:
-  python validate_arch.py [docs/specs] [--baseline-ref origin/main | --no-baseline]
+  python validate_arch.py [docs/product] [--baseline-ref origin/main | --no-baseline]
 
 Exit codes: 0 = pass (warnings do not fail), 1 = violations, 2 = file/parse error.
 """
@@ -79,7 +79,7 @@ def load_spec_doc(path):
 
 def feature_governed_by(spec_dir):
     """Union of every ADR id referenced by a feature requirement's governed_by,
-    across docs/specs/features/*.md (read from the frontmatter)."""
+    across docs/product/features/*.md (read from the frontmatter)."""
     refs = set()
     fdir = os.path.join(spec_dir, "features")
     if not os.path.isdir(fdir):
@@ -146,7 +146,7 @@ def baseline_adr_ids(spec_dir, ref, fail):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("spec_dir", nargs="?", default="docs/specs")
+    ap.add_argument("spec_dir", nargs="?", default="docs/product")
     ap.add_argument("--baseline-ref", default="origin/main")
     ap.add_argument("--no-baseline", action="store_true")
     args = ap.parse_args()

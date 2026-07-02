@@ -210,7 +210,8 @@ it is intentionally **ADR-compatible** -- a council record is an architecture de
 deliberation attached.
 
 **Where it goes:**
-1. **If the project already keeps ADRs** (`docs/adr/`, `docs/architecture/decisions/`,
+1. **If the project already keeps ADRs** (`docs/product/decisions/` -- the
+   mondo-workflow pipeline's home -- `docs/adr/`, `docs/architecture/decisions/`,
    `docs/decisions/`): write there, in that folder's format. The record *is* an ADR.
 2. **Otherwise, in a git repo:** write to `docs/council/YYYY-MM-DD-<slug>.md`. Create the directory
    if needed.

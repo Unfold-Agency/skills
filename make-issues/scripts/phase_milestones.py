@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Map an OPTIONAL phasing plan to GitHub milestones for make-issues.
 
-The new docs/specs overview does NOT author phasing by default (the old TDD's
+The new docs/product overview does NOT author phasing by default (the old TDD's
 implementation_phases is gone). Phase milestones are therefore OPTIONAL: if
 `overview.md`'s frontmatter carries a top-level `phasing` list, this maps
 feature -> phase -> milestone and supports it; if it is absent, milestones are
@@ -26,12 +26,12 @@ dependency edge: derived from the overview and re-asserted on every sync. The
 leading "Phase <number>" of the title is the stable key both this skill and
 do-work match on; the name is a human label that may change.
 
-  python scripts/phase_milestones.py docs/specs/overview.md          # human-readable maps
-  python scripts/phase_milestones.py docs/specs/overview.md --json    # {feature_to_phase, phase_title, ...}
-  python scripts/phase_milestones.py docs/specs/overview.md --feature checkout
-  python scripts/phase_milestones.py docs/specs/overview.md --ensure --repo owner/name
+  python scripts/phase_milestones.py docs/product/overview.md          # human-readable maps
+  python scripts/phase_milestones.py docs/product/overview.md --json    # {feature_to_phase, phase_title, ...}
+  python scripts/phase_milestones.py docs/product/overview.md --feature checkout
+  python scripts/phase_milestones.py docs/product/overview.md --ensure --repo owner/name
 
-The path may be the overview file or the spec dir (docs/specs).
+The path may be the overview file or the spec dir (docs/product).
 
 Exit codes: 0 = ok, 1 = bad args / unresolved, 2 = file/parse error,
             3 = a gh call failed (with --ensure).
@@ -204,7 +204,7 @@ def _resolve_overview(path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("overview", help="docs/specs/overview.md (or docs/specs)")
+    ap.add_argument("overview", help="docs/product/overview.md (or docs/product)")
     ap.add_argument("--json", action="store_true", help="emit the maps as JSON")
     ap.add_argument("--feature", help="a feature slug; print that feature's phase")
     ap.add_argument("--ensure", action="store_true",

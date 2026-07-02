@@ -19,7 +19,7 @@
 # migration WARNING for missing verification instead of a failure --
 # bump to "1.1" and author verification when amending a feature.
 #
-# Two doc SHAPES live under docs/specs/, each in the frontmatter of:
+# Two doc SHAPES live under docs/product/, each in the frontmatter of:
 #   overview.md            -- one per project (the lean PRD layer)
 #   features/<slug>.md      -- one per feature (the churn-heavy layer)
 # This schema documents both frontmatter shapes. CHANGELOG.md is human
@@ -42,7 +42,7 @@
 
 
 # ───────────────────────────────────────────────────────────────────
-# SHAPE 1 -- overview.md frontmatter  (docs/specs/overview.md)
+# SHAPE 1 -- overview.md frontmatter  (docs/product/overview.md)
 # The lean PRD: problem, users, goals/metrics, scope + no-gos, the
 # canonical project version, and the FEATURE INDEX (the registry that
 # every feature must appear in).
@@ -189,7 +189,7 @@ feature_example:
 
 # ═══════════════════════════════════════════════════════════════════
 # VALIDATOR RULES -- run fails (exit 1) on any violation (S-012 warns).
-# Run: python scripts/validate_spec.py [docs/specs] [--baseline-ref origin/main | --no-baseline]
+# Run: python scripts/validate_spec.py [docs/product] [--baseline-ref origin/main | --no-baseline]
 #
 # Integrity
 #   S-001  Each spec's frontmatter is well-formed (required meta + top-level keys)
@@ -201,7 +201,7 @@ feature_example:
 #          prefixes are unique across the index
 #   S-004  Every reference resolves: depends_on -> a known requirement id
 #          (across all features); governed_by -> ADR-format, and to a
-#          real file under docs/specs/decisions/ when that dir exists
+#          real file under docs/product/decisions/ when that dir exists
 #   S-005  No requirement/goal id present in the baseline (origin/main)
 #          is missing now (supersede or defer; never delete). FAILS
 #          CLOSED when the baseline ref is unresolvable, the clone is

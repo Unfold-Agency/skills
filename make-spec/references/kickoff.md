@@ -1,7 +1,7 @@
 # Kickoff (greenfield first pass)
 
 How to turn disparate client inputs -- RFPs, briefs, workshop transcripts, FigJam
-exports, stakeholder notes -- into the first `docs/specs/` set: an `overview.md`,
+exports, stakeholder notes -- into the first `docs/product/` set: an `overview.md`,
 a lean spec per feature, and a seeded `CHANGELOG.md`. Read this when no spec exists
 yet. Amend mode (a spec already exists) is `amend-and-changelog.md`.
 
@@ -96,13 +96,13 @@ pass with honest gaps -- do not block on answers.
    file each, the structured contract in the **frontmatter** (per
    `assets/spec-data-schema.yaml`), the human narrative in the body. There is no
    separate data file to derive.
-2. Stamp the fingerprints: `python scripts/stamp_fingerprint.py docs/specs`. This
+2. Stamp the fingerprints: `python scripts/stamp_fingerprint.py docs/product`. This
    hashes each spec's frontmatter and writes each feature's content version into
    the overview Feature Index (it rewrites only the frontmatter; bodies are kept).
 3. Validate. On a brand-new repo with no pushed `main` yet, the no-vanishing
    baseline doesn't exist, so pass `--no-baseline`:
    ```
-   python scripts/validate_spec.py docs/specs --no-baseline
+   python scripts/validate_spec.py docs/product --no-baseline
    ```
    Once `main` carries the docs, drop the flag (the default baseline is
    `origin/main`). Never present a spec whose validator fails -- fix or downgrade

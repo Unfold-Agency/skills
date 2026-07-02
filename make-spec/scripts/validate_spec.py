@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validate_spec.py -- enforce validator rules S-001..S-015 across docs/specs/
+validate_spec.py -- enforce validator rules S-001..S-015 across docs/product/
 
 Validates the whole spec set at once (the overview + every feature), because
 the interesting rules are cross-document: the feature index must agree with the
@@ -8,7 +8,7 @@ feature files (S-008), prefixes must be unique across features (S-007), and
 no-vanishing diffs the UNION of ids against a git baseline (S-005).
 
 Usage:
-  python validate_spec.py [docs/specs] [--baseline-ref origin/main | --no-baseline]
+  python validate_spec.py [docs/product] [--baseline-ref origin/main | --no-baseline]
                           [--budget-reqs 12] [--budget-words 1200]
 
 Exit codes: 0 = pass (S-012 budget warnings do not fail), 1 = violations,
@@ -265,10 +265,20 @@ def baseline_ids(spec_dir, ref, fail):
     return ids
 
 
+def legacy_layout_hint(spec_dir):
+    """One-line migration hint when the old docs/specs layout is present."""
+    legacy = os.path.join(os.path.dirname(os.path.normpath(spec_dir)), "specs")
+    if os.path.isdir(legacy):
+        return (f" -- legacy layout detected at {legacy}/: migrate with "
+                f"'git mv {legacy} {os.path.normpath(spec_dir)}' "
+                f"(or pass --spec-dir {legacy})")
+    return ""
+
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("spec_dir", nargs="?", default="docs/specs",
-                    help="the spec directory (default docs/specs)")
+    ap.add_argument("spec_dir", nargs="?", default="docs/product",
+                    help="the spec directory (default docs/product)")
     ap.add_argument("--baseline-ref", default="origin/main",
                     help="git ref for the no-vanishing baseline (default origin/main)")
     ap.add_argument("--no-baseline", action="store_true",
@@ -282,7 +292,8 @@ def main():
     spec_dir = args.spec_dir
     overview_path = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview_path):
-        print(f"ERROR: no overview.md under {spec_dir}", file=sys.stderr)
+        print(f"ERROR: no overview.md under {spec_dir}"
+              f"{legacy_layout_hint(spec_dir)}", file=sys.stderr)
         sys.exit(2)
 
     errors, warns = [], []
@@ -424,7 +435,7 @@ def main():
                                   "ADR id (want ^ADR-\\d{4}$)")
                 elif has_dec_dir and adr not in adr_files:
                     fail("S-004", f"{dpath}: {rid}.governed_by '{adr}' has no file "
-                                  "under docs/specs/decisions/")
+                                  "under docs/product/decisions/")
             acs = r.get("acceptance_criteria") or []
             if not acs:
                 fail("S-010", f"{dpath}: {rid} has no acceptance criteria")

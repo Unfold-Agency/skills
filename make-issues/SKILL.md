@@ -1,11 +1,11 @@
 ---
 name: make-issues
-description: Just-in-time, spec-anchored GitHub Issues. Point it at the feature(s) or a description you want tickets for and it creates or reconciles exactly that slice -- each issue traced back to the spec set -- then records what it did in a dedicated issues log. Use this skill whenever the user wants to make issues or tickets for some feature(s), break a slice of the work into work items, add a quick issue for something not yet in the specs, push the plan to GitHub, or reconcile existing issues after a spec or ADR change. Trigger it even if the user says "make issues for checkout," "create the tickets," "add an issue for X," "plan this work," or "sync the issues with the latest spec." It runs AFTER the planning layer and needs a spec set (make-spec, ideally make-arch); if none exists it stops and points there. Do NOT use for authoring the overview/features (upstream -- use make-spec) or the architecture (upstream -- use make-arch); this skill consumes docs/specs and writes to GitHub.
+description: Just-in-time, spec-anchored GitHub Issues. Point it at the feature(s) or a description you want tickets for and it creates or reconciles exactly that slice -- each issue traced back to the spec set -- then records what it did in a dedicated issues log. Use this skill whenever the user wants to make issues or tickets for some feature(s), break a slice of the work into work items, add a quick issue for something not yet in the specs, push the plan to GitHub, or reconcile existing issues after a spec or ADR change. Trigger it even if the user says "make issues for checkout," "create the tickets," "add an issue for X," "plan this work," or "sync the issues with the latest spec." It runs AFTER the planning layer and needs a spec set (make-spec, ideally make-arch); if none exists it stops and points there. Do NOT use for authoring the overview/features (upstream -- use make-spec) or the architecture (upstream -- use make-arch); this skill consumes docs/product and writes to GitHub.
 ---
 
 # Make issues
 
-Turn a chosen slice of an existing `docs/specs/` spec set into GitHub Issues that
+Turn a chosen slice of an existing `docs/product/` spec set into GitHub Issues that
 humans and coding agents can act on, then keep those issues honest as the specs
 change. The job is **traceability and stale-resistance**, not just decomposition.
 This is the lane after the planning layer -- `/make-spec` (the WHAT/WHY) and
@@ -33,13 +33,13 @@ notes in the issue's human region, which sync never overwrites.
 
 ## The precondition: this skill runs after make-spec
 
-make-issues assumes `docs/specs/` already exists. **If there is no spec set it
+make-issues assumes `docs/product/` already exists. **If there is no spec set it
 stops** and sends you to `/make-spec` (and `/make-arch`). It never creates
 un-anchored issues -- for ad-hoc GitHub issues with no spec behind them, use a
 different tool. An on-demand add here is a **quick amendment, not a rewrite**: it
 still anchors to the real features/goals/ADRs the spec set already holds.
 
-## The source: docs/specs/
+## The source: docs/product/
 
 The planning layer is a layered spec set, not a PRD+TDD pair. Each spec is a single
 Markdown file whose **YAML frontmatter** carries the structured contract (make-spec
@@ -71,12 +71,12 @@ Run the gate and stop on any failure before touching GitHub. Pass the scope you 
 about to act on so the dirty-spec gate can be advisory outside it:
 
 ```
-python scripts/gh_preflight.py --spec-dir docs/specs --scope <feature-slugs and/or req-ids>
+python scripts/gh_preflight.py --spec-dir docs/product --scope <feature-slugs and/or req-ids>
 ```
 
 It checks, in order: `gh auth status`; **gh >= 2.94.0** (native dependency/type
 flags -- below that, stop and tell the user to `brew upgrade gh`); the **spec-set
-precondition** (no `docs/specs/` -> stop, go to `/make-spec`); the **scoped
+precondition** (no `docs/product/` -> stop, go to `/make-spec`); the **scoped
 fingerprint gate**; a git work tree with a resolvable `owner/name`; and the existing
 managed issues, which pick the mode. It reports any missing static labels; create
 them with `gh label create <name> --color <hex> --description "..." --force` from
@@ -146,7 +146,7 @@ REFACTOR only fire for an issue whose feature is in scope.
    snippets + trace fields + fingerprint from `item_fingerprint.py --id <REQ>`). For
    an amendment, author the item against its anchor (see scoping-and-modes.md). Mark
    AFK/HITL honestly -- afk requires criteria.
-4. **Run analyze -- the hard gate.** `python scripts/analyze.py --spec-dir docs/specs
+4. **Run analyze -- the hard gate.** `python scripts/analyze.py --spec-dir docs/product
    --issues <gh-json> --scope <tokens> [--promote N=REQ] [--max-refactors N]`. It
    exits 0 on a clean plan, or 1 on blocking drift (malformed meta, refactor
    overflow, invalid promote target). **No GitHub write until it exits 0** or a
@@ -158,19 +158,19 @@ REFACTOR only fire for an issue whose feature is in scope.
    touch only the managed regions and splice the human region back byte-for-byte.
    For a `phasing` plan, ensure milestones first, then assign each issue its phase.
 7. **Report + ledger.** Print the receipt and append it to
-   `docs/specs/ISSUES-CHANGELOG.md`; advance the watermark.
+   `docs/product/ISSUES-CHANGELOG.md`; advance the watermark.
 8. **Refresh the traceability map (if make-trace is present).** After a successful
    sync, regenerate the traceability map so it reflects the issues you just created
    or updated -- run `/make-trace`, or call its generator directly
    (`python <make-trace>/scripts/build_trace.py`, locating `make-trace/` as a sibling
-   skill directory). It reads `docs/specs/` + the live issues and rewrites the
-   self-contained `docs/traceability/` artifact; a no-op regeneration is byte-identical,
+   skill directory). It reads `docs/product/` + the live issues and rewrites the
+   self-contained `docs/product/traceability/` artifact; a no-op regeneration is byte-identical,
    so an unchanged map produces no diff. This step is **non-fatal**: if make-trace is
    not installed, skip it with a one-line note (the sync itself is already complete).
 
 ## Report + the dedicated issues log (every run)
 
-Always print the receipt AND append it to `docs/specs/ISSUES-CHANGELOG.md` (the
+Always print the receipt AND append it to `docs/product/ISSUES-CHANGELOG.md` (the
 dedicated issues-operations ledger, separate from make-spec's spec `CHANGELOG.md`).
 See `references/reconciliation.md` §9 for the entry format. It is **honest**: a
 scoped or dirty run records **partial** coverage and the out-of-scope drift, never
@@ -187,7 +187,7 @@ Report any refactor fan-out truncation explicitly -- never silently drop.
 State these plainly; do not pretend past them.
 
 - **A spec set is required.** make-issues runs after `/make-spec`; with no
-  `docs/specs/` it stops. It does not create un-anchored issues.
+  `docs/product/` it stops. It does not create un-anchored issues.
 - **Scope bounds writes, not detection.** A scoped run detects drift everywhere but
   acts only in scope, and says so ("coverage: PARTIAL"). To reconcile the whole
   project, run `--all`. Do not read a scoped run's green as "everything is synced."

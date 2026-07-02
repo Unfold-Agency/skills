@@ -66,7 +66,7 @@
 <!-- One line per governing ADR (from the requirement's `governed_by`): its id,
      title, and a one-line snippet of the decision, plus a back-link to the ADR
      file. So the builder knows the constraint without opening the arch spec. -->
-- <ADR-NNNN> -- <title>: <one-line decision snippet>  (see `docs/specs/decisions/<ADR-NNNN>-*.md`)
+- <ADR-NNNN> -- <title>: <one-line decision snippet>  (see `docs/product/decisions/<ADR-NNNN>-*.md`)
 
 ## Dependencies
 

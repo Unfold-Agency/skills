@@ -17,12 +17,12 @@ This script does the deterministic, safe part:
     would break a running mock); it resurrects when re-authored.
   - SCOPE writes with --feature; detect drift GLOBALLY and report out-of-scope.
   - NO-OP guard: byte-identical when only the timestamp would change.
-  - Render docs/specs/api/API-CONTRACTS.md and maintain .make-api-sync.json.
+  - Render docs/product/api/API-CONTRACTS.md and maintain .make-api-sync.json.
 
   # write from an authored payload:
-  python scripts/build_contracts.py docs/specs payload.json [--feature checkout]... [--now ISO]
+  python scripts/build_contracts.py docs/product payload.json [--feature checkout]... [--now ISO]
   # read-only status (staleness / coverage gaps / tombstone candidates):
-  python scripts/build_contracts.py docs/specs --check
+  python scripts/build_contracts.py docs/product --check
 
 Payload:
   {"info": {"title": "...", "version": "0.1"},         # optional; seeds a new doc
@@ -35,7 +35,7 @@ Payload:
 
 Exit codes: 0 = wrote / no-op / clean --check; 1 = blocking (bad payload, unknown
 --feature, unknown feature on an op); 2 = file/parse error or fail-closed emptiness.
-Writes only under --out (default docs/specs/api).
+Writes only under --out (default docs/product/api).
 """
 import argparse
 import json
@@ -317,7 +317,7 @@ def stamp_and_write(doc, out_dir, header, prior_text, prior_doc, now):
 # ── main ─────────────────────────────────────────────────────────────────────
 def print_check(det, has_doc):
     if not has_doc:
-        print("no contract yet (docs/specs/api/openapi.yaml absent) -- kickoff needed")
+        print("no contract yet (docs/product/api/openapi.yaml absent) -- kickoff needed")
     print(f"stale operations ({len(det['stale'])}):")
     for s in det["stale"]:
         print(f"  {s['operationId']} -- {s['feature']} {s['stored']} -> {s['live']}")
@@ -332,7 +332,7 @@ def print_check(det, has_doc):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("spec_dir", nargs="?", default="docs/specs")
+    ap.add_argument("spec_dir", nargs="?", default="docs/product")
     ap.add_argument("payload", nargs="?", help="authored-operations JSON (or '-' for stdin)")
     ap.add_argument("--out", default=None, help="output dir (default <spec_dir>/api)")
     ap.add_argument("--feature", action="append", default=[], help="scope writes to these slugs")

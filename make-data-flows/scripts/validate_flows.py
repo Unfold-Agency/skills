@@ -15,7 +15,7 @@ Flows are ADVISORY, so coverage (DF-004) and staleness (DF-005) only warn; the
 structural + integrity rules fail. A feature with no flows region is fine (it
 simply has no flows yet) -- only regions that exist are validated.
 
-  python scripts/validate_flows.py docs/specs [--feature checkout]...
+  python scripts/validate_flows.py docs/product [--feature checkout]...
 
 Exit codes: 0 = clean (warnings allowed); 1 = one or more DF-001/002/003/006
 violations; 2 = spec dir / parse error. Read-only.
@@ -156,7 +156,7 @@ def validate_feature(path, compute_fp):
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("spec_dir", nargs="?", default="docs/specs")
+    ap.add_argument("spec_dir", nargs="?", default="docs/product")
     ap.add_argument("--feature", action="append", default=[], help="validate only these slugs (repeatable)")
     args = ap.parse_args()
 

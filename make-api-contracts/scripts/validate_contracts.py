@@ -19,7 +19,7 @@
 Contracts are ADVISORY: staleness (AC-005), canonical form (AC-007), and the
 boundary guard (AC-009) warn; structural + integrity rules fail.
 
-  python scripts/validate_contracts.py docs/specs [--out docs/specs/api]
+  python scripts/validate_contracts.py docs/product [--out docs/product/api]
 
 Exit codes: 0 = clean (warnings allowed); 1 = one or more failing rules; 2 = the
 contract is missing or unparseable. Read-only.
@@ -151,7 +151,7 @@ def validate(doc, features, adr_ids):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("spec_dir", nargs="?", default="docs/specs")
+    ap.add_argument("spec_dir", nargs="?", default="docs/product")
     ap.add_argument("--out", default=None, help="contract dir (default <spec_dir>/api)")
     args = ap.parse_args()
 

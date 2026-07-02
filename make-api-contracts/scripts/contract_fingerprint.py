@@ -18,7 +18,7 @@ IN fields -> yaml.safe_dump(sort_keys=True) -> sha256):
       internal-drift gate (AC-006): a stored info.x-fingerprint that no longer
       matches a recompute means the file was edited out from under the skill.
 
-  python scripts/contract_fingerprint.py docs/specs/api/openapi.yaml [--op <operationId>]
+  python scripts/contract_fingerprint.py docs/product/api/openapi.yaml [--op <operationId>]
 """
 import argparse
 import hashlib

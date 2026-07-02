@@ -3,7 +3,7 @@
 under a spec dir, using the validator's own normalization so the two never
 disagree. Run after authoring or editing any spec markdown:
 
-  python scripts/stamp_fingerprint.py docs/specs
+  python scripts/stamp_fingerprint.py docs/product
 
 It (1) stamps each features/<slug>.md, (2) writes the matching feature_version
 into the overview feature_index, and (3) stamps overview.md. Only the YAML
@@ -56,7 +56,7 @@ def restamp(path, mutate):
 
 
 def main():
-    spec_dir = sys.argv[1] if len(sys.argv) > 1 else "docs/specs"
+    spec_dir = sys.argv[1] if len(sys.argv) > 1 else "docs/product"
     overview_path = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview_path):
         print(f"no overview.md under {spec_dir}", file=sys.stderr)

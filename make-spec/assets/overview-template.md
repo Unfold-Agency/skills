@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-OVERVIEW TEMPLATE -- docs/specs/overview.md   (make-spec)
+OVERVIEW TEMPLATE -- docs/product/overview.md   (make-spec)
 
 ONE FILE, ONE TRUTH. The YAML frontmatter is the machine-readable
 contract (problem, users, goals/metrics, scope + no-gos, and the

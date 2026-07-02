@@ -2,13 +2,13 @@
 
 The whole point of emitting real OpenAPI 3.1 is that a mock server ingests it with **zero
 conversion** -- a developer gets a live fake backend that serves the `examples` while the
-real one is built. `docs/specs/api/openapi.yaml` is the file to point any OpenAPI-native
+real one is built. `docs/product/api/openapi.yaml` is the file to point any OpenAPI-native
 mock at.
 
 ## Stoplight Prism (no install)
 
 ```
-npx @stoplight/prism-cli mock docs/specs/api/openapi.yaml
+npx @stoplight/prism-cli mock docs/product/api/openapi.yaml
 # serves on http://127.0.0.1:4010 by default
 curl -s http://127.0.0.1:4010/orders -X POST -H 'content-type: application/json' -d '{}'
 ```

@@ -508,7 +508,7 @@
         .join('');
       const gen = DATA.meta.generatedAt ? new Date(DATA.meta.generatedAt) : null;
       document.getElementById('foot').textContent =
-        `Generated ${gen ? gen.toLocaleString() : '?'} from docs/specs + live GitHub Issues` +
+        `Generated ${gen ? gen.toLocaleString() : '?'} from docs/product + live GitHub Issues` +
         (DATA.meta.repo ? ` · ${DATA.meta.repo}` : '') +
         ' · additive ledger (deleted nodes are kept as tombstones)';
 

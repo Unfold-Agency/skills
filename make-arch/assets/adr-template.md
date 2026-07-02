@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-ADR TEMPLATE -- docs/specs/decisions/ADR-NNNN-<slug>.md   (make-arch)
+ADR TEMPLATE -- docs/product/decisions/ADR-NNNN-<slug>.md   (make-arch)
 
 One file per decision (Michael Nygard's ADR format). The ADR log is
 APPEND-ONLY and immutable: once a decision is Accepted you NEVER edit it.

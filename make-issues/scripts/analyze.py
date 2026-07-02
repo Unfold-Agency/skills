@@ -58,11 +58,11 @@ Hard gate: exits NONZERO when there is BLOCKING drift --
 Otherwise exits 0 and the plan is safe to execute. Out-of-scope drift never
 blocks (it is reported for the operator, not acted on).
 
-  python scripts/analyze.py --spec-dir docs/specs --issues issues.json
-  python scripts/analyze.py --spec-dir docs/specs --issues issues.json --scope checkout,cart
-  gh issue list ... --json ... | python scripts/analyze.py --spec-dir docs/specs --issues -
-  python scripts/analyze.py --spec-dir docs/specs --issues issues.json --promote 42=FR-CHK-007
-  python scripts/analyze.py --spec-dir docs/specs --issues issues.json --json
+  python scripts/analyze.py --spec-dir docs/product --issues issues.json
+  python scripts/analyze.py --spec-dir docs/product --issues issues.json --scope checkout,cart
+  gh issue list ... --json ... | python scripts/analyze.py --spec-dir docs/product --issues -
+  python scripts/analyze.py --spec-dir docs/product --issues issues.json --promote 42=FR-CHK-007
+  python scripts/analyze.py --spec-dir docs/product --issues issues.json --json
 
 Exit codes: 0 = plan is clean and safe to execute,
             1 = BLOCKING drift -- a human must approve the remediation report,
@@ -621,8 +621,8 @@ def read_issues(path):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--spec-dir", default="docs/specs",
-                    help="the layered spec dir (default: docs/specs)")
+    ap.add_argument("--spec-dir", default="docs/product",
+                    help="the layered spec dir (default: docs/product)")
     ap.add_argument("--issues", required=True,
                     help="path to the `gh issue list --json ...` output, or - for stdin")
     ap.add_argument("--scope", default="",

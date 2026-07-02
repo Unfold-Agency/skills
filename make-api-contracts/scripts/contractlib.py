@@ -5,7 +5,7 @@ This skill derives an OpenAPI 3.1 contract for the project's OWN API surface fro
 the make-spec requirements (their `interface` sketches and `IR-*` integration reqs),
 the make-data-flows diagrams (which show which calls a feature makes), and the
 make-arch integrations/ADRs (referenced, never redefined). The primary artifact is
-`docs/specs/api/openapi.yaml` (a mock server ingests it directly); a read-only
+`docs/product/api/openapi.yaml` (a mock server ingests it directly); a read-only
 `API-CONTRACTS.md` is rendered from it, and `.make-api-sync.json` is the sidecar
 ledger.
 

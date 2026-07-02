@@ -40,8 +40,8 @@ These four chain end to end -- see [How these skills chain](#how-these-skills-ch
 
 | Skill | What it does |
 |---|---|
-| [`make-spec`](./make-spec) | Turns discovery material into a layered spec set under `docs/specs/`: a lean `overview` (problem, users, goals `G-NNN`, scope, a `feature_index`) plus one WHAT-only `features/<slug>` file per feature, each with EARS acceptance criteria, pinned requirement IDs (`FR`/`IR`/`NFR`/`CR`), and per-requirement **`verification`** entries (how each will be proven -- method + check, a negative-path entry mandated per FR). A fail-closed fingerprint gate detects and blocks internal drift, and an `origin/main` no-vanishing check stops accidental deletions. |
-| [`make-arch`](./make-arch) | Derives the architecture from the spec set: an `architecture.md` (C4 / arc42-lite with mermaid) plus an append-only ADR log under `docs/specs/decisions/`. Recommend-then-refine, with each decision typed by confidence (`known` vs `assumption`). |
+| [`make-spec`](./make-spec) | Turns discovery material into a layered spec set under `docs/product/`: a lean `overview` (problem, users, goals `G-NNN`, scope, a `feature_index`) plus one WHAT-only `features/<slug>` file per feature, each with EARS acceptance criteria, pinned requirement IDs (`FR`/`IR`/`NFR`/`CR`), and per-requirement **`verification`** entries (how each will be proven -- method + check, a negative-path entry mandated per FR). A fail-closed fingerprint gate detects and blocks internal drift, and an `origin/main` no-vanishing check stops accidental deletions. |
+| [`make-arch`](./make-arch) | Derives the architecture from the spec set: an `architecture.md` (C4 / arc42-lite with mermaid) plus an append-only ADR log under `docs/product/decisions/`. Recommend-then-refine, with each decision typed by confidence (`known` vs `assumption`). |
 | [`make-issues`](./make-issues) | Projects the spec set (overview + features + ADRs) into traceable GitHub Issues **just-in-time**: pick the features/requirements to ticket (a checklist, a description, or `--feature`/`--req`/`--all`), create them, and reconcile them as the specs change. Writes are scoped but drift detection stays **global**, so a scoped run never mass-closes what it did not select. Requires a spec set (it stops and points you to `/make-spec` if none exists); on-demand `amendment` issues anchor to a feature/goal/ADR when the work is not yet a requirement. Per-requirement item fingerprints, a scoped spec-integrity preflight, a bounded reconcile engine, issue meta stamping `provenance` / `trace_req` / `trace_adr` / `feature` / `source_version`, and a dedicated `ISSUES-CHANGELOG.md` ledger. |
 | [`do-work`](./do-work) | Builds the project from those GitHub Issues, one actionable issue per run by default (drain the whole backlog with `--no-limit`, cap at N with `--limit=<N>`, preview the plan and approve before building with `--dry-run`, scope to one implementation phase with `--phase=<N>`, target one ticket with `--issue=<N>`, get a morning-after status with `--status`, or go fully autonomous with `--dangerously`), implements each issue on a branch, runs the build gate, opens a PR that closes it, then **reviews and fixes that PR** (via `do-pr-review` / `do-pr-fix`) and applies a **terminal acceptance gate** before optionally merging (`--auto-merge`). Respects AFK/HITL autonomy and the dependency order, and escalates a blocked build back upstream instead of editing scope. |
 
@@ -51,7 +51,7 @@ A `make-` skill that produces an observability artifact over the whole pipeline 
 
 | Skill | What it does |
 |---|---|
-| [`make-trace`](./make-trace) | Renders a single self-contained traceability map -- Objectives (`G-NNN`) -> Requirements (`FR`/`IR`/`NFR`/`CR`) -> Architecture (components / integrations / ADRs) -> GitHub Issues -- with every edge **derived from the specs + issue meta** (no hand-mapping) and a **live roll-up** coloring each parent by the status of the issues beneath it. The map is **additive**: it accumulates a ledger and **tombstones** anything deleted (an issue or requirement that disappears is shown struck-through as `deleted`, never dropped), while adds, edits, and renumbers flow through normally. Output is a private, self-contained `docs/traceability/index.html` opened locally (nothing is published, no GitHub Action); a byte-identical no-op guard means an unchanged map produces no diff. Flags: `--repo`, `--spec-dir`, `--out`, `--allow-empty`, `--open`. |
+| [`make-trace`](./make-trace) | Renders a single self-contained traceability map -- Objectives (`G-NNN`) -> Requirements (`FR`/`IR`/`NFR`/`CR`) -> Architecture (components / integrations / ADRs) -> GitHub Issues -- with every edge **derived from the specs + issue meta** (no hand-mapping) and a **live roll-up** coloring each parent by the status of the issues beneath it. The map is **additive**: it accumulates a ledger and **tombstones** anything deleted (an issue or requirement that disappears is shown struck-through as `deleted`, never dropped), while adds, edits, and renumbers flow through normally. Output is a private, self-contained `docs/product/traceability/index.html` opened locally (nothing is published, no GitHub Action); a byte-identical no-op guard means an unchanged map produces no diff. Flags: `--repo`, `--spec-dir`, `--out`, `--allow-empty`, `--open`. |
 
 ### The feature-level engineering aids
 
@@ -60,7 +60,7 @@ Two more `make-` companions that sit after `make-arch`. They are **advisory** --
 | Skill | What it does |
 |---|---|
 | [`make-data-flows`](./make-data-flows) | Generates and maintains per-feature **data-flow and user-flow diagrams** (Mermaid) embedded in each `features/<slug>.md` **body**, so an engineer can see how one feature moves data and walks a user. Because the diagrams live in the body they are **out of make-spec's fingerprint** (which hashes only the frontmatter), so embedding never moves a feature version or trips the S-006 gate. It fans out one worker sub-agent per feature, uses the stamped `feature_version` as the SKIP-vs-REGENERATE oracle (an advisory edit never regenerates), preserves the human narrative byte-for-byte, and is byte-identical on a no-op. `--feature`, `--all`, `--check`, `--force`. |
-| [`make-api-contracts`](./make-api-contracts) | Derives a **mock-ready OpenAPI 3.1 contract** for the project's OWN API surface from the requirements (`interface` sketches + `IR-*`), the `make-data-flows` diagrams, and the governing ADRs -- `docs/specs/api/openapi.yaml` (a mock server ingests it directly: `prism mock ...`) plus a generated `API-CONTRACTS.md` index. Each operation is stamped with provenance (`x-trace-req` / `x-feature` / `x-source-version` / `x-trace-adr` / `x-integration`) and updated by **upsert-by-operationId** (human-owned `summary`/`description`/`x-notes` preserved), with additive **tombstoning** and a byte-identical no-op. External providers (Stripe, ...) are referenced via ADR/integration, never redefined. `--feature`, `--all`, `--check`, `--allow-empty`. |
+| [`make-api-contracts`](./make-api-contracts) | Derives a **mock-ready OpenAPI 3.1 contract** for the project's OWN API surface from the requirements (`interface` sketches + `IR-*`), the `make-data-flows` diagrams, and the governing ADRs -- `docs/product/api/openapi.yaml` (a mock server ingests it directly: `prism mock ...`) plus a generated `API-CONTRACTS.md` index. Each operation is stamped with provenance (`x-trace-req` / `x-feature` / `x-source-version` / `x-trace-adr` / `x-integration`) and updated by **upsert-by-operationId** (human-owned `summary`/`description`/`x-notes` preserved), with additive **tombstoning** and a byte-identical no-op. External providers (Stripe, ...) are referenced via ADR/integration, never redefined. `--feature`, `--all`, `--check`, `--allow-empty`. |
 
 ### Utility skills
 
@@ -91,9 +91,9 @@ discovery ──/make-spec──▶  overview + per-feature specs  ──/make-a
                                                               (work items)                 (shipped code)
 ```
 
-- **`/make-spec`** turns discovery material into the spec set under `docs/specs/`: a lean `overview` (problem, users, goals `G-NNN`, scope, a `feature_index`) and one WHAT-only `features/<slug>` file per feature, each with EARS acceptance criteria and pinned requirement IDs (`FR`/`IR`/`NFR`/`CR`). Every spec carries a stored fingerprint.
-- **`/make-arch`** derives the HOW from the spec set: an `architecture.md` plus an append-only ADR log in `docs/specs/decisions/`, each decision typed `known` or `assumption`.
-- **`/make-issues`** projects requirements and ADRs into issues **just-in-time** -- scope the run to the features/requirements you pick (a checklist, a description, or `--feature`/`--req`/`--all`); writes are scoped but drift detection stays global, so it never mass-closes an unselected feature. Each issue is stamped with its `provenance`, `trace_req`, `trace_adr`, `feature`, and `source_version` plus a per-requirement fingerprint; on-demand `amendment` issues anchor to a feature/goal/ADR (a "quick amendment, not a rewrite"), promoted in place once `/make-spec` adds the requirement. It requires a spec set (it stops and points upstream if none exists) and records every run in a dedicated `docs/specs/ISSUES-CHANGELOG.md`.
+- **`/make-spec`** turns discovery material into the spec set under `docs/product/`: a lean `overview` (problem, users, goals `G-NNN`, scope, a `feature_index`) and one WHAT-only `features/<slug>` file per feature, each with EARS acceptance criteria and pinned requirement IDs (`FR`/`IR`/`NFR`/`CR`). Every spec carries a stored fingerprint.
+- **`/make-arch`** derives the HOW from the spec set: an `architecture.md` plus an append-only ADR log in `docs/product/decisions/`, each decision typed `known` or `assumption`.
+- **`/make-issues`** projects requirements and ADRs into issues **just-in-time** -- scope the run to the features/requirements you pick (a checklist, a description, or `--feature`/`--req`/`--all`); writes are scoped but drift detection stays global, so it never mass-closes an unselected feature. Each issue is stamped with its `provenance`, `trace_req`, `trace_adr`, `feature`, and `source_version` plus a per-requirement fingerprint; on-demand `amendment` issues anchor to a feature/goal/ADR (a "quick amendment, not a rewrite"), promoted in place once `/make-spec` adds the requirement. It requires a spec set (it stops and points upstream if none exists) and records every run in a dedicated `docs/product/ISSUES-CHANGELOG.md`.
 - **`/do-work`** claims each actionable issue, builds the slice, opens a PR that closes it, reviews and fixes the PR, and applies the terminal acceptance gate -- respecting the issue's AFK/HITL flag and its dependency order. It trusts `make-issues` for drift (it does not recompute fingerprints) and refuses any issue `make-issues` has flagged stale.
 - **`/make-trace`** sits alongside the chain rather than inside it: it visualizes traceability across all four tiers -- goals -> requirements -> architecture -> issues -- with a live roll-up derived from the specs and each issue's meta block. It is refreshed at the end of every `/make-issues` and `/do-work` run (and on demand), so the map keeps pace with the backlog without any bot committing to the repo.
 
@@ -103,22 +103,29 @@ discovery ──/make-spec──▶  overview + per-feature specs  ──/make-a
 
 **The documentation model (rule + regime).** Two properties place every artifact the pipeline touches. The **rule** decides who writes it: hand-write what cannot be derived (intent -- why, decisions, requirements); machine-generate what can be (state -- status, traceability, contracts); and machine-check the seam between them. The **regime** decides how it changes: **live** (the specs -- edited in place, re-stamped, diffed forward), **append-only** (ADRs and the CHANGELOGs -- never edited, only added to or superseded), **regenerated** (the trace map, flow diagrams, OpenAPI contract -- byte-identical no-op, never hand-touched), and **frozen-at-signature** (an `approved` spec version -- the commitment a client signs; it changes only by a new amend + re-approval, and its `verification` entries are the test of that promise). Rot happens when content sits in the wrong cell -- hand-written state drifts, generated intent is vacuous -- so each skill states which cell its artifacts live in.
 
-**Where the artifacts live.** In a project repo the planning artifacts have one canonical home -- `docs/specs/`. **Git history is the archive** -- there is no separate archive folder; each prior version is simply the commit that wrote it.
+**Where the artifacts live.** In a project repo everything the pipeline reads and writes has **one managed root -- `docs/product/`**. That single path prefix is the ownership contract: the skills never touch anything under `docs/` outside it, so the rest of `docs/` is free for whatever else the team keeps (engineering notes, onboarding, client material) without ever interfering with the workflow. **Git history is the archive** -- there is no separate archive folder; each prior version is simply the commit that wrote it.
 
 ```
-docs/specs/
-├─ overview.md                                   # problem, users, goals, scope, feature_index
-├─ features/
-│  ├─ <slug>.md                                  # one WHAT-only spec per feature (EARS, pinned IDs)
-│  └─ ...
-├─ architecture.md      +  arch-data.yaml        # the HOW (C4 / arc42-lite + mermaid)
-├─ decisions/
-│  ├─ ADR-0001-<slug>.md                         # append-only ADR log
-│  └─ ...
-└─ CHANGELOG.md                                  # the running delta across versions
+docs/
+├─ product/                                      # THE PIPELINE'S MANAGED ROOT
+│  ├─ overview.md                                #   problem, users, goals, scope, feature_index
+│  ├─ features/
+│  │  └─ <slug>.md                               #   one WHAT-only spec per feature (EARS + verification, pinned IDs)
+│  ├─ architecture.md   +  arch-data.yaml        #   the HOW (C4 / arc42-lite + mermaid)
+│  ├─ decisions/
+│  │  └─ ADR-0001-<slug>.md                      #   append-only ADR log
+│  ├─ api/
+│  │  └─ openapi.yaml + API-CONTRACTS.md         #   mock-ready contract (make-api-contracts)
+│  ├─ traceability/
+│  │  └─ index.html                              #   the generated trace map (make-trace)
+│  ├─ CHANGELOG.md                               #   spec deltas (make-spec)
+│  └─ ISSUES-CHANGELOG.md                        #   issue-ops ledger (make-issues)
+└─ <anything else>                               # yours -- never read or written by the pipeline
 ```
 
-The spec docs (`overview.md`, `features/<slug>.md`) are **single Markdown files**: the YAML **frontmatter** is the machine-readable contract the downstream skills consume and the fingerprint signs, and the body is human narrative -- the bytes a human reviews and signs are the bytes the pipeline builds from (no separately-derived data file). The architecture layer keeps its derived `arch-data.yaml`. `make-issues` and `do-work` read `docs/specs/` by default. A version bump is a commit, not a snapshot folder -- to see a prior version, read the spec at that commit.
+Migrating a project from the previous layout is one move -- `git mv docs/specs docs/product` (plus `git mv docs/traceability docs/product/traceability` if present); fingerprints are content hashes, so nothing needs re-stamping, and every script prints a migration hint when it finds the legacy layout.
+
+The spec docs (`overview.md`, `features/<slug>.md`) are **single Markdown files**: the YAML **frontmatter** is the machine-readable contract the downstream skills consume and the fingerprint signs, and the body is human narrative -- the bytes a human reviews and signs are the bytes the pipeline builds from (no separately-derived data file). The architecture layer keeps its derived `arch-data.yaml`. `make-issues` and `do-work` read `docs/product/` by default. A version bump is a commit, not a snapshot folder -- to see a prior version, read the spec at that commit.
 
 **One thread, end to end:**
 

@@ -121,7 +121,7 @@ def main():
     # ---- 2. architecture.md frontmatter ----------------------------------
     with open(arch_md_path, encoding="utf-8") as f:
         old_doc, arch_body = parse_md(f.read())
-    old_meta = data.get("meta") or {}
+    old_meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
     new_doc = {
         "meta": {
             "doc_type": "spec-arch",

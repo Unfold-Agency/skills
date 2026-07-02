@@ -167,7 +167,7 @@ def read_arch(spec_dir):
         try:
             with open(md_path, encoding="utf-8") as f:
                 _head, _body, doc = split_frontmatter(f.read())
-        except OSError:
+        except (OSError, ValueError):
             doc = {}
         meta = doc.get("meta")
         if isinstance(meta, dict) and meta.get("doc_type") == "spec-arch":
@@ -177,7 +177,7 @@ def read_arch(spec_dir):
                 try:
                     with open(path, encoding="utf-8") as f:
                         _h, _b, adr = split_frontmatter(f.read())
-                except OSError:
+                except (OSError, ValueError):
                     continue
                 if adr.get("id"):
                     adrs.add(str(adr["id"]))

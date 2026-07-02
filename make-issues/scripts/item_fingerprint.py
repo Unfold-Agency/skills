@@ -117,9 +117,9 @@ def project_in_fields(req):
             if entries:
                 # order-INSENSITIVE -- reordering the proof plan is cosmetic, but
                 # adding, removing, or editing an entry flips the hash.
-                out[f] = sorted(entries, key=lambda p: (p.get("method", ""),
-                                                        p.get("covers", ""),
-                                                        p.get("check", "")))
+                out[f] = sorted(entries, key=lambda p: (str(p.get("method", "")),
+                                                        str(p.get("covers", "")),
+                                                        str(p.get("check", ""))))
     return out
 
 

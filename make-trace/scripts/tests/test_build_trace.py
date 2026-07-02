@@ -10,6 +10,7 @@ the fail-closed emptiness guard, and the byte-identical no-op guard.
 """
 import copy
 import os
+import shutil
 import sys
 
 import pytest
@@ -143,6 +144,95 @@ def test_goal_rollup_math():
     assert n["G-001"]["counts"] == {"done": 1, "doing": 1, "todo": 2, "total": 4}
     # G-002 sees: #1 done, #2 doing, #4 todo
     assert n["G-002"]["counts"] == {"done": 1, "doing": 1, "todo": 1, "total": 3}
+
+
+# ── legacy arch-data.yaml fallback (dual-read) ───────────────────────
+# The primary fixture is v2.0 (architecture.md frontmatter + decisions/ADR-*.md);
+# this is the pre-migration shape it must keep reading.
+LEGACY_ARCH_YAML = """\
+meta:
+  doc_type: spec-arch
+  schema_version: '1.0'
+  project_id: proj-fixture
+  project_name: Fixture Storefront
+  arch_version: abc123def456
+  status: draft
+  fingerprint: fixture
+context: A storefront where shoppers build a cart and pay.
+components:
+- id: C-001
+  name: Storefront web app
+  responsibility: Render the catalog, cart, and checkout.
+  tech: Next.js
+  confidence: known
+  governed_by:
+  - ADR-0001
+integrations:
+- name: Payment gateway
+  external_system: Stripe
+  direction: outbound
+  data: payment intents, webhooks
+  confidence: known
+  governed_by:
+  - ADR-0001
+decisions:
+- id: ADR-0001
+  title: Use Stripe for payments
+  status: accepted
+  scope: feature
+  superseded_by: ''
+  confidence: known
+  governs:
+  - FR-CHK-001
+- id: ADR-0002
+  title: Use a self-hosted payment form
+  status: superseded
+  scope: feature
+  superseded_by: ADR-0003
+  confidence: known
+  governs: []
+"""
+
+
+def _legacy_tree(tmp_path):
+    """The v2.0 fixture with the arch layer swapped for a legacy arch-data.yaml."""
+    root = tmp_path / "specs"
+    shutil.copytree(FIXTURE_SPECS, root)
+    os.remove(root / "architecture.md")
+    shutil.rmtree(root / "decisions")
+    (root / "arch-data.yaml").write_text(LEGACY_ARCH_YAML, encoding="utf-8")
+    return str(root)
+
+
+def test_legacy_arch_data_fallback(tmp_path, capsys):
+    root = _legacy_tree(tmp_path)
+    overview, feats, arch = bt.load_specs(root)
+    assert "legacy arch-data.yaml" in capsys.readouterr().err  # one-line WARN
+    data, _, _ = bt.assemble(overview, feats, arch, fixture_issues(), None)
+    v2 = build()
+    # the same nodes and edges come out of either shape -- no crash, no drift
+    def arch_ids(d):
+        return {i for i, n in d["nodes"].items() if n["tier"] == "arch"}
+    assert arch_ids(data) == arch_ids(v2) == \
+        {"C-001", "INTG-payment-gateway", "ADR-0001", "ADR-0002"}
+    assert edge_set(data) == edge_set(v2)
+
+
+def test_legacy_flat_architecture_md_is_not_v2(tmp_path):
+    # The LEGACY architecture.md has a FLAT frontmatter (doc_type at top level,
+    # no meta) -- the discriminator must fall through to arch-data.yaml.
+    root = _legacy_tree(tmp_path)
+    (tmp_path / "specs" / "architecture.md").write_text(
+        "---\ndoc_type: spec-arch\ndata_file: arch-data.yaml\n---\n\n# Arch\n",
+        encoding="utf-8")
+    arch = bt.load_arch(root)
+    assert [d["id"] for d in arch["decisions"]] == ["ADR-0001", "ADR-0002"]
+
+
+def test_load_arch_none_means_lite_mode(tmp_path):
+    root = _legacy_tree(tmp_path)
+    os.remove(tmp_path / "specs" / "arch-data.yaml")
+    assert bt.load_arch(root) is None
 
 
 # ── issue status classification (parity with do-work) ────────────────

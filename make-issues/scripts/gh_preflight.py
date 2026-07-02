@@ -68,15 +68,17 @@ _REQ_ID_RE = re.compile(r"^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$")
 # This gate RE-COMPUTES it and must produce a hash BYTE-IDENTICAL to the upstream
 # validator that stamped the file, or it would reject legitimately-stamped specs:
 #   - overview.md / features/*.md (frontmatter) -> make-spec/scripts/validate_spec.py
-#   - arch-data.yaml                            -> make-arch/scripts/validate_arch.py
+#   - architecture.md (v2.0 frontmatter), or
+#     the legacy arch-data.yaml                 -> make-arch/scripts/validate_arch.py
 # To stay identical we copy their exact discipline: drop the OUT keys FLAT
 # (wherever they appear -- they live in `meta` AND, for the overview, in
 # feature_index rows), do NO text normalization (the upstream dumps strings
 # verbatim), then yaml.safe_dump(sort_keys=True, default_flow_style=False,
 # allow_unicode=True) -> sha256. The two skills use DIFFERENT OUT sets, so the
 # gate picks the set per file. The golden cross-fixtures in
-# scripts/tests/specs/upstream/ (stamped by the real upstream skills) lock this
-# interop; if these sets ever drift from the validators, that test fails.
+# scripts/tests/specs/upstream/ (legacy arch) and upstream-v2/ (v2.0 arch),
+# stamped by the real upstream skills, lock this interop; if these sets ever
+# drift from the validators, those tests fail.
 #
 # OUT keys never affect the fingerprint; everything else is IN. At the FILE level
 # requirement `status` is IN (make-spec hashes it); the PER-ITEM hash in
@@ -85,10 +87,12 @@ _REQ_ID_RE = re.compile(r"^(FR|IR|NFR|CR)-[A-Z]{2,5}-\d{3,}$")
 SPEC_OUT_KEYS = {"priority", "architecture_hints", "related_files", "notes",
                  "fingerprint", "feature_version", "generated_at",
                  "project_version", "appetite"}      # == make-spec OUT_KEYS
-ARCH_OUT_KEYS = {"fingerprint", "generated_at", "arch_version", "notes"}  # == make-arch OUT_KEYS
+ARCH_OUT_KEYS = {"fingerprint", "generated_at", "arch_version", "last_updated",
+                 "notes"}                             # == make-arch OUT_KEYS
 
-# Spec docs are single .md files; their contract lives in YAML frontmatter. The
-# arch file (arch-data.yaml) is a plain YAML file -- dispatch on the extension.
+# Spec docs are single .md files; their contract lives in YAML frontmatter. A
+# v2.0 architecture.md is the same shape; the legacy arch file (arch-data.yaml)
+# is a plain YAML file -- _load_doc dispatches on the extension.
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 
 
@@ -138,7 +142,8 @@ def _strip_out(value, out_keys):
 def compute_fingerprint(doc, out_keys=SPEC_OUT_KEYS):
     """Recompute a spec file's fingerprint EXACTLY as the upstream validator that
     stamped it does. Pass SPEC_OUT_KEYS for an overview/feature file, ARCH_OUT_KEYS
-    for arch-data.yaml -- they differ only in the OUT set. Byte-for-byte identical
+    for the arch file (architecture.md, or the legacy arch-data.yaml) -- they
+    differ only in the OUT set. Byte-for-byte identical
     to make-spec/make-arch's compute_fingerprint (verified by the golden
     cross-fixtures), so the gate accepts any spec the upstream skills stamped."""
     stripped = _strip_out(doc, out_keys)
@@ -169,19 +174,35 @@ def _load_doc(path):
     return doc, None
 
 
+def _is_v2_arch(path):
+    """True when architecture.md carries the v2.0 contract: a NESTED
+    meta.doc_type == "spec-arch". The legacy architecture.md (flat doc_type at
+    the top level, data in arch-data.yaml) is narrative-only and must not be
+    fingerprint-checked."""
+    doc, err = _load_doc(path)
+    if err:
+        return False
+    meta = doc.get("meta")
+    return isinstance(meta, dict) and meta.get("doc_type") == "spec-arch"
+
+
 def spec_files(spec_dir):
     """The spec docs to integrity-check: overview, every feature, and arch if
     present. Returns a list of (label, path). overview is required; arch is
-    optional. Specs are single .md files (contract in frontmatter); arch-data.yaml
-    is plain YAML."""
+    optional. Specs are single .md files (contract in frontmatter); the arch
+    entry is architecture.md when it is v2.0 (contract in frontmatter, like the
+    specs), else the legacy arch-data.yaml (plain YAML) if present."""
     files = []
     overview = os.path.join(spec_dir, "overview.md")
     files.append(("overview", overview))
     for fpath in sorted(glob.glob(os.path.join(spec_dir, "features", "*.md"))):
         files.append((f"feature:{os.path.basename(fpath)}", fpath))
-    arch = os.path.join(spec_dir, "arch-data.yaml")
-    if os.path.isfile(arch):
-        files.append(("arch", arch))
+    arch_md = os.path.join(spec_dir, "architecture.md")
+    arch_yaml = os.path.join(spec_dir, "arch-data.yaml")
+    if os.path.isfile(arch_md) and _is_v2_arch(arch_md):
+        files.append(("arch", arch_md))
+    elif os.path.isfile(arch_yaml):
+        files.append(("arch", arch_yaml))
     return files
 
 
@@ -248,7 +269,8 @@ def check_spec_integrity(spec_dir, scope=None):
         return {"name": "spec_integrity", "ok": False, "fatal": True,
                 "files": [], "warnings": [], "detail":
                 f"no overview.md under {spec_dir} -- specs must be in "
-                f"{spec_dir} (overview.md, features/*.md, arch-data.yaml){hint}"}
+                f"{spec_dir} (overview.md, features/*.md, architecture.md "
+                f"(or legacy arch-data.yaml)){hint}"}
     feature_count = 0
     for label, path in files:
         is_feature = label.startswith("feature:")

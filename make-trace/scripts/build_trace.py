@@ -8,7 +8,8 @@ and how every live issue rolls up through the spec.
 
   Objectives    docs/product/overview.md      goals (G-NNN, kind business|user)
   Requirements  docs/product/features/*.md     requirements (FR/IR/NFR/CR)
-  Architecture  docs/product/arch-data.yaml    components (C), integrations, ADRs
+  Architecture  docs/product/architecture.md   components (C), integrations; ADRs
+                + decisions/ADR-*.md          (legacy fallback: arch-data.yaml)
   Issues        gh issue list --state all    make-issues:meta -> trace_req/trace_adr
 
 Every edge is DERIVED from the spec itself (zero manual mapping):
@@ -40,6 +41,7 @@ fail-closed guard / gh error). Read-only against the specs; writes only under
 """
 import argparse
 import copy
+import glob
 import json
 import os
 import re
@@ -142,10 +144,42 @@ def load_yaml(path):
         return yaml.safe_load(f) or {}
 
 
+def load_arch(spec_dir):
+    """Load the architecture layer, dual-read. Primary is v2.0: an architecture.md
+    whose frontmatter carries a NESTED meta.doc_type == "spec-arch" -- return its
+    frontmatter dict with `decisions` filled from the decisions/ADR-*.md
+    frontmatters (sorted by filename; files with empty/no frontmatter skipped).
+    A legacy architecture.md (flat doc_type, no meta) never matches; the legacy
+    arch-data.yaml is the fallback (with a one-line migration WARN). None = lite
+    mode (no architecture layer). Malformed frontmatter raises through
+    load_spec_doc so the run fails closed."""
+    arch_md = os.path.join(spec_dir, "architecture.md")
+    if os.path.isfile(arch_md):
+        fm = load_spec_doc(arch_md)
+        meta = fm.get("meta")
+        if isinstance(meta, dict) and meta.get("doc_type") == "spec-arch":
+            decisions = []
+            for path in sorted(glob.glob(os.path.join(spec_dir, "decisions",
+                                                      "ADR-*.md"))):
+                doc = load_spec_doc(path)
+                if doc:
+                    decisions.append(doc)
+            fm["decisions"] = decisions
+            return fm
+    arch_path = os.path.join(spec_dir, "arch-data.yaml")
+    if os.path.isfile(arch_path):
+        print("WARN: reading legacy arch-data.yaml -- migrate with "
+              "make-arch/scripts/migrate_arch_data.py", file=sys.stderr)
+        return load_yaml(arch_path)
+    return None
+
+
 def load_specs(spec_dir):
     """Return (overview, features, arch). Raises on a missing/unparseable source
     so the caller fails closed rather than tombstoning everything. `features` is
-    [(slug, doc)]; `arch` is the arch-data.yaml dict or None (lite mode)."""
+    [(slug, doc)]; `arch` is the architecture dict (v2.0 architecture.md
+    frontmatter + scanned ADRs, or the legacy arch-data.yaml) or None (lite
+    mode)."""
     overview_path = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview_path):
         legacy = os.path.join(os.path.dirname(os.path.normpath(spec_dir)), "specs")
@@ -163,11 +197,7 @@ def load_specs(spec_dir):
                 slug = name[: -len(".md")]
                 features.append((slug, load_spec_doc(os.path.join(fdir, name))))
 
-    arch = None
-    arch_path = os.path.join(spec_dir, "arch-data.yaml")
-    if os.path.isfile(arch_path):
-        arch = load_yaml(arch_path)
-    return overview, features, arch
+    return overview, features, load_arch(spec_dir)
 
 
 # ── issues (right column) ────────────────────────────────────────────
@@ -611,7 +641,7 @@ def emptiness_violations(current_nodes, prior_nodes, arch_present):
         if prior.get(tier, 0) > 0 and cur.get(tier, 0) == 0:
             bad.append(tier)
     # Architecture is legitimately empty in lite mode; only guard it when an
-    # arch-data.yaml is actually present now but yielded nothing.
+    # architecture file is actually present now but yielded nothing.
     if arch_present and prior.get("arch", 0) > 0 and cur.get("arch", 0) == 0:
         bad.append("arch")
     return bad

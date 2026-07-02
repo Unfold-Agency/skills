@@ -20,7 +20,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 from gh_preflight import (  # noqa: E402
     check_spec_integrity, check_spec_set_present, parse_scope,
-    compute_fingerprint, SPEC_OUT_KEYS, ARCH_OUT_KEYS)
+    compute_fingerprint, spec_files, SPEC_OUT_KEYS, ARCH_OUT_KEYS)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 failures = []
@@ -147,11 +147,37 @@ r = check_spec_integrity(root)
 check("arch decision mutated without re-stamp -> gate FAILS", r["ok"] is False)
 shutil.rmtree(root)
 
-# ── arch is OPTIONAL: a tree with no arch-data.yaml still passes ─────────────
+# ── arch is OPTIONAL: a tree with no arch file at all still passes ───────────
 root = tempfile.mkdtemp(prefix="mkissues-specs-")
 write_specs(root, stamped(OVERVIEW), {"checkout": stamped(CHECKOUT)}, arch=None)
 r = check_spec_integrity(root)
-check("no arch-data.yaml -> gate ok (arch optional)", r["ok"] is True)
+check("no arch file -> gate ok (arch optional)", r["ok"] is True)
+shutil.rmtree(root)
+
+# ── the arch entry dispatch: v2.0 architecture.md vs legacy arch-data.yaml ────
+# A v2.0 architecture.md (NESTED meta.doc_type == spec-arch) is the arch entry.
+root = tempfile.mkdtemp(prefix="mkissues-specs-")
+write_specs(root, stamped(OVERVIEW), {"checkout": stamped(CHECKOUT)}, arch=None)
+ARCH_V2 = {"meta": {"doc_type": "spec-arch", "schema_version": "2.0"},
+           "context": "a storefront", "components": [], "integrations": []}
+_write_md(os.path.join(root, "architecture.md"), stamped(ARCH_V2, ARCH_OUT_KEYS))
+check("v2.0 architecture.md becomes the arch entry",
+      dict(spec_files(root)).get("arch", "").endswith("architecture.md"))
+r = check_spec_integrity(root)
+check("stamped v2.0 architecture.md passes the gate", r["ok"] is True)
+shutil.rmtree(root)
+
+# A LEGACY architecture.md (FLAT doc_type, no meta -- narrative only) must NOT
+# be mistaken for v2.0; the arch entry stays the arch-data.yaml beside it.
+root = tempfile.mkdtemp(prefix="mkissues-specs-")
+write_specs(root, stamped(OVERVIEW), {"checkout": stamped(CHECKOUT)},
+            stamped(ARCH, ARCH_OUT_KEYS))
+with open(os.path.join(root, "architecture.md"), "w") as f:
+    f.write("---\ndoc_type: spec-arch\ndata_file: arch-data.yaml\n---\n\n# Arch\n")
+check("legacy flat architecture.md is not v2.0 -> arch entry is arch-data.yaml",
+      dict(spec_files(root)).get("arch", "").endswith("arch-data.yaml"))
+r = check_spec_integrity(root)
+check("legacy tree with a flat architecture.md still passes", r["ok"] is True)
 shutil.rmtree(root)
 
 # ── missing overview.md -> fatal (drives exit 2) ─────────────────────────────
@@ -167,18 +193,52 @@ check("compute_fingerprint is self-consistent (idempotent recompute)",
       d["meta"]["fingerprint"] == compute_fingerprint(d))
 
 # ── GOLDEN cross-skill interop ───────────────────────────────────────────────
-# specs/upstream/ holds an overview, two features, and an arch file stamped by
-# the REAL make-spec / make-arch skills. The gate MUST accept them unmodified --
-# this is the test that locks SPEC_OUT_KEYS / ARCH_OUT_KEYS and the dump to the
-# upstream validators. If it fails, the gate has drifted and would reject
-# legitimately-stamped specs (a self-stamped fixture cannot catch that).
+# specs/upstream/ holds an overview, two features, and a LEGACY arch-data.yaml
+# stamped by the REAL make-spec / make-arch skills; specs/upstream-v2/ holds the
+# same specs with the v2.0 arch layer (architecture.md frontmatter + decisions/
+# ADR-*.md, stamped by the real make-arch stamp_fingerprint.py). The gate MUST
+# accept both unmodified -- these are the tests that lock SPEC_OUT_KEYS /
+# ARCH_OUT_KEYS and the dump to the upstream validators. If one fails, the gate
+# has drifted and would reject legitimately-stamped specs (a self-stamped
+# fixture cannot catch that).
 UPSTREAM = os.path.join(HERE, "specs", "upstream")
 if os.path.isdir(UPSTREAM):
     r = check_spec_integrity(UPSTREAM)
-    check("gate accepts REAL make-spec/make-arch-stamped specs (interop locked)",
+    check("gate accepts REAL make-spec/make-arch-stamped specs (legacy arch)",
           r["ok"] is True and not r.get("fatal"))
 else:
     check("golden upstream fixtures present", False)
+
+UPSTREAM_V2 = os.path.join(HERE, "specs", "upstream-v2")
+if os.path.isdir(UPSTREAM_V2):
+    r = check_spec_integrity(UPSTREAM_V2)
+    check("gate accepts the v2.0 golden (architecture.md frontmatter)",
+          r["ok"] is True and not r.get("fatal"))
+    arch_rows = [f for f in r["files"] if f["file"] == "arch"]
+    check("v2.0 golden: architecture.md is the arch entry and is clean",
+          len(arch_rows) == 1 and arch_rows[0]["ok"] is True)
+
+    # A mutated (un-restamped) v2.0 architecture.md trips the arch dirty path
+    # exactly as a dirty arch-data.yaml did: FAIL on a full run, WARN on a
+    # scoped one (arch is project-level, advisory when scoped).
+    root = os.path.join(tempfile.mkdtemp(prefix="mkissues-specs-"), "v2")
+    shutil.copytree(UPSTREAM_V2, root)
+    arch_path = os.path.join(root, "architecture.md")
+    with open(arch_path, encoding="utf-8") as f:
+        text = f.read()
+    with open(arch_path, "w", encoding="utf-8") as f:
+        f.write(text.replace("tech: Next.js", "tech: Nuxt"))  # IN edit, no re-stamp
+    r = check_spec_integrity(root)
+    check("mutated v2.0 architecture.md without re-stamp -> full run FAILS",
+          r["ok"] is False and any(f["file"] == "arch" and f["level"] == "fail"
+                                   for f in r["files"]))
+    r = check_spec_integrity(root, parse_scope("checkout"))
+    check("mutated v2.0 architecture.md on a scoped run -> WARNS, gate passes",
+          r["ok"] is True and any(w["file"] == "arch"
+                                  for w in r.get("warnings", [])))
+    shutil.rmtree(os.path.dirname(root))
+else:
+    check("golden upstream-v2 fixtures present", False)
 
 # ── SCOPED gate ("a1"): a dirty SELECTED feature FAILS ───────────────────────
 # Two clean features + a dirty checkout. Scoped to checkout -> FAIL (never trace

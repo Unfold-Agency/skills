@@ -85,7 +85,7 @@
 | Source | ID | What it is |
 |---|---|---|
 | Requirement | <FR-XXX-000> | <requirement name from the feature spec> |
-| Governing ADR | <ADR-0000> | <ADR title from arch-data.yaml> |
+| Governing ADR | <ADR-0000> | <ADR title from its frontmatter> |
 | Feature | <slug> | <feature title from the feature_index> |
 
 Born from feature <slug> v<feature_version>.

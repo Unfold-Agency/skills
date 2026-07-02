@@ -1,10 +1,11 @@
+---
 meta:
   doc_type: spec-arch
-  schema_version: '1.0'
+  schema_version: '2.0'
   project_id: proj-fixture
   project_name: Fixture Storefront
-  arch_version: abc123def456
   status: draft
+  arch_version: abc123def456
   fingerprint: fixture
 context: A storefront where shoppers build a cart and pay.
 components:
@@ -23,19 +24,10 @@ integrations:
   confidence: known
   governed_by:
   - ADR-0001
-decisions:
-- id: ADR-0001
-  title: Use Stripe for payments
-  status: accepted
-  scope: feature
-  superseded_by: ''
-  confidence: known
-  governs:
-  - FR-CHK-001
-- id: ADR-0002
-  title: Use a self-hosted payment form
-  status: superseded
-  scope: feature
-  superseded_by: ADR-0003
-  confidence: known
-  governs: []
+diagrams:
+- context
+---
+
+# Architecture -- Fixture Storefront
+
+Human narrative; the frontmatter above is the signed contract.

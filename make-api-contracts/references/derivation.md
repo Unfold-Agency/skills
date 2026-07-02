@@ -14,8 +14,8 @@ payload that `build_contracts.py` merges.
   blocks in the feature body show which calls a feature actually makes and in what
   order. They confirm an operation exists; a requirement with an `interface` but no
   covering flow yields an operation marked `x-flow: unconfirmed`.
-- **`governed_by` ADRs + arch-data.yaml integrations** -- the `x-trace-adr` and
-  `x-integration` back-links into make-arch.
+- **`governed_by` ADRs + the architecture.md frontmatter integrations** -- the
+  `x-trace-adr` and `x-integration` back-links into make-arch.
 - **EARS acceptance criteria** -- the `IF ... THEN` unwanted-behavior clause (every FR
   has one, S-011) becomes the operation's error response (e.g. a `4XX`).
 

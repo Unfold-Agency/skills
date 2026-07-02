@@ -61,11 +61,16 @@ def spec_dir(tmp_path):
                  [_req("FR-CHK-001"), _req("IR-CHK-001", "integration")],
                  body_extra=FLOW_REGION)
     make_feature(str(feats), "cart", "CART", [_req("FR-CART-001", interface="GET /cart")])
-    # a minimal arch-data.yaml so ADR-0001 resolves
-    (d / "arch-data.yaml").write_text(
-        "meta: {doc_type: spec-arch}\n"
-        "decisions:\n- {id: ADR-0001, title: Use Stripe, status: accepted}\n"
-        "integrations:\n- {name: Stripe, external_system: Stripe, direction: outbound}\n",
+    # a minimal v2.0 architecture layer so ADR-0001 resolves
+    (d / "architecture.md").write_text(
+        "---\n"
+        "meta: {doc_type: spec-arch, schema_version: '2.0'}\n"
+        "integrations:\n- {name: Stripe, external_system: Stripe, direction: outbound}\n"
+        "---\n\n# Architecture\n",
+        encoding="utf-8")
+    (d / "decisions").mkdir()
+    (d / "decisions" / "ADR-0001-use-stripe.md").write_text(
+        "---\nid: ADR-0001\ntitle: Use Stripe\nstatus: accepted\n---\n\n# ADR-0001\n",
         encoding="utf-8")
     return str(d)
 
@@ -205,6 +210,32 @@ def test_check_reports_gaps_and_stale(spec_dir):
     features = read_features(spec_dir)
     det = bc.detect(doc, features)
     assert any(g["req"] == "FR-CART-001" for g in det["gaps"])
+
+
+# ── read_arch: v2.0 primary, legacy arch-data.yaml fallback ──────────────────
+def test_read_arch_v2_and_legacy(spec_dir, tmp_path):
+    from contractlib import read_arch
+    # v2.0: architecture.md frontmatter + decisions/ADR-*.md (the spec_dir fixture)
+    assert read_arch(spec_dir) == ({"ADR-0001"}, {"INTG-stripe"})
+    # legacy: only arch-data.yaml -> the same ids via the fallback
+    legacy = tmp_path / "legacy"
+    legacy.mkdir()
+    (legacy / "arch-data.yaml").write_text(
+        "meta: {doc_type: spec-arch}\n"
+        "decisions:\n- {id: ADR-0001, title: Use Stripe, status: accepted}\n"
+        "integrations:\n- {name: Stripe, external_system: Stripe, direction: outbound}\n",
+        encoding="utf-8")
+    assert read_arch(str(legacy)) == ({"ADR-0001"}, {"INTG-stripe"})
+    # a legacy FLAT-frontmatter architecture.md (no nested meta) is NOT v2.0;
+    # the fallback still reads arch-data.yaml
+    (legacy / "architecture.md").write_text(
+        "---\ndoc_type: spec-arch\ndata_file: arch-data.yaml\n---\n\n# Arch\n",
+        encoding="utf-8")
+    assert read_arch(str(legacy)) == ({"ADR-0001"}, {"INTG-stripe"})
+    # absent entirely -> lite mode, empty sets
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert read_arch(str(empty)) == (set(), set())
 
 
 # ── validator ────────────────────────────────────────────────────────────────

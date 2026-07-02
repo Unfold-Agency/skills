@@ -111,7 +111,7 @@ docs/
 │  ├─ overview.md                                #   problem, users, goals, scope, feature_index
 │  ├─ features/
 │  │  └─ <slug>.md                               #   one WHAT-only spec per feature (EARS + verification, pinned IDs)
-│  ├─ architecture.md   +  arch-data.yaml        #   the HOW (C4 / arc42-lite + mermaid)
+│  ├─ architecture.md                            #   the HOW (frontmatter contract + C4 narrative/mermaid)
 │  ├─ decisions/
 │  │  └─ ADR-0001-<slug>.md                      #   append-only ADR log
 │  ├─ api/
@@ -125,7 +125,7 @@ docs/
 
 Migrating a project from the previous layout is one move -- `git mv docs/specs docs/product` (plus `git mv docs/traceability docs/product/traceability` if present); fingerprints are content hashes, so nothing needs re-stamping, and every script prints a migration hint when it finds the legacy layout.
 
-The spec docs (`overview.md`, `features/<slug>.md`) are **single Markdown files**: the YAML **frontmatter** is the machine-readable contract the downstream skills consume and the fingerprint signs, and the body is human narrative -- the bytes a human reviews and signs are the bytes the pipeline builds from (no separately-derived data file). The architecture layer keeps its derived `arch-data.yaml`. `make-issues` and `do-work` read `docs/product/` by default. A version bump is a commit, not a snapshot folder -- to see a prior version, read the spec at that commit.
+The spec docs (`overview.md`, `features/<slug>.md`) are **single Markdown files**: the YAML **frontmatter** is the machine-readable contract the downstream skills consume and the fingerprint signs, and the body is human narrative -- the bytes a human reviews and signs are the bytes the pipeline builds from (no separately-derived data file). The architecture layer follows the same discipline: `architecture.md`'s frontmatter carries its machine contract, and each `decisions/ADR-*.md` file's frontmatter is its own record (the derived `arch-data.yaml` is retired; `make-arch`'s `migrate_arch_data.py` converts a legacy project in one command). `make-issues` and `do-work` read `docs/product/` by default. A version bump is a commit, not a snapshot folder -- to see a prior version, read the spec at that commit.
 
 **One thread, end to end:**
 

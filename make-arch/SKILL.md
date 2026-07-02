@@ -95,6 +95,18 @@ genuine HOW decision shows up.
 - **Lower-confidence call** -> record it as an `assumption` ADR (reversible by
   design) and badge it, rather than inventing a constraint to make it look `known`.
 
+## Honest limits
+
+Be honest about what the gate proves: the fingerprint certifies that
+`arch-data.yaml` has not changed since it was stamped -- nothing more. It does
+not prove the decisions are implemented (an accepted ADR may be half-built or
+quietly diverged from in code -- the issue roll-up in make-trace is the closer
+signal), that a human re-read the file before re-stamping, or who authored a
+change (git carries authorship). `architecture.md` is a human-written narrative:
+its value is the synthesis a newcomer builds a mental model from, so keep it
+prose-first and let the ADRs carry the durable detail -- never generate the
+narrative from the data file.
+
 ## Downstream
 
 `/make-issues` reads the features + this ADR index and stamps each issue with

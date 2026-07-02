@@ -135,7 +135,7 @@ def check_specs(spec_dir):
                 f"(or pass --spec-dir {legacy})") if os.path.isdir(legacy) else ""
         return {"name": "specs", "ok": False, "fatal": True,
                 "detail": f"no {overview} -- run /make-spec to author the spec set "
-                          f"(docs/product/), then /make-issues{hint}"}
+                          f"({spec_dir}/), then /make-issues{hint}"}
     _, err = _load_yaml(overview)
     if err:
         return {"name": "specs", "ok": False, "fatal": True, "detail": err}

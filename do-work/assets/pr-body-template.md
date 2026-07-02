@@ -49,15 +49,19 @@ Closes #<N>
      (consistency != correctness): the trace above proves the specs/issue/PR are
      consistent; this ledger records whether each criterion was actually MET vs
      deferred or mocked. Be truthful -- "met" has real evidence (a test, a checked
-     behavior); "mocked" is backed by a FIXME(dangerously) stub; "deferred" was not
-     built. The issue is acceptance-clean only when every row is "met"; any
+     behavior); when the issue embeds a "## Verification" proof plan, cite the
+     verification entry you executed (method + check), not a bare "works".
+     "mocked" is backed by a FIXME(dangerously) stub; "deferred" was not built --
+     including a criterion whose only proof is demo/inspection (a human-judgment
+     row: record the steps as evidence; the deferred row IS the reviewer's
+     checklist). The issue is acceptance-clean only when every row is "met"; any
      deferred/mocked row parks the PR for a human (or, under --dangerously, merges
      with a needs-human-review follow-up per row -- see below). -->
 
 | Acceptance criterion | Status | Evidence (how met, or why deferred/mocked) |
 |---|---|---|
-| `<criterion 1>` | met | <the test / behavior that proves it> |
-| `<criterion 2>` | deferred / mocked | <why, and the follow-up issue #> |
+| `<criterion 1>` | met | <the verification entry executed, e.g. `test (negative): <check> -- passing`> |
+| `<criterion 2>` | deferred / mocked | <why -- e.g. `demo (positive): <steps for the human>` -- and the follow-up issue #> |
 
 ### Assumptions & mocks
 

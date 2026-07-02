@@ -113,26 +113,26 @@ REPO["Create the GitHub repo"]:::step
 DISC --> REPO --> MS
 
 %% ── 1 · specify ──────────────────────────────────────────
-subgraph S1["1 · Specify — the WHAT"]
+subgraph S1["1 · Specify -- the WHAT"]
     MS["/make-spec"]:::skill
     SPECS["docs/product/ spec set<br/>overview.md + features/&lt;slug&gt;.md<br/>EARS criteria · pinned FR/IR/NFR/CR IDs ·<br/>verification entries · fingerprints"]:::artifact
-    HR1["👤 HUMAN REVIEW<br/>read and sign the spec set —<br/>an approved version is frozen-at-signature"]:::human
+    HR1["👤 HUMAN REVIEW<br/>read and sign the spec set --<br/>an approved version is frozen-at-signature"]:::human
     MS --> SPECS --> HR1
 end
 HR1 -. "revise scope or wording" .-> MS
 
 %% ── 2 · architect ────────────────────────────────────────
-subgraph S2["2 · Architect — the HOW"]
+subgraph S2["2 · Architect -- the HOW"]
     MA["/make-arch<br/>recommend-then-refine"]:::skill
     ARCH["architecture.md + decisions/ADR-*.md<br/>C4 / arc42-lite · append-only ADR log"]:::artifact
-    HR2["👤 HUMAN REVIEW<br/>confirm each decision —<br/>typed known vs assumption"]:::human
+    HR2["👤 HUMAN REVIEW<br/>confirm each decision --<br/>typed known vs assumption"]:::human
     MA --> ARCH --> HR2
 end
 HR1 -->|"approved"| MA
 HR2 -. "refine or supersede an ADR" .-> MA
 
 %% ── optional advisory companions ─────────────────────────
-subgraph SADV["Optional · advisory — never gates the build"]
+subgraph SADV["Optional · advisory -- never gates the build"]
     MDF["/make-data-flows<br/>per-feature data + user flows,<br/>embedded in feature bodies"]:::advisory
     MAC["/make-api-contracts<br/>mock-ready api/openapi.yaml<br/>+ API-CONTRACTS.md"]:::advisory
     MDF --> MAC
@@ -141,10 +141,10 @@ HR2 -. "on demand, per feature" .-> MDF
 
 %% ── 3 · ticket ───────────────────────────────────────────
 subgraph S3["3 · Ticket"]
-    MI["/make-issues — just-in-time<br/>scope: checklist · description ·<br/>--feature · --req · --all"]:::skill
-    PRE["⛔ Integrity preflight — fail-closed<br/>fingerprint gate (drift detection stays global) ·<br/>origin/main no-vanishing check"]:::gate
+    MI["/make-issues -- just-in-time<br/>scope: checklist · description ·<br/>--feature · --req · --all"]:::skill
+    PRE["⛔ Integrity preflight -- fail-closed<br/>fingerprint gate (drift detection stays global) ·<br/>origin/main no-vanishing check"]:::gate
     ISS["GitHub Issues<br/>stamped: provenance · trace_req · trace_adr ·<br/>feature · source_version · AFK / HITL"]:::artifact
-    AMEND["amendment issue — work not yet a<br/>requirement, anchored to a feature / goal / ADR"]:::artifact
+    AMEND["amendment issue -- work not yet a<br/>requirement, anchored to a feature / goal / ADR"]:::artifact
     HR3["👤 HUMAN REVIEW (optional)<br/>triage the backlog · adjust AFK vs HITL"]:::human
     MI --> PRE -->|"specs clean"| ISS --> HR3
     MI -->|"on demand"| AMEND
@@ -155,7 +155,7 @@ AMEND -. "promoted in place once /make-spec<br/>adds the requirement" .-> MS
 ISS -. "spec or ADR changed → re-run:<br/>updates unstarted issues, flags in-flight ones" .-> MI
 
 %% ── 4 · build ────────────────────────────────────────────
-subgraph S4["4 · Build — the do-work loop"]
+subgraph S4["4 · Build -- the do-work loop"]
     DW["/do-work<br/>one AFK issue by default · --no-limit · --limit=N ·<br/>--phase=N · --issue=N · --status · --dangerously"]:::skill
     DRY["👤 --dry-run (optional)<br/>outline the plan, wait for approval"]:::human
     SEL["select the next actionable issue<br/>dependency order · AFK only (HITL waits for a human<br/>unless --dangerously) · flagged-stale issues refused"]:::step
@@ -165,7 +165,7 @@ subgraph S4["4 · Build — the do-work loop"]
     FIX["/do-pr-fix<br/>implement findings · reply in-thread · push"]:::skill
     ACC["⛔ Acceptance gate<br/>every criterion met?"]:::gate
     ESC1["👤 parked for a human<br/>label: escalated"]:::human
-    ESC2["👤 parked for a human — needs-human-review<br/>(under --dangerously: merged anyway,<br/>each gap filed as a follow-up issue)"]:::human
+    ESC2["👤 parked for a human<br/>label: needs-human-review"]:::human
     MRG{"merge"}:::step
     HMG["👤 human merges (default)<br/>e.g. /do-pr-merge"]:::human
     AMG["auto-merge on green CI<br/>(--auto-merge / --dangerously)"]:::step
@@ -175,10 +175,11 @@ subgraph S4["4 · Build — the do-work loop"]
     DW --> SEL
     SEL --> BLD --> PRR --> FIND
     FIND -->|"yes"| FIX --> PRR
-    FIND -->|"no — review-clean"| ACC
+    FIND -->|"no -- review-clean"| ACC
     FIND -->|"won't converge (~2 rounds)"| ESC1
     ACC -->|"all met"| MRG
     ACC -->|"any deferred / mocked"| ESC2
+    ESC2 -. "under --dangerously: merged anyway,<br/>each gap filed as a follow-up issue" .-> AMG
     MRG --> HMG --> DONE
     MRG --> AMG --> DONE
     DONE -->|"next issue<br/>(--no-limit / --limit=N)"| SEL
@@ -188,7 +189,7 @@ BLD -. "design gap →<br/>add or supersede an ADR" .-> MA
 BLD -. "wrong or unsatisfiable requirement →<br/>amend the feature" .-> MS
 
 %% ── change loop ──────────────────────────────────────────
-CHG["🔁 Change arrives<br/>new requirement · feature amended · scope shift<br/>(change flows forward only — never edit scope in an issue)"]:::change
+CHG["🔁 Change arrives<br/>new requirement · feature amended · scope shift<br/>(change flows forward only -- never edit scope in an issue)"]:::change
 CHG -. "amend" .-> MS
 
 %% ── observability ────────────────────────────────────────

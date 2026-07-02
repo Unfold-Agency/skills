@@ -5,7 +5,7 @@ must carry at least a system-context diagram; add container, sequence, and ERD
 diagrams where they make the system legible. All diagrams are **mermaid** fenced
 blocks (` ```mermaid `), so they render in GitHub and the Claude apps and live in
 the same file as the prose. The validator (A-006) checks that every kind listed in
-`arch-data.yaml`'s `diagrams` has a matching mermaid block.
+architecture.md's frontmatter `diagrams` has a matching mermaid block in the body.
 
 Keep diagrams thin -- they illustrate the decisions, they do not replace the ADRs.
 
@@ -56,9 +56,9 @@ erDiagram
   ORDER }|--|| SHOPPER : "placed by"
 ```
 
-## Matching the index
+## Matching the list
 
-The kinds you draw must match `arch-data.yaml`'s `diagrams` list. The validator
+The kinds you draw must match the frontmatter `diagrams` list. The validator
 greps for the signature of each listed kind (`erdiagram`, `sequencediagram`, the
 kind keyword for context/container). If you list `sequence` but draw none, A-006
 fails -- list only what you actually drew, and always include `context`.

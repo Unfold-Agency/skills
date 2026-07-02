@@ -19,9 +19,9 @@ right things.**
    - **`assumption`** -- a sensible default you are supplying because the inputs are
      silent. "No stated search load, so a managed Postgres FTS is enough for now" ->
      `assumption`. State what would confirm or overturn it.
-   Confidence is **typed data** in `arch-data.yaml` (`confidence: known | assumption`),
-   not a tone in prose. The validator requires it on every component, integration,
-   and decision (A-005).
+   Confidence is **typed data** in the frontmatter (`confidence: known | assumption`
+   on every component/integration in `architecture.md` and on every ADR), not a
+   tone in prose. The validator requires it on each of them (A-005).
 4. **Surface the assumptions as a badge.** In `architecture.md`, mark
    assumption-backed choices visibly (a `**assumption**` badge). This is the point
    where a human architects deliberately -- they scan the badges, confirm or

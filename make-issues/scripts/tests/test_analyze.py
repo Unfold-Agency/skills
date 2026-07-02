@@ -25,6 +25,7 @@ from item_fingerprint import compute_item_fingerprint  # noqa: E402
 import analyze  # noqa: E402
 
 UPSTREAM = os.path.join(HERE, "specs", "upstream")
+UPSTREAM_V2 = os.path.join(HERE, "specs", "upstream-v2")
 
 failures = []
 
@@ -284,8 +285,27 @@ check("removed req + won't-do issue -> SKIP (respect the human decision)",
 
 # ── the spec-read loaders, pinned to the real upstream fixtures (not injected) ─
 adr = analyze.load_adr_status(UPSTREAM)
-check("load_adr_status reads arch-data.yaml: ADR-0002 superseded, ADR-0001 accepted",
+check("load_adr_status falls back to legacy arch-data.yaml: ADR-0002 superseded, "
+      "ADR-0001 accepted",
       adr.get("ADR-0002") == "superseded" and adr.get("ADR-0001") == "accepted")
+adr_v2 = analyze.load_adr_status(UPSTREAM_V2)
+check("load_adr_status reads the v2.0 decisions/ frontmatter golden",
+      adr_v2.get("ADR-0002") == "superseded" and adr_v2.get("ADR-0001") == "accepted")
+
+# v2.0 scan details: frontmatter-less/unparseable ADR files are skipped silently,
+# and a non-empty scan wins over (never merges with) a legacy arch-data.yaml.
+with tempfile.TemporaryDirectory() as tmp:
+    ddir = os.path.join(tmp, "decisions")
+    os.makedirs(ddir)
+    with open(os.path.join(ddir, "ADR-0001-use-x.md"), "w", encoding="utf-8") as f:
+        f.write("---\nid: ADR-0001\ntitle: Use X\nstatus: accepted\n---\n\n# ADR\n")
+    with open(os.path.join(ddir, "ADR-0002-junk.md"), "w", encoding="utf-8") as f:
+        f.write("no frontmatter at all\n")
+    with open(os.path.join(tmp, "arch-data.yaml"), "w", encoding="utf-8") as f:
+        f.write("decisions:\n- {id: ADR-0009, status: superseded}\n")
+    adr_scan = analyze.load_adr_status(tmp)
+    check("v2.0 decisions scan skips frontmatter-less files and shadows legacy yaml",
+          adr_scan == {"ADR-0001": "accepted"})
 up_reqs = analyze.load_requirements(UPSTREAM)
 check("load_requirements reads the feature files end-to-end (FR-CHK-001 present)",
       "FR-CHK-001" in up_reqs and len(up_reqs) >= 4)

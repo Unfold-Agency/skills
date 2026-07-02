@@ -155,7 +155,20 @@ def load_requirements(spec_dir):
 
 
 def load_adr_status(spec_dir):
-    """{ADR id: status} from arch-data.yaml's decisions index. {} if absent."""
+    """{ADR id: status}, dual-read. v2.0 first: each decisions/ADR-*.md carries
+    its record in frontmatter (unparseable/frontmatter-less files skipped
+    silently). When that scan yields nothing, fall back to the legacy
+    arch-data.yaml's decisions index. {} if absent."""
+    out = {}
+    for path in sorted(glob.glob(os.path.join(spec_dir, "decisions", "ADR-*.md"))):
+        try:
+            doc = load_spec_doc(path)
+        except (OSError, yaml.YAMLError):
+            continue
+        if isinstance(doc, dict) and doc.get("id"):
+            out[str(doc["id"])] = str(doc.get("status") or "")
+    if out:
+        return out
     arch_path = os.path.join(spec_dir, "arch-data.yaml")
     if not os.path.isfile(arch_path):
         return {}
@@ -163,7 +176,6 @@ def load_adr_status(spec_dir):
         doc = load_yaml(arch_path)
     except (OSError, yaml.YAMLError):
         return {}
-    out = {}
     for d in (doc or {}).get("decisions") or []:
         if isinstance(d, dict) and d.get("id"):
             out[str(d["id"])] = str(d.get("status") or "")

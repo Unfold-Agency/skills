@@ -10,7 +10,7 @@ The preflight gate has already run the scoped fingerprint gate: every **selected
 
 1. **`features/<slug>.md`** -- the `requirements` you will slice. **The requirement is the work item.** Each carries `id` (e.g. `FR-CHK-001`), `name`, `kind`, `description`, EARS `acceptance_criteria` (order-significant), `verification` (schema 1.1+: the `{method, check, covers}` proof plan), `governed_by` (ADR ids), `depends_on` (requirement ids, may cross features), `interface`, advisory fields, and `status`.
 2. **`overview.md`** -- the `goals` (G-NNN) each feature serves, the `feature_index`, and the OPTIONAL `phasing` list. The issue's *Goal* comes from here, in the user's terms.
-3. **`arch-data.yaml`** -- the `decisions` index. For each governing ADR a requirement names in `governed_by`, pull the id, title, and a one-line decision snippet to embed in the issue. Full prose is in `decisions/ADR-NNNN-*.md` (back-link it; do not copy the whole ADR).
+3. **`decisions/ADR-NNNN-*.md`** -- the ADR records. For each governing ADR a requirement names in `governed_by`, pull the id and title from the ADR file's frontmatter and a one-line decision snippet from its `## Decision` prose, to embed in the issue (back-link the file; do not copy the whole ADR).
 
 Skip requirements whose `status` is `superseded` or `deferred` -- they are not work. Slice only `active` ones.
 
@@ -30,7 +30,7 @@ Each issue is a vertical slice a builder can act on **without opening the specs*
 - the **EARS acceptance criteria** (`acceptance_criteria`), verbatim and **in order** -- the order is part of the contract;
 - the **verification entries** (`verification`, schema 1.1+) -- the proof plan the builder executes and cites as as-built evidence (`## Verification` section; omit only for a 1.0 requirement that predates the field);
 - the **interface** (`interface`), if any;
-- a **one-line snippet of each governing ADR** (id, title, decision), from `arch-data.yaml`, with a back-link to its `decisions/ADR-NNNN-*.md` file.
+- a **one-line snippet of each governing ADR** (id, title, decision), from the ADR file's frontmatter + `## Decision` prose, with a back-link to its `decisions/ADR-NNNN-*.md` file.
 
 The specs stay canonical -- reference the requirement and ADR ids; do not paraphrase scope. To change scope you change the feature spec and re-sync.
 
@@ -76,7 +76,7 @@ Fill the template (`assets/issue-body-template.md`) from the specs:
 | Acceptance criteria | the requirement `acceptance_criteria`, embedded verbatim and in order; last box is always the build gate |
 | Verification | the requirement `verification` entries (schema 1.1+), embedded as `method (covers) -- check` lines; omit for a 1.0 requirement |
 | Interface | the requirement `interface`, if any |
-| Governing decisions | one line per `governed_by` ADR (id, title, decision snippet) from `arch-data.yaml`, with a back-link |
+| Governing decisions | one line per `governed_by` ADR (id, title, decision snippet) from the ADR file's frontmatter + prose, with a back-link |
 | `trace_req` | the requirement id this item satisfies (>=1, required) |
 | `trace_adr` | the requirement's `governed_by` ADR ids (may be empty) |
 | `feature` | the feature slug the requirement lives in |

@@ -144,10 +144,44 @@ def read_features(spec_dir):
     return out
 
 
+def _integration_ids(integrations):
+    """Synthesized INTG-<normalized-name> ids from an integrations list."""
+    intgs = set()
+    for i in integrations if isinstance(integrations, list) else []:
+        if isinstance(i, dict) and i.get("name"):
+            norm = re.sub(r"[^a-z0-9]+", "-", str(i["name"]).lower()).strip("-")
+            intgs.add(f"INTG-{norm}")
+    return intgs
+
+
 def read_arch(spec_dir):
-    """(adr_ids, integration_ids) from arch-data.yaml. Empty sets when absent
-    (lite mode). Integration ids are synthesized INTG-<normalized-name>, matching
-    make-trace."""
+    """(adr_ids, integration_ids) from the architecture layer, dual-read. Primary
+    is v2.0: architecture.md whose frontmatter carries a NESTED meta.doc_type ==
+    "spec-arch" (integrations) plus decisions/ADR-*.md frontmatters (adr ids); a
+    legacy architecture.md (flat doc_type, no meta) never matches, so the legacy
+    arch-data.yaml is the fallback. Empty sets when absent (lite mode) or
+    unreadable -- this lib stays quiet; the validator reports the gaps.
+    Integration ids are synthesized INTG-<normalized-name>, matching make-trace."""
+    md_path = os.path.join(spec_dir, "architecture.md")
+    if os.path.isfile(md_path):
+        try:
+            with open(md_path, encoding="utf-8") as f:
+                _head, _body, doc = split_frontmatter(f.read())
+        except OSError:
+            doc = {}
+        meta = doc.get("meta")
+        if isinstance(meta, dict) and meta.get("doc_type") == "spec-arch":
+            adrs = set()
+            for path in sorted(glob.glob(os.path.join(spec_dir, "decisions",
+                                                      "ADR-*.md"))):
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        _h, _b, adr = split_frontmatter(f.read())
+                except OSError:
+                    continue
+                if adr.get("id"):
+                    adrs.add(str(adr["id"]))
+            return adrs, _integration_ids(doc.get("integrations"))
     path = os.path.join(spec_dir, "arch-data.yaml")
     if not os.path.isfile(path):
         return set(), set()
@@ -159,16 +193,9 @@ def read_arch(spec_dir):
     if not isinstance(data, dict):
         return set(), set()
     decisions = data.get("decisions")
-    integrations = data.get("integrations")
     decisions = decisions if isinstance(decisions, list) else []
-    integrations = integrations if isinstance(integrations, list) else []
     adrs = {str(d.get("id")) for d in decisions if isinstance(d, dict) and d.get("id")}
-    intgs = set()
-    for i in integrations:
-        if isinstance(i, dict) and i.get("name"):
-            norm = re.sub(r"[^a-z0-9]+", "-", str(i["name"]).lower()).strip("-")
-            intgs.add(f"INTG-{norm}")
-    return adrs, intgs
+    return adrs, _integration_ids(data.get("integrations"))
 
 
 def active_req_ids(features):

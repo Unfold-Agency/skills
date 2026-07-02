@@ -10,7 +10,7 @@ guarantees that keep a scoped run safe.
 
 make-issues runs **after** the planning layer. It assumes `/make-spec` (and,
 ideally, `/make-arch`) have already produced `docs/product/` -- an `overview.md`, at
-least one `features/<slug>.md`, and optionally `arch-data.yaml` + `decisions/`.
+least one `features/<slug>.md`, and optionally `architecture.md` + `decisions/`.
 Preflight (`gh_preflight.py`) checks this first (`spec_set`): if the spec set is
 absent it **stops** and sends you upstream. make-issues never invents un-anchored
 issues -- every issue it writes traces back to the spec set. If you only want an

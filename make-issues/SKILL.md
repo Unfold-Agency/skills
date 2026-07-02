@@ -43,12 +43,12 @@ still anchors to the real features/goals/ADRs the spec set already holds.
 
 The planning layer is a layered spec set, not a PRD+TDD pair. Each spec is a single
 Markdown file whose **YAML frontmatter** carries the structured contract (make-spec
-emits one file per document -- there is no separate `*-data.yaml`); `arch-data.yaml`
-is make-arch's own plain-YAML file:
+emits one file per document -- there is no separate `*-data.yaml`); make-arch
+follows the same single-file discipline:
 
 - `overview.md` -- the lean PRD: `meta` (project_version, mode, status, fingerprint), `goals` (G-NNN), `scope`, `non_goals`, a `feature_index` (rows `{slug, prefix, title, feature_version, status, appetite}`), and an OPTIONAL `phasing` list.
 - `features/<slug>.md` -- one per feature: `meta` (slug, prefix, status, feature_version, fingerprint) plus a `requirements` list. **The requirement is the work item.** Each carries `id` (e.g. `FR-CHK-001`), `name`, `kind`, `description`, EARS `acceptance_criteria` (order-significant), `verification` (schema 1.1+: `{method, check, covers}` proof entries -- `demo`/`inspection` methods signal HITL, see slicing-and-review.md), `governed_by` (ADR ids), `depends_on` (requirement ids, may cross features), `interface`, advisory `priority`/`architecture_hints`/`related_files`/`notes`, and a lifecycle `status`.
-- `arch-data.yaml` -- architecture plus a `decisions` index (ADR rows `{id, title, status, scope, superseded_by, confidence}`); full prose in `decisions/ADR-NNNN-*.md`.
+- `architecture.md` + `decisions/ADR-NNNN-*.md` -- the architecture layer; each ADR file's **frontmatter** is its machine record (`{id, title, status, scope, superseded_by, confidence, governs}`) and its body the prose. (A pre-migration project may still carry the legacy `arch-data.yaml` index; the scripts fall back to it.)
 - `CHANGELOG.md` -- make-spec's Keep-a-Changelog ledger of **spec** changes (Added/Modified/Removed id lists). make-issues reads it as the human narrative of the delta; it does not write it.
 
 The integrity gate is the **fingerprint gate** (below), now scoped ("a1").
@@ -139,8 +139,8 @@ REFACTOR only fire for an issue whose feature is in scope.
 1. **Preflight** with `--scope` (above). Stop on any failure; heed warnings.
 2. **Read the specs** for the selected slice: the `features/<slug>.md`
    `requirements` you will slice, the `overview.md` goals + feature_index (+ optional
-   `phasing`), and `arch-data.yaml` (ADR index, for `trace_adr` and one-line
-   snippets). Read `references/slicing-and-review.md`.
+   `phasing`), and the ADR frontmatter records in `decisions/` (for `trace_adr` and
+   one-line snippets). Read `references/slicing-and-review.md`.
 3. **Assemble the plan.** For spec work, slice each `active` requirement into thin
    items and fill the template (requirement text + EARS criteria + interface + ADR
    snippets + trace fields + fingerprint from `item_fingerprint.py --id <REQ>`). For

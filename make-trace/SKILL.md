@@ -36,7 +36,7 @@ maintain (full detail in `references/data-model.md`):
 |---|---|---|
 | Objectives (`G-NNN`) | `docs/product/overview.md` `goals` | leaf targets (top of the chain) |
 | Requirements (`FR/IR/NFR/CR`) | `docs/product/features/<slug>.md` | the feature's `supports: [G-NNN]` -> objectives |
-| Architecture (`C-NNN`, `INTG-`, `ADR-`) | `docs/product/arch-data.yaml` | ADR `governs` / requirement `governed_by`; a component/integration inherits the requirements its governing ADRs cover |
+| Architecture (`C-NNN`, `INTG-`, `ADR-`) | `docs/product/architecture.md` frontmatter + `decisions/ADR-*.md` frontmatter (legacy fallback: `arch-data.yaml`) | ADR `governs` / requirement `governed_by`; a component/integration inherits the requirements its governing ADRs cover |
 | Issues (`#N`) | `gh issue list --state all` | the `make-issues:meta` block -> `trace_req` / `trace_adr` / `feature` |
 
 - **Issue status** matches what `do-work` sees (the same `select_work` classification):

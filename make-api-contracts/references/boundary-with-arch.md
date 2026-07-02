@@ -9,7 +9,8 @@ the contract duplicates or contradicts an ADR.
   endpoints its own code implements and its own frontend/clients call (`POST /orders`,
   `GET /cart`).
 - **make-arch owns** the *decision* to use an external system (an ADR: "use Stripe") and
-  the *integration edge* in `arch-data.yaml` (the external system, direction, data).
+  the *integration edge* in `architecture.md`'s frontmatter (the external system,
+  direction, data).
 
 ## The seam
 

@@ -16,6 +16,13 @@ decision is referenced by id in each requirement's `governed_by` (an
 ADR-NNNN from make-arch) -- it is NOT restated here. "Use Stripe" is an
 ADR; "the system shall capture payment" is a requirement here.
 
+VERIFICATION. Criteria state WHAT must be true; each requirement's
+`verification` states HOW that will be PROVEN -- method + check, with at
+least one `covers: negative` entry per FR (the failure/abuse path,
+S-014/S-015). Do not restate a criterion as a check; name the evidence.
+A cross-cutting concern (auth, theming, analytics) that would repeat in
+every feature gets its OWN namespaced feature file instead.
+
 KEEP IT LEAN. A feature spec should be reviewable in one sitting. The
 validator WARNS (S-012) above the budget (~12 requirements / ~1200
 words). If a feature is bigger than that, split it into two features.
@@ -37,7 +44,7 @@ use ` -- `.
 ---
 meta:
   doc_type: spec-feature
-  schema_version: "1.0"
+  schema_version: "1.1"
   slug: ""                  # kebab-case; matches the file name + index row
   prefix: ""                # ^[A-Z]{2,5}$ ; the requirement namespace
   title: ""
@@ -61,6 +68,13 @@ requirements:
     governed_by: []          # ADR-NNNN ids if an architecture decision governs this -- IN the fingerprint
     depends_on: []           # other requirement ids (within or across features) -- IN the fingerprint
     interface: ""            # data shape / contract sketch, when useful -- IN the fingerprint
+    verification:            # HOW "done" is proven (see references/verification-methods.md) -- IN the fingerprint
+      - method: test         # test | demo | inspection | analysis | monitor
+        check: ""            # what is exercised + what evidence shows it (not a restated criterion)
+        covers: positive     # proves the happy path
+      - method: test         # every FR needs >=1 covers: negative (S-015) -- the failure/abuse path,
+        check: ""            #   mirroring the required IF ... THEN criterion above (S-011)
+        covers: negative
     # ── advisory; OUT of the fingerprint (change freely, no re-stamp) ──
     priority: must           # must | should | could | wont
     architecture_hints: ""

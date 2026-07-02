@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════
-# spec-data -- SCHEMA v1.0
+# spec-data -- SCHEMA v1.1
 # The machine-readable contract embedded in each spec's YAML frontmatter.
 #
 # ONE FILE PER DOCUMENT. A spec is a single Markdown file: the YAML
@@ -11,7 +11,13 @@
 # stamped by scripts/stamp_fingerprint.py; everything else is
 # hand-authored (never hand-edit the stamps). The validator
 # (scripts/validate_spec.py) enforces the rules at the bottom
-# (S-001 .. S-013) and fails on any violation.
+# (S-001 .. S-015) and fails on any violation.
+#
+# SCHEMA 1.1 adds per-requirement `verification` (S-014/S-015): the
+# acceptance criteria state WHAT must be true (EARS); verification
+# states HOW it will be PROVEN. Docs still at schema_version "1.0" get a
+# migration WARNING for missing verification instead of a failure --
+# bump to "1.1" and author verification when amending a feature.
 #
 # Two doc SHAPES live under docs/specs/, each in the frontmatter of:
 #   overview.md            -- one per project (the lean PRD layer)
@@ -104,7 +110,7 @@ overview_example:
 feature_example:
   meta:
     doc_type: spec-feature
-    schema_version: "1.0"
+    schema_version: "1.1"
     slug: "checkout"             # MUST match the file name and an index row
     prefix: "CHK"                # MUST match the index row; req namespace
     title: ""
@@ -138,6 +144,13 @@ feature_example:
       governed_by: []            # ADR ids (e.g. ADR-0001) -- IN the fingerprint
       depends_on: []             # other requirement ids -- IN the fingerprint
       interface: ""              # data shape / contract sketch -- IN the fingerprint
+      verification:              # HOW "done" is proven -- IN the fingerprint (S-014/S-015)
+        - method: test           # test | demo | inspection | analysis | monitor
+          check: ""              # what is exercised + what evidence shows it
+          covers: positive       # positive | negative (failure/abuse path)
+        - method: test           # every FR needs >=1 covers: negative (S-015),
+          check: ""              #   mirroring the EARS unwanted-behavior rule (S-011)
+          covers: negative       # see references/verification-methods.md
       # ── OUT of the fingerprint (advisory; change freely, no re-sync) ──
       priority: must             # must | should | could | wont
       architecture_hints: ""
@@ -154,9 +167,10 @@ feature_example:
 # Skill re-stamps), while an advisory change does not.
 #
 #   IN  (changing these flips the fingerprint):
-#       description, acceptance_criteria, governed_by, depends_on,
-#       interface, id, name, kind, status, supports  (and, for the overview,
-#       goals/scope/non_goals/feature_index identity (slug/prefix/title/status))
+#       description, acceptance_criteria, verification, governed_by,
+#       depends_on, interface, id, name, kind, status, supports  (and, for the
+#       overview, goals/scope/non_goals/feature_index identity
+#       (slug/prefix/title/status))
 #   OUT (changing these does NOT flip the fingerprint), stripped wherever
 #       they appear -- including inside overview feature_index rows, so the
 #       index can be re-synced without invalidating the overview's own stamp:
@@ -213,6 +227,15 @@ feature_example:
 #   S-013  Every entry in an active feature's `supports` list is a goal-format
 #          id (^G-\d{3,}$) that resolves to a real goal in overview.md. Absent
 #          or empty passes -- the feature -> objective link is optional.
+#   S-014  Every active requirement has >=1 verification entry, each a
+#          well-formed {method, check, covers}: method in
+#          test|demo|inspection|analysis|monitor, check non-empty, covers in
+#          positive|negative. MISSING verification fails at schema_version
+#          >= 1.1 and warns (aggregated, migration lane) below it; a
+#          PRESENT-but-malformed entry always fails, at any version.
+#   S-015  Every active functional (FR) requirement has >=1 verification
+#          entry with covers: negative -- how the failure/abuse path is
+#          proven. Mirrors S-011 (same versioned enforcement as S-014).
 #
 # Budget (warning, not failure)
 #   S-012  A feature exceeding the lean budget (req count or word count)

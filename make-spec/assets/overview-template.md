@@ -24,7 +24,7 @@ Strip all HTML comments before publishing.
 ---
 meta:
   doc_type: spec-overview
-  schema_version: "1.0"
+  schema_version: "1.1"
   project_id: ""            # e.g. proj-2026-014
   project_name: ""
   client: ""

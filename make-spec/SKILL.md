@@ -37,6 +37,16 @@ Plus" is a constraint and stays; "use the Shopify REST API" is an architecture
 decision -- leave a `governed_by` placeholder and let `/make-arch` record the ADR.
 When in doubt, reframe as a constraint or defer it to an ADR.
 
+**And every requirement states its proof.** Acceptance criteria say what must be
+TRUE (EARS); each requirement's `verification` list says how that will be PROVEN
+-- method + check, with at least one negative-path entry per FR (S-014/S-015,
+mirroring the required `IF ... THEN` criterion). This is the commitment made
+operational: the spec a client signs carries not just the promise but the test
+of the promise, and it is the checklist do-work's acceptance gate verifies
+against. See `references/verification-methods.md`. A cross-cutting concern
+(auth, theming, analytics) that would repeat in every feature gets its own
+namespaced feature file instead of fanning out.
+
 ## Modes
 
 Decide which one applies before doing anything else:
@@ -67,13 +77,16 @@ And two flags that compose with the modes:
 - `assets/changelog-entry-template.md` -- the structured CHANGELOG entry; its
   Added/Modified/Removed id lists are what `make-issues` reconciles against.
 - `assets/spec-data-schema.yaml` -- the schema for both frontmatter shapes, the
-  fingerprint **IN/OUT contract**, and validator rules S-001..S-013. Read before
+  fingerprint **IN/OUT contract**, and validator rules S-001..S-015. Read before
   authoring any spec.
 - `references/kickoff.md` -- greenfield: scope the corpus, consolidate the
   overview, distill features, author + stamp + validate.
 - `references/amend-and-changelog.md` -- brownfield: classify, diff-don't-rewrite,
   supersede-not-delete, the CHANGELOG delta, the `--trivial` lane.
 - `references/ears-grammar.md` -- the five EARS templates the validator parses.
+- `references/verification-methods.md` -- the five verification methods
+  (test/demo/inspection/analysis/monitor), the per-FR negative-path mandate, and
+  the 1.0 -> 1.1 migration lane.
 - `references/id-grammar.md` -- the pinned, feature-namespaced ID grammars and the
   traceability chains.
 - `scripts/stamp_fingerprint.py` -- run after authoring or editing any spec:
@@ -114,7 +127,11 @@ prior version, read it from git.
    frontmatter (per the schema), the human narrative in the body. The template
    comments are the rules. There is no separate data file to derive. Set each
    feature's `supports: [G-NNN]` to the overview goal(s) it advances (the
-   feature -> objective link the validator resolves and make-trace maps).
+   feature -> objective link the validator resolves and make-trace maps), and
+   each requirement's `verification` (how it will be proven -- FRs need a
+   negative-path entry). When amending a feature that predates verification
+   (schema_version "1.0"), bump it to "1.1" and author the verification then --
+   the validator warns until you do and fails closed once bumped.
 2. `python scripts/stamp_fingerprint.py docs/specs` -- stamps the fingerprint and
    content version into each frontmatter (your body is preserved) and syncs the
    Feature Index.
@@ -133,6 +150,13 @@ goals without a baseline, requirements whose failure path was inferred rather th
 stated, decisions deferred to an ADR, claims that rest on a weak source. A kickoff
 with visible open questions is healthy; a spec that hides its gaps is not. Never
 invent a source, a metric, or a behavior to make the validator pass.
+
+And be honest about what the gate proves: a fingerprint certifies that **these
+bytes have not changed since they were stamped** -- nothing more. It does not
+prove the content is correctly classified, that a human actually re-read it
+before re-stamping, or who authored the change (git carries authorship). The
+gate detects and blocks drift; correctness is verification's job, and sincerity
+is the reviewer's.
 
 ## Downstream
 

@@ -163,7 +163,7 @@ def load_adr_status(spec_dir):
     for path in sorted(glob.glob(os.path.join(spec_dir, "decisions", "ADR-*.md"))):
         try:
             doc = load_spec_doc(path)
-        except (OSError, yaml.YAMLError):
+        except (OSError, yaml.YAMLError, ValueError):
             continue
         if isinstance(doc, dict) and doc.get("id"):
             out[str(doc["id"])] = str(doc.get("status") or "")

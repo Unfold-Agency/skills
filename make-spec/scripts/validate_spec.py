@@ -435,7 +435,7 @@ def main():
                                   "ADR id (want ^ADR-\\d{4}$)")
                 elif has_dec_dir and adr not in adr_files:
                     fail("S-004", f"{dpath}: {rid}.governed_by '{adr}' has no file "
-                                  "under docs/product/decisions/")
+                                  f"under {dec_dir}/")
             acs = r.get("acceptance_criteria") or []
             if not acs:
                 fail("S-010", f"{dpath}: {rid} has no acceptance criteria")

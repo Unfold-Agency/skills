@@ -248,7 +248,7 @@ def check_spec_integrity(spec_dir, scope=None):
         return {"name": "spec_integrity", "ok": False, "fatal": True,
                 "files": [], "warnings": [], "detail":
                 f"no overview.md under {spec_dir} -- specs must be in "
-                f"docs/product/ (overview.md, features/*.md, arch-data.yaml){hint}"}
+                f"{spec_dir} (overview.md, features/*.md, arch-data.yaml){hint}"}
     feature_count = 0
     for label, path in files:
         is_feature = label.startswith("feature:")

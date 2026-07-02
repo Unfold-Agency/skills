@@ -518,6 +518,97 @@ check("baseline_ids: a clean baseline returns the prior id set (not None)",
       res == {"G-001"} and not errs)
 
 
+# ── 9. verification (S-014/S-015) -- how "done" is proven ────────────
+# The fixture is schema 1.0 without verification: it must PASS with one
+# aggregated S-014 migration warning per feature, never fail.
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    rc, out = run_validator(d, "--no-baseline")
+    check("S-014 migration: a 1.0 doc without verification warns, still passes",
+          rc == 0 and "S-014" in out and "migration pending" in out
+          and not codes(out))
+
+
+def _bump_11(doc):
+    doc["meta"]["schema_version"] = "1.1"
+
+
+VER_FR = [
+    {"method": "test",
+     "check": "unit test adds an item and asserts the cart total updates",
+     "covers": "positive"},
+    {"method": "test",
+     "check": "unit test adds an out-of-stock item and asserts the add is blocked",
+     "covers": "negative"},
+]
+VER_CR = [
+    {"method": "inspection",
+     "check": "copy review confirms the localized empty-cart message renders",
+     "covers": "positive"},
+]
+
+
+def _add_ver(doc):
+    _bump_11(doc)
+    for r in doc["requirements"]:
+        r["verification"] = copy.deepcopy(
+            VER_FR if r["id"].startswith("FR-") else VER_CR)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    edit_yaml(feat(d, "cart"), _bump_11)
+    stamp(d)
+    rc, out = run_validator(d, "--no-baseline")
+    check("S-014: a 1.1 doc without verification fails closed",
+          rc == 1 and "S-014" in codes(out))
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    edit_yaml(feat(d, "cart"), _add_ver)
+    stamp(d)
+    rc, out = run_validator(d, "--no-baseline")
+    check("S-014/S-015: a 1.1 doc with method+check+negative coverage passes",
+          rc == 0 and not codes(out))
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    # Malformed entries (bad method, empty check, bad covers) always fail --
+    # even on a 1.0 doc; only MISSING verification gets the migration lane.
+    edit_yaml(feat(d, "cart"), lambda doc: doc["requirements"][0].__setitem__(
+        "verification", [{"method": "vibes", "check": "", "covers": "sideways"}]))
+    stamp(d)
+    rc, out = run_validator(d, "--no-baseline")
+    check("S-014: a malformed verification entry fails even on a 1.0 doc",
+          rc == 1 and codes(out) == {"S-014"})
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    def _all_positive(doc):
+        _bump_11(doc)
+        for r in doc["requirements"]:
+            r["verification"] = [{"method": "test",
+                                  "check": "happy-path assertion only",
+                                  "covers": "positive"}]
+    edit_yaml(feat(d, "cart"), _all_positive)
+    stamp(d)
+    rc, out = run_validator(d, "--no-baseline")
+    check("S-015: a 1.1 FR without negative-coverage verification fails",
+          rc == 1 and codes(out) == {"S-015"})
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    # verification is contract content (IN the fingerprint): mutating an
+    # entry WITHOUT re-stamping must fail CLOSED with S-006 only.
+    edit_yaml(feat(d, "cart"), _add_ver)
+    stamp(d)
+    edit_yaml(feat(d, "cart"), lambda doc: doc["requirements"][0]
+              ["verification"][1].__setitem__("check", "different evidence"))
+    rc, out = run_validator(d, "--no-baseline")
+    check("C1 IN: a verification change without re-stamping fails S-006",
+          rc == 1 and codes(out) == {"S-006"})
+
+
 print()
 if failures:
     print(f"FAILURES ({len(failures)}): {failures}")

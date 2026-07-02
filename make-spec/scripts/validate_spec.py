@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-validate_spec.py -- enforce validator rules S-001..S-012 across docs/specs/
+validate_spec.py -- enforce validator rules S-001..S-015 across docs/specs/
 
 Validates the whole spec set at once (the overview + every feature), because
 the interesting rules are cross-document: the feature index must agree with the
@@ -51,6 +51,33 @@ ADR_ID_RE = re.compile(r"^ADR-\d{4}$")
 PREFIX_RE = re.compile(r"^[A-Z]{2,5}$")
 STATUS_ENUM = ("active", "superseded", "deferred")
 DOC_STATUS_ENUM = ("draft", "review", "approved")
+
+# ── Verification vocabulary (S-014/S-015) ────────────────────────────
+# Acceptance criteria state WHAT must be true (EARS); verification states
+# HOW it will be PROVEN. Methods are the classic V&V four plus production
+# monitoring (see references/verification-methods.md).
+VERIFICATION_METHODS = ("test", "demo", "inspection", "analysis", "monitor")
+VERIFICATION_COVERS = ("positive", "negative")
+# Missing verification fails closed at schema_version >= 1.1 and warns on
+# older docs (the migration lane: bump the version when amending). A
+# PRESENT-but-malformed entry always fails, regardless of version.
+VERIFICATION_ENFORCE_FROM = (1, 1)
+
+
+def schema_at_least(meta, threshold):
+    """True when meta.schema_version >= threshold (major, minor). An absent
+    version reads as 1.0; an unparseable one enforces (fails closed) rather
+    than exempting."""
+    raw = str((meta or {}).get("schema_version") or "1.0")
+    parts = []
+    for piece in raw.split(".")[:2]:
+        try:
+            parts.append(int(piece))
+        except ValueError:
+            return True  # a mangled version never buys an exemption
+    while len(parts) < 2:
+        parts.append(0)
+    return tuple(parts) >= threshold
 
 # ── Fingerprint IN/OUT contract (S-006) ──────────────────────────────
 # Keys dropped before hashing. Changing any of these never flips the
@@ -373,8 +400,11 @@ def main():
             if mo and name.endswith(".md"):
                 adr_files.add(mo.group(1))
 
-    # ---- S-004 / S-010 / S-011: per-requirement references + EARS ------
+    # ---- S-004 / S-010 / S-011 / S-014 / S-015: per-requirement ---------
     for slug, dpath, doc in feats:
+        enforce_ver = schema_at_least(doc.get("meta"), VERIFICATION_ENFORCE_FROM)
+        ver_report = fail if enforce_ver else warn
+        missing_ver = []
         for r in doc.get("requirements") or []:
             if not isinstance(r, dict) or r.get("status") not in (None, "active"):
                 continue  # superseded/deferred reqs are kept but not enforced
@@ -408,6 +438,52 @@ def main():
                 fail("S-011", f"{dpath}: {rid} (functional) has no unwanted-behavior "
                               "criterion (IF ... THEN the system shall ...) -- the "
                               "failure/edge path")
+
+            # ---- S-014 / S-015: verification (how "done" is proven) -----
+            # Criteria say WHAT must be true; verification says HOW it will
+            # be proven. Missing entries fail at schema >= 1.1 and aggregate
+            # into one migration warning below it; a present-but-malformed
+            # entry always fails.
+            ver = r.get("verification")
+            if not ver:
+                if enforce_ver:
+                    fail("S-014", f"{dpath}: {rid} has no verification entries "
+                                  "(method + check -- how will this be proven?)")
+                else:
+                    missing_ver.append(str(rid))
+            elif not isinstance(ver, list):
+                fail("S-014", f"{dpath}: {rid}.verification must be a list of "
+                              "{method, check, covers} entries")
+            else:
+                covers_seen = []
+                for i, v in enumerate(ver):
+                    label = f"{rid}.verification[{i}]"
+                    if not isinstance(v, dict):
+                        fail("S-014", f"{dpath}: {label} is not a mapping "
+                                      "(want {method, check, covers})")
+                        continue
+                    if v.get("method") not in VERIFICATION_METHODS:
+                        fail("S-014", f"{dpath}: {label}.method '{v.get('method')}' "
+                                      f"not in {VERIFICATION_METHODS}")
+                    if not str(v.get("check") or "").strip():
+                        fail("S-014", f"{dpath}: {label}.check is empty -- state "
+                                      "what is exercised and what evidence shows it")
+                    if v.get("covers") not in VERIFICATION_COVERS:
+                        fail("S-014", f"{dpath}: {label}.covers '{v.get('covers')}' "
+                                      f"not in {VERIFICATION_COVERS}")
+                    else:
+                        covers_seen.append(v["covers"])
+                if str(rid).startswith("FR-") and "negative" not in covers_seen:
+                    ver_report("S-015", f"{dpath}: {rid} (functional) has no "
+                                        "verification entry with covers: negative -- "
+                                        "how is the failure/abuse path proven?")
+        if missing_ver:
+            # not enforce_ver here by construction -- one aggregated warning
+            # per feature keeps a 1.0 spec set readable during migration.
+            warn("S-014", f"{dpath}: {len(missing_ver)} active requirement(s) have "
+                          f"no verification entries (e.g. {missing_ver[0]}) -- "
+                          "schema 1.0 doc, migration pending: bump schema_version "
+                          "to \"1.1\" and author verification when amending")
 
     # ---- S-013: feature supports -> overview goals resolve --------------
     # A feature may declare the overview goal(s) it serves in a top-level

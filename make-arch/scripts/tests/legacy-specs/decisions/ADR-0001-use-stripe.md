@@ -1,17 +1,8 @@
----
-id: ADR-0001
-title: "Use Stripe for payments"
-status: accepted
-date: "2026-06-29"
-scope: feature
-confidence: known
-supersedes: ""
-superseded_by: ""
-governs:
-  - FR-CHK-001
----
-
 # ADR-0001 -- Use Stripe for payments
+
+- **Status:** Accepted
+- **Date:** 2026-06-29
+- **Confidence:** known (the client already runs Stripe)
 
 ## Context
 The storefront must capture card payments and reduce PCI scope. The client

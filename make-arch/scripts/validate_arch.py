@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
 """
-validate_arch.py -- enforce validator rules A-001..A-008 across docs/product/
+validate_arch.py -- enforce validator rules A-001..A-009 across docs/product/
 
-Validates the architecture layer: arch-data.yaml + decisions/ADR-*.md +
-architecture.md, and cross-checks the ADR index against the make-spec feature
-files (no-orphan). Reuses the make-spec discipline: a fail-closed fingerprint
-gate (A-007) and an origin/main append-only baseline (A-008).
+Validates the architecture layer in its SINGLE-FILE form: architecture.md
+(frontmatter = the machine contract: meta, context, components, integrations,
+diagrams) plus decisions/ADR-NNNN-*.md (each ADR's frontmatter = its machine
+record), and cross-checks the ADRs against the make-spec feature files
+(no-orphan). There is no derived arch-data.yaml -- the bytes a human signs are
+the bytes validated here. Reuses the make-spec discipline: a fail-closed
+fingerprint gate on architecture.md (A-007) and an origin/main baseline that
+enforces the ADR log's append-only regime (A-008) and per-file immutability
+once accepted (A-009).
 
 Usage:
   python validate_arch.py [docs/product] [--baseline-ref origin/main | --no-baseline]
 
-Exit codes: 0 = pass (warnings do not fail), 1 = violations, 2 = file/parse error.
+Exit codes: 0 = pass (warnings do not fail), 1 = violations, 2 = file/parse
+error (including a legacy arch-data.yaml layout awaiting migration).
 """
 import argparse
 import copy
@@ -31,9 +37,14 @@ ADR_STATUS = ("proposed", "accepted", "superseded", "deprecated")
 DOC_STATUS = ("draft", "review", "approved")
 CONFIDENCE = ("known", "assumption")
 DIAGRAM_KINDS = ("context", "container", "sequence", "erd")
+ADR_REQUIRED_KEYS = ("id", "title", "status", "scope", "confidence")
+# The one allowed edit to an accepted ADR: the supersede transition (A-009).
+ADR_TRANSITION_KEYS = {"status", "superseded_by"}
 
-# Fingerprint IN/OUT contract (A-007) -- advisory/derived keys dropped before hashing.
-OUT_KEYS = {"fingerprint", "generated_at", "arch_version", "notes"}
+# Fingerprint IN/OUT contract (A-007) -- advisory/derived keys dropped before
+# hashing architecture.md's frontmatter. ADR files carry no fingerprint: their
+# regime is append-only, enforced against the git baseline (A-008/A-009).
+OUT_KEYS = {"fingerprint", "generated_at", "arch_version", "last_updated", "notes"}
 
 
 def _strip_out(obj):
@@ -51,30 +62,48 @@ def compute_fingerprint(doc):
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-def load_yaml(path):
-    with open(path, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
-
-
-# Spec features are single .md files; their requirements (and the governed_by ADR
-# refs this validator cross-checks) live in the YAML frontmatter -- no separate
-# data file. arch-data.yaml is make-arch's own plain-YAML file (load_yaml above).
+# ── single-file loading: frontmatter is the signed contract ───────────
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 
 
-def load_spec_doc(path):
-    """Parse a single-file spec's YAML frontmatter into its doc dict. Returns {}
-    when there is no frontmatter or it is not a mapping -- so a malformed feature
-    fails closed rather than crashing the governed_by scan. Tolerates a BOM."""
-    with open(path, encoding="utf-8") as f:
-        text = f.read()
+def split_frontmatter(text):
+    """(frontmatter_text, body) for a leading --- ... --- block, else (None, text).
+    A leading UTF-8 BOM is tolerated."""
     if text.startswith("﻿"):
         text = text[1:]
     m = FRONTMATTER_RE.match(text)
     if not m:
-        return {}
-    doc = yaml.safe_load(m.group(1))
-    return doc if isinstance(doc, dict) else {}
+        return None, text
+    return m.group(1), text[m.end():]
+
+
+def parse_md(text):
+    """(doc, body) from a single-file document. doc is {} when there is no
+    frontmatter or it is not a mapping -- malformed files fail closed through
+    the integrity rules rather than crashing."""
+    fm, body = split_frontmatter(text)
+    if fm is None:
+        return {}, body
+    doc = yaml.safe_load(fm)
+    return (doc if isinstance(doc, dict) else {}), body
+
+
+def load_md(path):
+    with open(path, encoding="utf-8") as f:
+        return parse_md(f.read())
+
+
+def adr_files(spec_dir):
+    """[(adr_id_from_filename, filename)] for decisions/ADR-*.md, sorted."""
+    dec_dir = os.path.join(spec_dir, "decisions")
+    out = []
+    if not os.path.isdir(dec_dir):
+        return out
+    for name in sorted(os.listdir(dec_dir)):
+        mo = re.match(r"^(ADR-\d{4})", name)
+        if mo and name.endswith(".md"):
+            out.append((mo.group(1), name))
+    return out
 
 
 def feature_governed_by(spec_dir):
@@ -88,7 +117,7 @@ def feature_governed_by(spec_dir):
         if not name.endswith(".md"):
             continue
         try:
-            doc = load_spec_doc(os.path.join(fdir, name))
+            doc, _ = load_md(os.path.join(fdir, name))
         except yaml.YAMLError:
             continue
         for r in doc.get("requirements") or []:
@@ -98,12 +127,15 @@ def feature_governed_by(spec_dir):
     return refs
 
 
-# ── git append-only baseline (A-008), fail-closed (same shape as make-spec) ──
+# ── git baseline (A-008 append-only, A-009 immutable-once-accepted) ──
 def _git(args, cwd):
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
 
 
-def baseline_adr_ids(spec_dir, ref, fail):
+def baseline_adrs(spec_dir, ref, fail):
+    """{adr_id: (filename, text)} for every decisions/ADR-*.md at the baseline
+    ref, or None when the baseline cannot be trusted (the caller has already
+    recorded the fail-closed A-008 violation). An empty dict = greenfield."""
     cwd = os.path.abspath(spec_dir)
     inside = _git(["rev-parse", "--is-inside-work-tree"], cwd)
     if inside.returncode != 0 or inside.stdout.strip() != "true":
@@ -119,29 +151,35 @@ def baseline_adr_ids(spec_dir, ref, fail):
         fail("A-008", f"cannot resolve baseline ref '{ref}' -- fetch it or pass "
                       "--no-baseline for the greenfield kickoff")
         return None
-    # Distinguish "absent at baseline" (greenfield, legit) from "unreadable"
-    # (corrupt/partial clone -- fail closed). ls-tree reads the tree: an empty
-    # listing means the file did not exist at the baseline; a nonzero rc means
-    # the tree itself is unusable.
-    listing = _git(["ls-tree", "--name-only", ref, "--", "arch-data.yaml"], cwd)
+    # List the decisions dir at the baseline. An empty listing means the log did
+    # not exist there (greenfield) -- nothing prior, nothing to lose; a nonzero
+    # rc means the tree itself is unusable (fail closed).
+    listing = _git(["ls-tree", "-r", "--name-only", ref, "--", "decisions"], cwd)
     if listing.returncode != 0:
         fail("A-008", f"cannot list the baseline tree at '{ref}' (git ls-tree "
                       f"failed: {listing.stderr.strip()}) -- baseline unusable, "
                       "refusing to pass")
         return None
-    if not listing.stdout.strip():
-        return set()  # no arch-data at baseline -- greenfield, nothing to lose
-    show = _git(["show", f"{ref}:./arch-data.yaml"], cwd)
-    if show.returncode != 0:
-        fail("A-008", f"cannot read arch-data.yaml at '{ref}' (git show failed: "
-                      f"{show.stderr.strip()}) -- baseline incomplete, refusing to pass")
-        return None
-    try:
-        prev = yaml.safe_load(show.stdout) or {}
-    except yaml.YAMLError:
-        return set()
-    return {str(d.get("id")) for d in (prev.get("decisions") or [])
-            if isinstance(d, dict) and d.get("id")}
+    out = {}
+    for path in listing.stdout.splitlines():
+        name = os.path.basename(path)
+        mo = re.match(r"^(ADR-\d{4})", name)
+        if not (mo and name.endswith(".md")):
+            continue
+        show = _git(["show", f"{ref}:./{path}"], cwd)
+        if show.returncode != 0:
+            fail("A-008", f"cannot read '{path}' at '{ref}' (git show failed: "
+                          f"{show.stderr.strip()}) -- baseline incomplete, "
+                          "refusing to pass")
+            return None
+        out[mo.group(1)] = (name, show.stdout)
+    return out
+
+
+def _transition_view(doc):
+    """The ADR frontmatter with the allowed supersede-transition fields removed
+    -- what must stay byte-stable once a decision is accepted (A-009)."""
+    return {k: v for k, v in (doc or {}).items() if k not in ADR_TRANSITION_KEYS}
 
 
 def main():
@@ -152,68 +190,91 @@ def main():
     args = ap.parse_args()
 
     spec_dir = args.spec_dir
-    arch_path = os.path.join(spec_dir, "arch-data.yaml")
-    if not os.path.isfile(arch_path):
-        print(f"ERROR: no arch-data.yaml under {spec_dir}", file=sys.stderr)
+    arch_md_path = os.path.join(spec_dir, "architecture.md")
+    legacy_yaml = os.path.join(spec_dir, "arch-data.yaml")
+
+    if not os.path.isfile(arch_md_path):
+        hint = (" -- legacy arch-data.yaml found: run "
+                "scripts/migrate_arch_data.py to adopt the single-file layout"
+                if os.path.isfile(legacy_yaml) else "")
+        print(f"ERROR: no architecture.md under {spec_dir}{hint}", file=sys.stderr)
         sys.exit(2)
     try:
-        arch = load_yaml(arch_path)
+        with open(arch_md_path, encoding="utf-8") as f:
+            arch_text = f.read()
+        arch, arch_body = parse_md(arch_text)
     except Exception as e:
-        print(f"ERROR: cannot parse {arch_path}: {e}", file=sys.stderr)
+        print(f"ERROR: cannot parse {arch_md_path}: {e}", file=sys.stderr)
+        sys.exit(2)
+
+    meta = arch.get("meta") if isinstance(arch.get("meta"), dict) else {}
+    if str(meta.get("doc_type") or "") != "spec-arch":
+        hint = (" -- legacy arch-data.yaml layout detected: run "
+                "scripts/migrate_arch_data.py to move the contract into "
+                "architecture.md's frontmatter"
+                if os.path.isfile(legacy_yaml) else
+                " -- architecture.md needs the schema v2.0 frontmatter "
+                "(see assets/arch-schema.yaml)")
+        print(f"ERROR: {arch_md_path} has no spec-arch frontmatter{hint}",
+              file=sys.stderr)
         sys.exit(2)
 
     errors, warns = [], []
     fail = lambda rule, msg: errors.append(f"[{rule}] {msg}")
     warn = lambda rule, msg: warns.append(f"[{rule}] {msg}")
 
-    meta = arch.get("meta") or {}
+    if os.path.isfile(legacy_yaml):
+        warn("A-001", f"{legacy_yaml} still exists alongside the v2.0 frontmatter "
+                      "-- it is no longer read; delete it (migrate_arch_data.py "
+                      "does) so it cannot drift")
 
-    # ---- A-001: well-formed --------------------------------------------
-    if not isinstance(arch.get("meta"), dict):
-        fail("A-001", "meta block missing or not a mapping")
+    # ---- A-001: well-formed ---------------------------------------------
     for key in ("status", "fingerprint"):
         if key not in meta:
-            fail("A-001", f"meta missing '{key}'")
-    for key in ("components", "integrations", "decisions", "diagrams"):
+            fail("A-001", f"architecture.md meta missing '{key}'")
+    for key in ("components", "integrations", "diagrams"):
         if key not in arch:
-            fail("A-001", f"missing top-level key '{key}'")
+            fail("A-001", f"architecture.md frontmatter missing top-level '{key}'")
     if str(meta.get("status") or "draft") not in DOC_STATUS:
         fail("A-001", f"status '{meta.get('status')}' not in {DOC_STATUS}")
 
-    # ---- A-002: ADR id format, uniqueness, file <-> index agreement ----
-    adr_ids = {}
-    for d in arch.get("decisions") or []:
-        if not isinstance(d, dict):
+    # ---- load the ADR log (each file's frontmatter is its record) -------
+    adr_ids = {}       # id -> frontmatter doc
+    adr_bodies = {}    # id -> body text
+    adr_names = {}     # id -> filename
+    for fid, name in adr_files(spec_dir):
+        path = os.path.join(spec_dir, "decisions", name)
+        try:
+            doc, body = load_md(path)
+        except Exception as e:
+            fail("A-001", f"decisions/{name}: cannot parse ({e})")
             continue
-        did = d.get("id")
-        if not did:
-            fail("A-002", "a decisions[] entry is missing 'id'")
+        if not doc:
+            fail("A-001", f"decisions/{name}: no ADR frontmatter (see "
+                          "assets/adr-template.md; migrate_arch_data.py injects "
+                          "it from a legacy arch-data.yaml)")
             continue
-        if not ADR_ID_RE.match(str(did)):
-            fail("A-002", f"malformed ADR id '{did}' (want ^ADR-\\d{{4}}$)")
+        for key in ADR_REQUIRED_KEYS:
+            if key not in doc:
+                fail("A-001", f"decisions/{name}: frontmatter missing '{key}'")
+        did = str(doc.get("id") or "")
+        # ---- A-002: id format, filename agreement, uniqueness ----------
+        if not ADR_ID_RE.match(did):
+            fail("A-002", f"decisions/{name}: malformed id '{did}' "
+                          "(want ^ADR-\\d{4}$)")
+            continue
+        if did != fid:
+            fail("A-002", f"decisions/{name}: frontmatter id '{did}' != filename "
+                          f"id '{fid}'")
         if did in adr_ids:
-            fail("A-002", f"duplicate ADR id '{did}'")
-        adr_ids[did] = d
+            fail("A-002", f"duplicate ADR id '{did}' (decisions/{name} and "
+                          f"decisions/{adr_names[did]})")
+            continue
+        adr_ids[did] = doc
+        adr_bodies[did] = body
+        adr_names[did] = name
 
-    # The ADR *index* (arch-data.yaml decisions[]) is the source the validator
-    # gates for status/supersession; the decisions/ADR-*.md bodies are checked
-    # for existence only (their prose Status/Supersedes lines are not parsed).
-    dec_dir = os.path.join(spec_dir, "decisions")
-    adr_files = {}
-    if os.path.isdir(dec_dir):
-        for name in os.listdir(dec_dir):
-            mo = re.match(r"^(ADR-\d{4})", name)
-            if mo and name.endswith(".md"):
-                adr_files[mo.group(1)] = name
-    for did in adr_ids:
-        if did not in adr_files:
-            fail("A-002", f"{did} is in the index but has no decisions/{did}-*.md file")
-    for did in adr_files:
-        if did not in adr_ids:
-            fail("A-002", f"decisions/{adr_files[did]} exists but {did} is not in "
-                          "the arch-data index")
-
-    # ---- A-003: supersede discipline -----------------------------------
+    # ---- A-003: supersede discipline -------------------------------------
     for did, d in adr_ids.items():
         st = str(d.get("status") or "")
         if st and st not in ADR_STATUS:
@@ -248,8 +309,8 @@ def main():
                 break
             cur = nxt
 
-    # ---- A-005: typed confidence ---------------------------------------
-    for coll in ("components", "integrations", "decisions"):
+    # ---- A-005: typed confidence -----------------------------------------
+    for coll in ("components", "integrations"):
         for item in arch.get(coll) or []:
             if not isinstance(item, dict):
                 continue
@@ -257,8 +318,12 @@ def main():
             if c not in CONFIDENCE:
                 who = item.get("id") or item.get("name") or f"a {coll[:-1]}"
                 fail("A-005", f"{who} confidence '{c}' not in {CONFIDENCE}")
+    for did, d in adr_ids.items():
+        if d.get("confidence") not in CONFIDENCE:
+            fail("A-005", f"{did} confidence '{d.get('confidence')}' not in "
+                          f"{CONFIDENCE}")
 
-    # ---- A-004: no-orphan (cross-check vs features) --------------------
+    # ---- A-004: no-orphan (cross-check vs features) -----------------------
     feat_refs = feature_governed_by(spec_dir)
     for did, d in adr_ids.items():
         if str(d.get("status")) != "accepted":
@@ -272,53 +337,82 @@ def main():
                               "requirement's governed_by references it (orphan)")
     for ref in feat_refs:
         if ref not in adr_ids:
-            fail("A-004", f"a feature references governed_by '{ref}' but it is not "
-                          "in the arch-data decisions index")
+            fail("A-004", f"a feature references governed_by '{ref}' but there is "
+                          f"no decisions/{ref}-*.md")
         elif str(adr_ids[ref].get("status") or "") == "superseded":
             sb = str(adr_ids[ref].get("superseded_by") or "?")
             fail("A-004", f"a feature is governed_by '{ref}' which is superseded -- "
                           f"repoint governed_by at {sb}")
 
-    # ---- A-006: mermaid diagrams present -------------------------------
-    arch_md = os.path.join(spec_dir, "architecture.md")
-    if not os.path.isfile(arch_md):
-        fail("A-006", "architecture.md is missing")
-    else:
-        md = open(arch_md).read()
-        low = md.lower()
-        if "```mermaid" not in low:
-            fail("A-006", "architecture.md has no ```mermaid block")
-        # Match each listed kind against the BODIES of the mermaid fences only,
-        # not the surrounding prose -- else a '## System context' heading would
-        # satisfy the 'context' kind with no real diagram present.
-        blocks = "\n".join(re.findall(r"```mermaid(.*?)```", low, re.DOTALL))
-        kinds = [k for k in (arch.get("diagrams") or []) if k in DIAGRAM_KINDS]
-        if "context" not in kinds:
-            fail("A-006", "diagrams must include the 'context' diagram")
-        SIGNATURE = {"context": "c4context", "container": "c4container",
-                     "erd": "erdiagram", "sequence": "sequencediagram"}
-        for kind in kinds:
-            if SIGNATURE[kind] not in blocks:
-                fail("A-006", f"diagrams lists '{kind}' but architecture.md has no "
-                              f"matching mermaid {SIGNATURE[kind]} block")
+    # ---- A-006: mermaid diagrams present in the body ----------------------
+    low = arch_body.lower()
+    if "```mermaid" not in low:
+        fail("A-006", "architecture.md body has no ```mermaid block")
+    # Match each listed kind against the BODIES of the mermaid fences only,
+    # not the surrounding prose -- else a '## System context' heading would
+    # satisfy the 'context' kind with no real diagram present.
+    blocks = "\n".join(re.findall(r"```mermaid(.*?)```", low, re.DOTALL))
+    kinds = [k for k in (arch.get("diagrams") or []) if k in DIAGRAM_KINDS]
+    if "context" not in kinds:
+        fail("A-006", "diagrams must include the 'context' diagram")
+    SIGNATURE = {"context": "c4context", "container": "c4container",
+                 "erd": "erdiagram", "sequence": "sequencediagram"}
+    for kind in kinds:
+        if SIGNATURE[kind] not in blocks:
+            fail("A-006", f"diagrams lists '{kind}' but architecture.md has no "
+                          f"matching mermaid {SIGNATURE[kind]} block")
 
-    # ---- A-007: fingerprint integrity (FAIL CLOSED) --------------------
+    # ---- A-007: fingerprint integrity (FAIL CLOSED) -----------------------
     stored = str(meta.get("fingerprint") or "")
     if not stored:
-        fail("A-007", "meta.fingerprint is blank")
+        fail("A-007", "architecture.md meta.fingerprint is blank")
     elif stored != compute_fingerprint(arch):
-        fail("A-007", "fingerprint mismatch -- arch-data.yaml drifted from its "
-                      "markdown or was hand-edited (re-derive and re-stamp)")
+        fail("A-007", "architecture.md fingerprint mismatch -- the frontmatter "
+                      "changed since it was stamped (re-run "
+                      "scripts/stamp_fingerprint.py)")
 
-    # ---- A-008: append-only ADRs vs baseline (FAIL CLOSED) -------------
+    # ---- A-008 / A-009: the baseline gates (FAIL CLOSED) ------------------
     if not args.no_baseline:
-        prior = baseline_adr_ids(spec_dir, args.baseline_ref, fail)
+        prior = baseline_adrs(spec_dir, args.baseline_ref, fail)
         if prior is not None:
-            for v in sorted(prior - set(adr_ids)):
+            # A-008 -- append-only: nothing at the baseline may vanish.
+            for v in sorted(set(prior) - set(adr_ids)):
                 fail("A-008", f"ADR '{v}' existed at {args.baseline_ref} and is now "
                               "missing -- ADRs are append-only (supersede, never delete)")
+            # A-009 -- immutable once accepted: an ADR accepted at the baseline
+            # may differ ONLY in the supersede transition (status ->
+            # superseded/deprecated + superseded_by). A baseline file with no
+            # frontmatter is the pre-v2.0 era: exempt, so the one-time migration
+            # (which injects frontmatter) can land.
+            for did, (name, base_text) in sorted(prior.items()):
+                if did not in adr_ids:
+                    continue  # already an A-008 failure
+                try:
+                    base_doc, base_body = parse_md(base_text)
+                except yaml.YAMLError:
+                    continue
+                if not base_doc or str(base_doc.get("status") or "") != "accepted":
+                    continue
+                cur_doc, cur_body = adr_ids[did], adr_bodies[did]
+                cur_status = str(cur_doc.get("status") or "")
+                if cur_status == "proposed":
+                    fail("A-009", f"{did} was accepted at {args.baseline_ref} and "
+                                  "cannot return to 'proposed'")
+                fm_changed = (
+                    yaml.safe_dump(_transition_view(cur_doc), sort_keys=True)
+                    != yaml.safe_dump(_transition_view(base_doc), sort_keys=True))
+                body_changed = (cur_body or "").strip() != (base_body or "").strip()
+                if fm_changed or body_changed:
+                    what = " and ".join(w for w, c in
+                                        (("frontmatter", fm_changed),
+                                         ("prose", body_changed)) if c)
+                    fail("A-009", f"{did} was accepted at {args.baseline_ref} but "
+                                  f"its {what} changed -- an accepted ADR is "
+                                  "immutable except the supersede transition "
+                                  "(status + superseded_by); write a superseding "
+                                  "ADR instead of editing")
 
-    # ---- report ---------------------------------------------------------
+    # ---- report ------------------------------------------------------------
     for w in warns:
         print(f"  warn {w}")
     if errors:
@@ -326,8 +420,9 @@ def main():
         for e in errors:
             print(f"  {e}")
         sys.exit(1)
-    n_assume = sum(1 for coll in ("components", "integrations", "decisions")
-                   for it in (arch.get(coll) or [])
+    n_assume = sum(1 for it in (arch.get("components") or [])
+                   + (arch.get("integrations") or [])
+                   + list(adr_ids.values())
                    if isinstance(it, dict) and it.get("confidence") == "assumption")
     print(f"PASS -- {spec_dir} arch (status {meta.get('status') or '?'}, "
           f"{len(adr_ids)} ADR(s), {n_assume} assumption-backed choice(s))"

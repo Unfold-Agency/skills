@@ -1,0 +1,159 @@
+# ═══════════════════════════════════════════════════════════════════
+# architecture layer -- SCHEMA v2.0   (make-arch)
+# The machine contract lives in the FRONTMATTER of the signed files.
+#
+# SINGLE-FILE DISCIPLINE (the make-spec pattern, applied to arch). There
+# is NO derived arch-data.yaml: the bytes a human reviews and signs ARE
+# the bytes the pipeline validates and consumes. Two frontmatter shapes:
+#
+#   architecture.md          -- meta + context + components + integrations
+#                               + diagrams in the frontmatter; the body is
+#                               the human narrative + MERMAID diagrams
+#   decisions/ADR-NNNN-*.md  -- one APPEND-ONLY file per decision; its
+#                               frontmatter is the machine record, its body
+#                               the Nygard prose (Context / Decision /
+#                               Consequences / Rejected alternatives)
+#
+# (Schema v1.0 was the derived arch-data.yaml. It carried the two-file
+# fidelity gap the 2026-06-30 council closed for make-spec: the gate
+# hashed an LLM-derived copy the human never signed. Migrate with
+# scripts/migrate_arch_data.py -- it injects the frontmatter and deletes
+# the YAML; consumers read the old file as a legacy fallback until then.)
+#
+# THE DOCTRINE:
+#   - ADRs are immutable once accepted. You never EDIT a decision; you add
+#     a NEW ADR that SUPERSEDES it. The ONE allowed edit to an accepted
+#     ADR is the supersede transition itself: status -> superseded (or
+#     deprecated) plus superseded_by -- nothing else may change (A-009).
+#   - Recommend-then-refine: every choice carries a TYPED confidence --
+#     `known` (backed by a stated requirement/constraint/client fact) or
+#     `assumption` (a default pending human confirmation, badged).
+#   - Architecture serves features. A requirement links its governing
+#     decision via governed_by: [ADR-NNNN]; no-orphan (A-004) keeps the
+#     two in agreement.
+#
+# Conventions: ADR ids are ^ADR-\d{4}$, globally unique, never reused or
+# deleted (A-008). Every choice has a confidence. Empty lists are present,
+# not omitted.
+# ═══════════════════════════════════════════════════════════════════
+
+
+# ───────────────────────────────────────────────────────────────────
+# SHAPE 1 -- architecture.md frontmatter  (docs/product/architecture.md)
+# The thin C4/arc42-lite overview. The body carries the narrative and
+# the ```mermaid diagrams; this frontmatter carries the machine contract
+# the fingerprint signs (A-007).
+# ───────────────────────────────────────────────────────────────────
+architecture_example:
+  meta:
+    doc_type: spec-arch
+    schema_version: "2.0"
+    project_id: ""
+    project_name: ""
+    status: draft                # draft | review | approved
+    arch_version: ""             # STAMPED -- first 12 hex of the fingerprint (OUT)
+    fingerprint: ""              # STAMPED -- sha256 over contract content (A-007)
+
+  # One-paragraph system context (the C4 level-1 story; the diagram is
+  # in the body).
+  context: ""
+
+  # C4 containers / components. Each carries a typed confidence and,
+  # when an ADR decides its technology, a governed_by link.
+  components:
+    - id: "C-001"
+      name: ""
+      responsibility: ""
+      tech: ""
+      confidence: assumption     # known | assumption
+      governed_by: []            # ADR ids
+
+  # External integrations (the C4 system-context edges).
+  integrations:
+    - name: ""
+      external_system: ""
+      direction: outbound        # inbound | outbound | bidirectional
+      data: ""
+      confidence: assumption
+      governed_by: []
+
+  # Which mermaid diagram kinds the body must carry (A-006).
+  diagrams:
+    - context                    # required: the level-1 system context
+    # - container                # optional: C4 level-2
+    # - sequence                 # optional: a key workflow
+    # - erd                      # optional: the data model
+
+
+# ───────────────────────────────────────────────────────────────────
+# SHAPE 2 -- ADR frontmatter  (docs/product/decisions/ADR-NNNN-<slug>.md)
+# One decision per file. The frontmatter IS the index entry downstream
+# tools read (make-issues snippets, make-trace, make-api-contracts);
+# there is no separate index to drift.
+# ───────────────────────────────────────────────────────────────────
+adr_example:
+  id: "ADR-0001"                 # ^ADR-\d{4}$; MUST match the filename (A-002)
+  title: ""                      # imperative: "Use X for Y"
+  status: accepted               # proposed | accepted | superseded | deprecated
+  date: ""                       # YYYY-MM-DD (decision date)
+  scope: feature                 # feature | project
+                                 #   feature-scoped accepted ADRs must be
+                                 #   referenced by >=1 requirement's
+                                 #   governed_by (A-004); project-scoped
+                                 #   unreferenced only warns
+  confidence: known              # known | assumption
+  supersedes: ""                 # the ADR this one replaces (optional)
+  superseded_by: ""              # REQUIRED when status is superseded/deprecated
+  governs: []                    # informational: requirement ids / feature slugs
+
+
+# ═══════════════════════════════════════════════════════════════════
+# FINGERPRINT IN/OUT CONTRACT (A-007) -- architecture.md frontmatter only.
+#   OUT (do NOT flip the fingerprint): meta.fingerprint, meta.arch_version,
+#       meta.generated_at, last_updated, notes
+#   IN  (everything else): meta identity/status, context, components,
+#       integrations, diagrams. Normalization is identical to make-spec:
+#       deep-copy, drop the OUT keys everywhere,
+#       yaml.safe_dump(sort_keys=True), sha256.
+#
+# ADR files are NOT fingerprinted. Their regime is APPEND-ONLY, and the
+# integrity check is the git baseline itself: A-008 (no ADR vanishes) and
+# A-009 (an accepted ADR's bytes never change except the supersede
+# transition) diff each file against origin/main -- stronger than a hash
+# for a file that must not move at all.
+# ═══════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════
+# VALIDATOR RULES -- run fails (exit 1) on any violation.
+# Run: python scripts/validate_arch.py [docs/product] [--baseline-ref origin/main | --no-baseline]
+#
+#   A-001  Well-formed: architecture.md frontmatter has meta (status,
+#          fingerprint) + components/integrations/diagrams; every ADR
+#          frontmatter has id, title, status, scope, confidence
+#   A-002  Every ADR file's frontmatter id matches ^ADR-\d{4}$, matches its
+#          own filename (decisions/ADR-NNNN-*.md), and is unique
+#   A-003  Supersede discipline: status in
+#          {proposed,accepted,superseded,deprecated}; a superseded/
+#          deprecated ADR has a superseded_by that resolves to another
+#          existing ADR (not itself, not a proposed one, no cycles)
+#   A-004  no-orphan: every accepted feature-scoped ADR is referenced by
+#          >=1 feature requirement's governed_by; every governed_by a
+#          feature cites resolves to an ADR file; a governed_by pointing
+#          at a superseded ADR must repoint (project-scoped unreferenced
+#          -> warn)
+#   A-005  Typed confidence: every component, integration, and ADR has a
+#          confidence in {known, assumption}
+#   A-006  Diagrams: architecture.md body contains a ```mermaid block for
+#          every kind listed in diagrams (at least context)
+#   A-007  architecture.md meta.fingerprint matches a recompute over its
+#          frontmatter contract -- FAILS CLOSED
+#   A-008  Append-only: no ADR file present at the baseline (origin/main)
+#          is missing now. FAILS CLOSED when the baseline can't be trusted
+#          (no repo / shallow / unresolvable ref); --no-baseline only for
+#          the greenfield first commit
+#   A-009  Immutable once accepted: an ADR whose baseline status was
+#          `accepted` may differ from its baseline bytes ONLY in the
+#          supersede transition (frontmatter status -> superseded |
+#          deprecated, superseded_by set). Any other change -- prose or
+#          frontmatter -- fails: write a superseding ADR instead
+# ═══════════════════════════════════════════════════════════════════

@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
-"""Self-contained test harness for validate_arch.py.
+"""Self-contained test harness for validate_arch.py (single-file layout, v2.0).
 
-  1. the valid fixture passes
-  2. fingerprint integrity (A-007) fails CLOSED on a contract change un-restamped
+  1. the valid fixture passes (architecture.md frontmatter + ADR frontmatter;
+     no arch-data.yaml)
+  2. fingerprint integrity (A-007) on architecture.md fails CLOSED on a
+     contract change un-restamped; body edits are OUT of the fingerprint
   3. one targeted mutation per rule trips EXACTLY that rule
   4. A-008 append-only -- origin/main baseline fails CLOSED on a non-repo, an
      unresolvable ref, and a shallow clone; passes greenfield; catches a real
-     deleted ADR (throwaway local git repos, no network)
-  5. supersession integrity (cycles of any length, dead/proposed targets, a
-     feature governed_by a superseded/unknown ADR) and A-006 matching diagram
-     kinds inside the mermaid fence (prose headings cannot satisfy a kind)
+     deleted ADR file (throwaway local git repos, no network)
+  5. supersession integrity (cycles, dead/proposed targets, a feature
+     governed_by a superseded/unknown ADR) and A-006 diagram-kind matching
+  6. A-009 immutable-once-accepted: prose and frontmatter edits to a
+     baseline-accepted ADR fail; the supersede transition passes; a reversal
+     to 'proposed' fails; a pre-v2.0 (no-frontmatter) baseline is exempt
+     (the migration window)
+  7. migrate_arch_data.py: a legacy arch-data.yaml fixture migrates to a
+     passing v2.0 layout; idempotent; --dry-run writes nothing
 
   python scripts/tests/test_validate_arch.py
 Exit 0 = every case behaved as expected.
 """
-import copy
+import glob
 import os
 import re
 import shutil
@@ -29,7 +36,9 @@ import yaml  # noqa: E402
 
 VALIDATOR = os.path.join(SCRIPTS, "validate_arch.py")
 STAMP = os.path.join(SCRIPTS, "stamp_fingerprint.py")
+MIGRATE = os.path.join(SCRIPTS, "migrate_arch_data.py")
 FIXTURE = os.path.join(HERE, "specs")
+LEGACY_FIXTURE = os.path.join(HERE, "legacy-specs")
 
 failures = []
 
@@ -40,13 +49,19 @@ def check(name, cond):
         failures.append(name)
 
 
-def copy_fixture(dst):
-    shutil.copytree(FIXTURE, dst)
+def copy_fixture(dst, src=FIXTURE):
+    shutil.copytree(src, dst)
     return dst
 
 
 def run_validator(spec_dir, *extra):
     r = subprocess.run([sys.executable, VALIDATOR, spec_dir, *extra],
+                       capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr
+
+
+def run_migrate(spec_dir, *extra):
+    r = subprocess.run([sys.executable, MIGRATE, spec_dir, *extra],
                        capture_output=True, text=True)
     return r.returncode, r.stdout + r.stderr
 
@@ -63,37 +78,41 @@ def codes(out):
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
 
 
-def edit_yaml(path, fn):
-    """Edit a spec doc in place. A .md spec is edited via its YAML frontmatter
-    (the body is preserved); a .yaml file (arch-data.yaml) is edited directly."""
+def edit_md(path, fn):
+    """Edit a single-file doc via its YAML frontmatter; the body is preserved."""
     with open(path) as f:
         text = f.read()
-    if path.endswith(".md"):
-        m = FRONTMATTER_RE.match(text)
-        fm = m.group(1) if m else ""
-        body = text[m.end():] if m else text
-        doc = yaml.safe_load(fm) or {}
-        fn(doc)
-        dumped = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
-        with open(path, "w") as f:
-            f.write("---\n" + dumped + "---\n" + body)
-    else:
-        doc = yaml.safe_load(text)
-        fn(doc)
-        with open(path, "w") as f:
-            yaml.safe_dump(doc, f, sort_keys=False, allow_unicode=True)
+    m = FRONTMATTER_RE.match(text)
+    fm = m.group(1) if m else ""
+    body = text[m.end():] if m else text
+    doc = yaml.safe_load(fm) or {}
+    fn(doc)
+    dumped = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True)
+    with open(path, "w") as f:
+        f.write("---\n" + dumped + "---\n" + body)
+
+
+def append_body(path, line):
+    with open(path, "a") as f:
+        f.write(line)
 
 
 def arch(spec_dir):
-    return os.path.join(spec_dir, "arch-data.yaml")
+    return os.path.join(spec_dir, "architecture.md")
 
 
 def feature(spec_dir):
     return os.path.join(spec_dir, "features", "checkout.md")
 
 
-def archmd(spec_dir):
-    return os.path.join(spec_dir, "architecture.md")
+def adr(spec_dir, adr_id):
+    hits = glob.glob(os.path.join(spec_dir, "decisions", f"{adr_id}-*.md"))
+    assert hits, f"no fixture file for {adr_id}"
+    return hits[0]
+
+
+def edit_adr(spec_dir, adr_id, **kv):
+    edit_md(adr(spec_dir, adr_id), lambda doc: doc.update(kv))
 
 
 # ── 1. base passes ───────────────────────────────────────────────────
@@ -101,12 +120,14 @@ with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
     rc, out = run_validator(d, "--no-baseline")
     check("base fixture passes (exit 0)", rc == 0 and not codes(out))
+    check("base fixture warns on the unreferenced project-scoped ADR",
+          "A-004" in out and "project-scoped" in out)
 
 
-# ── 2. A-007 fingerprint fails closed on a contract change ───────────
+# ── 2. A-007 fingerprint on architecture.md fails closed ─────────────
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
-    edit_yaml(arch(d), lambda doc: doc["components"][0].__setitem__(
+    edit_md(arch(d), lambda doc: doc["components"][0].__setitem__(
         "responsibility", "A different responsibility."))
     rc, out = run_validator(d, "--no-baseline")
     check("A-007: a contract change without re-stamping fails closed",
@@ -115,15 +136,22 @@ with tempfile.TemporaryDirectory() as tmp:
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
     # arch_version is OUT of the fingerprint -- touching it alone still passes
-    edit_yaml(arch(d), lambda doc: doc["meta"].__setitem__("arch_version", "zzzzzzzzzzzz"))
+    edit_md(arch(d), lambda doc: doc["meta"].__setitem__("arch_version", "zzzzzzzzzzzz"))
     rc, out = run_validator(d, "--no-baseline")
     check("A-007 OUT: an arch_version-only change still passes",
           rc == 0 and "A-007" not in codes(out))
 
 with tempfile.TemporaryDirectory() as tmp:
     d = copy_fixture(os.path.join(tmp, "specs"))
-    # A blank (never-stamped) fingerprint must fail CLOSED, like a drift.
-    edit_yaml(arch(d), lambda doc: doc["meta"].__setitem__("fingerprint", ""))
+    # the BODY (narrative + mermaid) is not fingerprinted -- editing it passes
+    append_body(arch(d), "\nAn extra narrative sentence.\n")
+    rc, out = run_validator(d, "--no-baseline")
+    check("A-007 body: a narrative-only edit does not trip the fingerprint",
+          rc == 0 and "A-007" not in codes(out))
+
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "specs"))
+    edit_md(arch(d), lambda doc: doc["meta"].__setitem__("fingerprint", ""))
     rc, out = run_validator(d, "--no-baseline")
     check("A-007 blank: an un-stamped fingerprint fails closed",
           rc == 1 and codes(out) == {"A-007"} and "blank" in out)
@@ -131,44 +159,39 @@ with tempfile.TemporaryDirectory() as tmp:
 
 # ── 3. one targeted mutation per rule ────────────────────────────────
 def m_a001(d):
-    edit_yaml(arch(d), lambda doc: doc["meta"].pop("status", None))
+    edit_md(arch(d), lambda doc: doc["meta"].pop("status", None))
 
 def m_a002(d):
-    # a new decision with a malformed id and no file; proposed so A-004 skips it
-    edit_yaml(arch(d), lambda doc: doc["decisions"].append(
-        {"id": "ADR-99", "title": "Bad", "status": "proposed", "scope": "feature",
-         "superseded_by": "", "confidence": "known", "governs": []}))
+    # a malformed frontmatter id in an ADR file (proposed elsewhere untouched)
+    edit_adr(d, "ADR-0002", id="ADR-99")
 
 def m_a003(d):
-    edit_yaml(arch(d), lambda doc: next(
-        x for x in doc["decisions"] if x["id"] == "ADR-0002"
-    ).__setitem__("superseded_by", ""))
+    edit_adr(d, "ADR-0002", superseded_by="")
 
 def m_a004(d):
     # drop the feature ref to ADR-0003 -> it becomes an accepted orphan
-    edit_yaml(feature(d), lambda doc: doc["requirements"].__setitem__(
-        slice(None), [r for r in doc["requirements"] if r["id"] != "FR-CHK-002"]))
+    edit_md(feature(d), lambda doc: doc.__setitem__(
+        "requirements", [r for r in doc["requirements"] if r["id"] != "FR-CHK-002"]))
 
 def m_a005(d):
-    edit_yaml(arch(d), lambda doc: doc["components"][0].__setitem__("confidence", "maybe"))
+    edit_md(arch(d), lambda doc: doc["components"][0].__setitem__("confidence", "maybe"))
 
 def m_a006(d):
-    # remove the mermaid block from architecture.md (md is not fingerprinted)
-    with open(archmd(d)) as f:
+    with open(arch(d)) as f:
         text = f.read()
-    text = text.replace("```mermaid", "```text", 1)
-    with open(archmd(d), "w") as f:
-        f.write(text)
+    with open(arch(d), "w") as f:
+        f.write(text.replace("```mermaid", "```text", 1))
 
 
-# (rule, fn, restamp?)
+# (rule, fn, restamp?) -- ADR/feature/body edits never need a re-stamp; only
+# architecture.md FRONTMATTER edits do.
 MUTATIONS = [
     ("A-001", m_a001, True),
-    ("A-002", m_a002, True),
-    ("A-003", m_a003, True),
-    ("A-004", m_a004, False),   # edits features only; arch fingerprint unchanged
+    ("A-002", m_a002, False),
+    ("A-003", m_a003, False),
+    ("A-004", m_a004, False),
     ("A-005", m_a005, True),
-    ("A-006", m_a006, False),   # edits md only; arch fingerprint unchanged
+    ("A-006", m_a006, False),
 ]
 
 for rule, mut, restamp in MUTATIONS:
@@ -196,11 +219,11 @@ def git(cwd, *args):
                           capture_output=True, text=True)
 
 
-def init_repo(path, with_specs=True):
+def init_repo(path, with_specs=True, src=FIXTURE):
     os.makedirs(path)
     git(path, "init", "-q", "-b", "main")
     if with_specs:
-        copy_fixture(os.path.join(path, "docs", "specs"))
+        copy_fixture(os.path.join(path, "docs", "product"), src=src)
     else:
         with open(os.path.join(path, "README.md"), "w") as f:
             f.write("# seed\n")
@@ -208,136 +231,144 @@ def init_repo(path, with_specs=True):
     git(path, "commit", "-q", "-m", "base")
 
 
+def clone(tmp, origin, name):
+    work = os.path.join(tmp, name)
+    git(tmp, "clone", "-q", origin, work)
+    return os.path.join(work, "docs", "product")
+
+
 if shutil.which("git") is None:
-    print("WARN git not available -- skipping A-008 git scenarios")
+    print("WARN git not available -- skipping A-008/A-009 git scenarios")
 else:
-    # (A) non-repo → fail closed
+    # (A) non-repo -> fail closed
     with tempfile.TemporaryDirectory() as tmp:
         d = copy_fixture(os.path.join(tmp, "specs"))
         rc, out = run_validator(d)
         check("A-008 non-repo fails closed",
               rc == 1 and "A-008" in codes(out) and "not a git" in out)
 
-    # (B) repo, origin/main unresolvable → fail closed
+    # (B) repo, origin/main unresolvable -> fail closed
     with tempfile.TemporaryDirectory() as tmp:
         repo = os.path.join(tmp, "repo")
         init_repo(repo)
-        rc, out = run_validator(os.path.join(repo, "docs", "specs"))
+        rc, out = run_validator(os.path.join(repo, "docs", "product"))
         check("A-008 unresolvable ref fails closed",
               rc == 1 and "A-008" in codes(out) and "cannot resolve" in out)
 
-    # (C) a deleted ADR vs origin/main → caught (append-only)
+    # (C) a deleted ADR file vs origin/main -> caught (append-only; ADR files
+    #     are not fingerprinted, so no re-stamp is needed to isolate A-008)
     with tempfile.TemporaryDirectory() as tmp:
         origin = os.path.join(tmp, "origin")
         init_repo(origin)
-        work = os.path.join(tmp, "work")
-        git(tmp, "clone", "-q", origin, work)
-        wspecs = os.path.join(work, "docs", "specs")
-        # delete the superseded ADR-0002 from the index + remove its file
-        edit_yaml(arch(wspecs), lambda doc: doc.__setitem__(
-            "decisions", [x for x in doc["decisions"] if x["id"] != "ADR-0002"]))
-        os.remove(os.path.join(wspecs, "decisions", "ADR-0002-self-hosted-form.md"))
-        stamp(wspecs)
+        wspecs = clone(tmp, origin, "work")
+        os.remove(adr(wspecs, "ADR-0002"))
         rc, out = run_validator(wspecs)
-        check("A-008 catches a deleted ADR vs origin/main",
+        check("A-008 catches a deleted ADR file vs origin/main",
               rc == 1 and codes(out) == {"A-008"} and "ADR-0002" in out)
 
-    # (D) shallow clone → fail closed
+    # (D) shallow clone -> fail closed
     with tempfile.TemporaryDirectory() as tmp:
         origin = os.path.join(tmp, "origin")
         init_repo(origin)
         shallow = os.path.join(tmp, "shallow")
-        git(tmp, "clone", "-q", "--depth", "1", f"file://{os.path.abspath(origin)}", shallow)
-        rc, out = run_validator(os.path.join(shallow, "docs", "specs"))
+        git(tmp, "clone", "-q", "--depth", "1",
+            f"file://{os.path.abspath(origin)}", shallow)
+        rc, out = run_validator(os.path.join(shallow, "docs", "product"))
         check("A-008 shallow clone fails closed",
               rc == 1 and "A-008" in codes(out) and "shallow" in out)
 
-    # (E) greenfield: origin/main resolves but has no arch-data → passes
+    # (E) greenfield: origin/main resolves but has no decisions/ -> passes
     with tempfile.TemporaryDirectory() as tmp:
         origin = os.path.join(tmp, "origin")
         init_repo(origin, with_specs=False)
         work = os.path.join(tmp, "work")
         git(tmp, "clone", "-q", origin, work)
-        wspecs = copy_fixture(os.path.join(work, "docs", "specs"))
+        wspecs = copy_fixture(os.path.join(work, "docs", "product"))
         rc, out = run_validator(wspecs)
         check("A-008 greenfield against resolvable main passes",
               rc == 0 and not codes(out))
 
-
-# ── 5. supersession integrity + A-006 diagram-kind matching (the fixes) ──
-def run_mut(mutate, restamp):
+    # ── 6. A-009 immutable-once-accepted ─────────────────────────────
+    # (a) a prose edit to a baseline-accepted ADR -> fail
     with tempfile.TemporaryDirectory() as tmp:
-        d = copy_fixture(os.path.join(tmp, "specs"))
-        mutate(d)
-        if restamp:
-            stamp(d)
-        return run_validator(d, "--no-baseline")
+        origin = os.path.join(tmp, "origin")
+        init_repo(origin)
+        wspecs = clone(tmp, origin, "work")
+        append_body(adr(wspecs, "ADR-0001"), "\nA quiet edit to the prose.\n")
+        rc, out = run_validator(wspecs)
+        check("A-009: a prose edit to an accepted ADR fails",
+              rc == 1 and codes(out) == {"A-009"} and "prose" in out)
+
+    # (b) a frontmatter edit (title) to a baseline-accepted ADR -> fail
+    with tempfile.TemporaryDirectory() as tmp:
+        origin = os.path.join(tmp, "origin")
+        init_repo(origin)
+        wspecs = clone(tmp, origin, "work")
+        edit_adr(wspecs, "ADR-0003", title="A retitled decision")
+        rc, out = run_validator(wspecs)
+        check("A-009: a frontmatter edit to an accepted ADR fails",
+              rc == 1 and codes(out) == {"A-009"} and "frontmatter" in out)
+
+    # (c) the supersede transition is the ONE allowed edit -> passes
+    with tempfile.TemporaryDirectory() as tmp:
+        origin = os.path.join(tmp, "origin")
+        init_repo(origin)
+        wspecs = clone(tmp, origin, "work")
+        edit_adr(wspecs, "ADR-0004", status="superseded", superseded_by="ADR-0003")
+        rc, out = run_validator(wspecs)
+        check("A-009: the supersede transition on an accepted ADR passes",
+              rc == 0 and not codes(out))
+
+    # (d) reversing accepted -> proposed -> fail
+    with tempfile.TemporaryDirectory() as tmp:
+        origin = os.path.join(tmp, "origin")
+        init_repo(origin)
+        wspecs = clone(tmp, origin, "work")
+        edit_adr(wspecs, "ADR-0004", status="proposed")
+        rc, out = run_validator(wspecs)
+        check("A-009: an accepted ADR cannot return to 'proposed'",
+              rc == 1 and "A-009" in codes(out) and "proposed" in out)
+
+    # (e) a pre-v2.0 baseline (no frontmatter) is exempt -- the migration window
+    with tempfile.TemporaryDirectory() as tmp:
+        stage = copy_fixture(os.path.join(tmp, "stage"))
+        # strip ADR-0004's frontmatter in the staged origin (legacy-era file)
+        p = adr(stage, "ADR-0004")
+        with open(p) as f:
+            text = f.read()
+        m = FRONTMATTER_RE.match(text)
+        with open(p, "w") as f:
+            f.write(text[m.end():])
+        origin = os.path.join(tmp, "origin")
+        init_repo(origin, src=stage)
+        wspecs = clone(tmp, origin, "work")
+        # "migrate": restore the full frontmatter version from the fixture
+        shutil.copyfile(adr(FIXTURE, "ADR-0004"), adr(wspecs, "ADR-0004"))
+        rc, out = run_validator(wspecs)
+        check("A-009: a no-frontmatter baseline ADR is exempt (migration window)",
+              rc == 0 and not codes(out))
 
 
-def set_adr(doc, adr_id, **kv):
-    next(x for x in doc["decisions"] if x["id"] == adr_id).update(kv)
-
-
-def add_feature_ref(d, adr):
-    edit_yaml(feature(d), lambda doc: doc["requirements"][0].__setitem__(
-        "governed_by",
-        list(doc["requirements"][0].get("governed_by") or []) + [adr]))
-
-
-# self-supersession (1-cycle)
-rc, out = run_mut(lambda d: edit_yaml(arch(d),
-    lambda doc: set_adr(doc, "ADR-0002", superseded_by="ADR-0002")), True)
-check("A-003: self-supersession is caught", rc == 1 and "A-003" in codes(out))
-
-# dangling superseded_by -> a non-existent ADR
-rc, out = run_mut(lambda d: edit_yaml(arch(d),
-    lambda doc: set_adr(doc, "ADR-0002", superseded_by="ADR-9999")), True)
-check("A-003: a dangling superseded_by is caught",
-      rc == 1 and "A-003" in codes(out) and "not a known ADR" in out)
-
-# superseded_by an ADR that is still 'proposed' (not a live decision)
-rc, out = run_mut(lambda d: edit_yaml(arch(d),
-    lambda doc: set_adr(doc, "ADR-0003", status="proposed")), True)
-check("A-003: supersede-by-a-proposed-ADR is caught",
-      rc == 1 and "A-003" in codes(out) and "proposed" in out)
-
-# a 2-cycle ADR-0002 <-> ADR-0003 (also trips A-004: a feature cites ADR-0003)
-rc, out = run_mut(lambda d: edit_yaml(arch(d),
-    lambda doc: set_adr(doc, "ADR-0003", status="superseded",
-                        superseded_by="ADR-0002")), True)
-check("A-003: a supersession cycle (no live head) is detected",
-      rc == 1 and "A-003" in codes(out) and "cycle" in out)
-
-# a feature governed_by a SUPERSEDED ADR (feature file is not arch-fingerprinted)
-rc, out = run_mut(lambda d: add_feature_ref(d, "ADR-0002"), False)
-check("A-004: a feature governed_by a superseded ADR is caught",
-      rc == 1 and "A-004" in codes(out) and "superseded" in out)
-
-# a feature governed_by an ADR absent from the index (the untested A-004 branch)
-rc, out = run_mut(lambda d: add_feature_ref(d, "ADR-7777"), False)
-check("A-004: a feature governed_by an unknown ADR is caught",
-      rc == 1 and "A-004" in codes(out) and "ADR-7777" in out)
-
-
-# A-006: a mermaid fence present but NOT a real context diagram -- the prose
-# heading '## System context' must NOT satisfy the 'context' kind.
-def break_context_diagram(d):
-    p = archmd(d)
-    with open(p) as f:
-        text = f.read()
-    with open(p, "w") as f:
-        f.write(text.replace("C4Context", "flowchart"))
-
-
-rc, out = run_mut(break_context_diagram, False)
-check("A-006: a mermaid fence with no real context diagram fails (prose can't satisfy it)",
-      rc == 1 and "A-006" in codes(out))
-
-# A-006: a listed kind with no matching diagram block (diagrams is IN -> restamp)
-rc, out = run_mut(lambda d: edit_yaml(arch(d),
-    lambda doc: doc.__setitem__("diagrams", ["context", "sequence"])), True)
-check("A-006: a listed kind (sequence) with no matching mermaid block fails",
-      rc == 1 and "A-006" in codes(out) and "sequence" in out)
+# ── 7. migrate_arch_data.py over the legacy fixture ──────────────────
+with tempfile.TemporaryDirectory() as tmp:
+    d = copy_fixture(os.path.join(tmp, "legacy"), src=LEGACY_FIXTURE)
+    rc, out = run_migrate(d, "--dry-run")
+    check("migrate --dry-run reports and writes nothing",
+          rc == 0 and "would migrate" in out
+          and os.path.isfile(os.path.join(d, "arch-data.yaml")))
+    rc, out = run_migrate(d)
+    ok = (rc == 0 and not os.path.isfile(os.path.join(d, "arch-data.yaml")))
+    check("migrate deletes arch-data.yaml", ok)
+    with open(adr(d, "ADR-0003")) as f:
+        doc = yaml.safe_load(FRONTMATTER_RE.match(f.read()).group(1))
+    check("migrate injects ADR frontmatter (index + body-parsed fields)",
+          doc.get("id") == "ADR-0003" and doc.get("status") == "accepted"
+          and doc.get("supersedes") == "ADR-0002" and doc.get("date") == "2026-06-29")
+    rc, out = run_validator(d, "--no-baseline")
+    check("the migrated layout passes the validator", rc == 0 and not codes(out))
+    rc, out = run_migrate(d)
+    check("migrate is idempotent (second run is a no-op)",
+          rc == 0 and "nothing to migrate" in out)
 
 
 print()

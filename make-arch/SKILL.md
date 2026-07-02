@@ -11,12 +11,24 @@ set: how the system is built, and the decisions behind it. Two artifacts, both i
 
 ```
 docs/product/
-  architecture.md / arch-data.yaml      # a thin C4/arc42-lite overview: context,
-                                          #   components, integrations + MERMAID
-  decisions/ADR-NNNN-<slug>.md           # an APPEND-ONLY ADR log, one file per
-                                          #   decision (Status/Context/Decision/
-                                          #   Consequences + rejected alternatives)
+  architecture.md               # a thin C4/arc42-lite overview: the FRONTMATTER
+                                #   carries the machine contract (context,
+                                #   components, integrations, diagrams); the body
+                                #   is the human narrative + MERMAID
+  decisions/ADR-NNNN-<slug>.md  # an APPEND-ONLY ADR log, one file per decision;
+                                #   each file's FRONTMATTER is its machine record
+                                #   (id/title/status/scope/confidence/...), the
+                                #   body its Nygard prose (Context/Decision/
+                                #   Consequences + rejected alternatives)
 ```
+
+**One file per document -- there is no derived `arch-data.yaml`.** The bytes a
+human reviews and signs ARE the bytes the pipeline validates and consumes
+(make-issues snippets, make-trace, make-api-contracts all read the frontmatter).
+This closes the same fidelity gap the single-file spec design closed for
+make-spec: previously the gate hashed an LLM-derived YAML copy the human never
+signed. A project still carrying `arch-data.yaml` migrates in one command --
+`python scripts/migrate_arch_data.py docs/product`.
 
 This is the chosen replacement for a monolithic TDD. The win: a **decision** like
 "which payment processor" lives in one immutable ADR, findable in ≤ 2 hops from any
@@ -53,7 +65,10 @@ genuine HOW decision shows up.
   `references/recommend-then-refine.md`.
 - **Append-only ADRs.** One decision per file; numbered in order; never edited once
   accepted; reversed only by a superseding ADR (the old one stays, marked
-  `Superseded by`). See `references/adr-protocol.md`.
+  superseded). The validator enforces this mechanically against `origin/main`: an
+  accepted ADR's bytes may change ONLY by the supersede transition -- frontmatter
+  `status` -> `superseded`/`deprecated` plus `superseded_by` -- and any other edit
+  fails A-009. See `references/adr-protocol.md`.
 
 ## Files in this skill
 
@@ -61,57 +76,70 @@ genuine HOW decision shows up.
   required mermaid context diagram). HTML comments are authoring guidance; strip them.
 - `assets/adr-template.md` -- the Nygard ADR template (Status/Context/Decision/
   Consequences/rejected alternatives).
-- `assets/arch-data-schema.yaml` -- the schema for `arch-data.yaml`, the fingerprint
-  IN/OUT contract, and validator rules A-001..A-008. Read before deriving the YAML.
+- `assets/arch-schema.yaml` -- both frontmatter shapes (architecture.md + ADR), the
+  fingerprint IN/OUT contract, and validator rules A-001..A-009. Read before
+  authoring the layer.
 - `references/recommend-then-refine.md` -- proposing a stack and typing confidence.
 - `references/adr-protocol.md` -- the append-only ADR rules and the supersede flow.
 - `references/diagrams.md` -- the mermaid diagram kinds (context/container/sequence/ERD).
-- `scripts/stamp_fingerprint.py` -- stamps `arch-data.yaml`'s fingerprint + version.
+- `scripts/stamp_fingerprint.py` -- stamps `architecture.md`'s frontmatter
+  fingerprint + version (the body is preserved; ADR files are never stamped --
+  their regime is append-only, gated against the git baseline).
 - `scripts/validate_arch.py` -- run after every stamp. Never present an architecture
-  whose data file fails validation.
+  that fails validation.
+- `scripts/migrate_arch_data.py` -- the one-time v1.0 -> v2.0 migration: injects
+  each ADR's frontmatter from the legacy index, moves the contract into
+  `architecture.md`'s frontmatter, deletes `arch-data.yaml`, re-stamps.
 
-## The derive -> stamp -> validate loop
+## The author -> stamp -> validate loop
 
-1. Author/edit `architecture.md` and the ADR file(s) (the template comments are the
-   rules; keep the overview thin -- the durable detail is in the ADRs).
-2. Derive `arch-data.yaml` per the schema (the ADR index, components, integrations,
-   diagrams, and each choice's confidence).
-3. `python scripts/stamp_fingerprint.py docs/product`
-4. `python scripts/validate_arch.py docs/product` (add `--no-baseline` only on the
+1. Author/edit `architecture.md` -- the structured contract in the **frontmatter**
+   (context, components, integrations, diagrams, per the schema), the narrative +
+   mermaid in the body -- and the ADR file(s), each with its frontmatter record and
+   Nygard prose (the template comments are the rules; keep the overview thin -- the
+   durable detail is in the ADRs). There is no separate data file to derive.
+2. `python scripts/stamp_fingerprint.py docs/product`
+3. `python scripts/validate_arch.py docs/product` (add `--no-baseline` only on the
    greenfield first commit, before `main` carries the docs). The validator enforces
    ADR format + supersede discipline, no-orphan (every accepted feature-scoped ADR
    is referenced by a feature), typed confidence, a present mermaid context diagram,
-   a **fail-closed fingerprint gate**, and the **append-only `origin/main`
-   baseline** (an ADR that existed there may never vanish). Fix every failure.
+   a **fail-closed fingerprint gate** on `architecture.md`, the **append-only
+   `origin/main` baseline** (an ADR that existed there may never vanish, A-008),
+   and **immutability once accepted** (an accepted ADR's bytes may change only by
+   the supersede transition, A-009). Fix every failure.
 
 ## How a decision changes (the common asks)
 
 - **Choose something** (Stripe, Postgres) -> a new `ADR-NNNN` (Accepted, + rejected
   alternatives), update `architecture.md`/diagram, link it from the governing
   feature requirement's `governed_by`. Record it in the spec `CHANGELOG.md`.
-- **Reverse a decision** -> a NEW ADR marking the old one `Superseded`; never edit
-  the old file. Downstream, `/make-issues` opens refactor issues for merged work the
-  reversal invalidated.
+- **Reverse a decision** -> a NEW ADR, then apply the supersede transition to the
+  old file's frontmatter (`status: superseded`, `superseded_by: ADR-MMMM`) -- the
+  one edit A-009 allows; its prose is never touched. Downstream, `/make-issues`
+  opens refactor issues for merged work the reversal invalidated.
 - **Lower-confidence call** -> record it as an `assumption` ADR (reversible by
   design) and badge it, rather than inventing a constraint to make it look `known`.
 
 ## Honest limits
 
-Be honest about what the gate proves: the fingerprint certifies that
-`arch-data.yaml` has not changed since it was stamped -- nothing more. It does
-not prove the decisions are implemented (an accepted ADR may be half-built or
-quietly diverged from in code -- the issue roll-up in make-trace is the closer
-signal), that a human re-read the file before re-stamping, or who authored a
-change (git carries authorship). `architecture.md` is a human-written narrative:
-its value is the synthesis a newcomer builds a mental model from, so keep it
-prose-first and let the ADRs carry the durable detail -- never generate the
-narrative from the data file.
+Be honest about what the gates prove: the fingerprint certifies that
+`architecture.md`'s frontmatter has not changed since it was stamped, and the
+baseline gates (A-008/A-009) certify the ADR log only grew and no accepted
+decision was edited -- nothing more. They do not prove the decisions are
+implemented (an accepted ADR may be half-built or quietly diverged from in code
+-- the issue roll-up in make-trace is the closer signal), that a human re-read a
+file before re-stamping, or who authored a change (git carries authorship).
+`architecture.md`'s body is a human-written narrative: its value is the
+synthesis a newcomer builds a mental model from, so keep it prose-first and let
+the ADRs carry the durable detail -- never generate the narrative from the
+structured data.
 
 ## Downstream
 
-`/make-issues` reads the features + this ADR index and stamps each issue with
-`trace_adr` (its governing decision); `/do-work` builds from those issues. Change
-flows forward: add/supersede an ADR here -> re-run `/make-issues` to reconcile.
+`/make-issues` reads the features + the ADR frontmatter records and stamps each
+issue with `trace_adr` (its governing decision); `/do-work` builds from those
+issues. Change flows forward: add/supersede an ADR here -> re-run `/make-issues`
+to reconcile.
 
 Optionally, once the architecture is settled, `/make-data-flows` embeds per-feature
 data-flow and user-flow diagrams (Mermaid) into the feature specs, and

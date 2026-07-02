@@ -2,30 +2,44 @@
 ═══════════════════════════════════════════════════════════════════
 ADR TEMPLATE -- docs/product/decisions/ADR-NNNN-<slug>.md   (make-arch)
 
-One file per decision (Michael Nygard's ADR format). The ADR log is
-APPEND-ONLY and immutable: once a decision is Accepted you NEVER edit it.
-To change a decision, write a NEW ADR that supersedes it -- the old one
-stays, with its Status updated to "Superseded by ADR-MMMM". This is why
-the architecture layer stays in sync: every decision is a frozen record,
-and the chain of supersessions is the history.
+One file per decision (Michael Nygard's ADR format). The YAML
+FRONTMATTER is the machine record -- the index entry downstream tools
+read (make-issues snippets, make-trace, make-api-contracts); there is
+no separate index file. The body is the human prose.
+
+The ADR log is APPEND-ONLY and immutable: once a decision is accepted
+you NEVER edit it. To change a decision, write a NEW ADR that
+supersedes it. The ONE allowed edit to an accepted ADR is the
+supersede transition itself -- set `status: superseded` (or
+`deprecated`) and `superseded_by: ADR-MMMM`; anything else fails the
+validator (A-009). The chain of supersessions is the history.
 
 Numbering: four digits, assigned in order (ADR-0001, ADR-0002, ...).
-Never reused or deleted (validator A-002/A-008).
+Never reused or deleted (A-002/A-008). The frontmatter `id` must match
+the filename.
 
-Confidence: state whether the decision is `known` (backed by a
-requirement, constraint, or client fact -- cite it) or an `assumption`
-(a default pending confirmation). Assumption-backed ADRs are where a
-human should look first.
+Confidence: `known` (backed by a requirement, constraint, or client
+fact -- cite it in Context) or `assumption` (a default pending
+confirmation). Assumption-backed ADRs are where a human looks first.
+
+Strip these authoring comments before publishing. Never an em dash;
+use ` -- `.
 ═══════════════════════════════════════════════════════════════════
 -->
 
-# ADR-NNNN -- [Decision title, imperative: "Use X for Y"]
+---
+id: ADR-NNNN
+title: "[Decision title, imperative: Use X for Y]"
+status: proposed            # proposed | accepted | superseded | deprecated
+date: "YYYY-MM-DD"
+scope: feature              # feature | project
+confidence: known           # known | assumption
+supersedes: ""              # ADR-MMMM, only if this one replaces another
+superseded_by: ""           # set ONLY by the supersede transition (A-009)
+governs: []                 # informational: requirement ids / feature slugs
+---
 
-- **Status:** Proposed | Accepted | Superseded by ADR-MMMM | Deprecated
-- **Date:** YYYY-MM-DD
-- **Confidence:** known (cite the source) | assumption (state what would confirm it)
-- **Scope:** feature | project
-- **Supersedes:** ADR-MMMM   <!-- only if this one replaces another -->
+# ADR-NNNN -- [Decision title]
 
 ## Context
 

@@ -13,15 +13,21 @@ ADR).
    Context, Decision, Consequences, Rejected alternatives (see
    `assets/adr-template.md`).
 2. **Number in order, never reuse.** `ADR-0001`, `ADR-0002`, ... The validator pins
-   the format (`^ADR-\d{4}$`), requires a matching index row in `arch-data.yaml`,
-   and -- via the append-only baseline (A-008) -- refuses to let an ADR that existed
-   at `origin/main` vanish.
-3. **Never edit an accepted decision.** Once Accepted, the Decision text is frozen.
-   To change course you write a **new** ADR that **supersedes** it:
-   - The new ADR's frontmatter sets `Supersedes: ADR-MMMM` and explains why.
-   - The old ADR's Status becomes `Superseded by ADR-NNNN`; in the index its
-     `status: superseded` and `superseded_by: ADR-NNNN`. The validator (A-003)
-     checks that a superseded ADR points at a real, different ADR.
+   the format (`^ADR-\d{4}$`), requires the frontmatter `id` to match the filename
+   (A-002), and -- via the append-only baseline (A-008) -- refuses to let an ADR
+   that existed at `origin/main` vanish. Each file's **frontmatter is its machine
+   record** (id, title, status, date, scope, confidence, supersedes,
+   superseded_by, governs); there is no separate index to keep in sync.
+3. **Never edit an accepted decision.** Once accepted, the file is frozen -- and
+   the validator enforces it mechanically: A-009 diffs every baseline-accepted ADR
+   against `origin/main` and fails on ANY change except the one allowed edit, the
+   **supersede transition**. To change course you write a **new** ADR that
+   **supersedes** it:
+   - The new ADR's frontmatter sets `supersedes: ADR-MMMM`; its Context explains why.
+   - The old ADR's frontmatter gets exactly two field changes -- `status:
+     superseded` and `superseded_by: ADR-NNNN`. Its prose is never touched. The
+     validator (A-003) checks that a superseded ADR points at a real, different,
+     non-proposed ADR.
    - The old file **stays** -- the supersession chain is the history.
 4. **Status lifecycle:** `proposed` -> `accepted` -> (`superseded` | `deprecated`).
    `proposed` ADRs are exempt from the no-orphan check; an `accepted` feature-scoped
@@ -49,5 +55,6 @@ ADR).
 An ADR carries `confidence: known | assumption` like every other choice (see
 `recommend-then-refine.md`). An `assumption` ADR is a deliberate, reversible
 placeholder -- the cheapest way to keep moving while flagging that a human should
-confirm the call. Promote it to `known` (a tiny superseding ADR, or a status note
-once confirmed) rather than silently treating the guess as settled.
+confirm the call. Promote it with a tiny **superseding** ADR once confirmed (an
+accepted ADR's confidence field is frozen like the rest of it, A-009) rather than
+silently treating the guess as settled.

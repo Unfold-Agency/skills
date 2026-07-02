@@ -735,13 +735,14 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--repo", help="owner/name (default: inferred by gh from cwd)")
     ap.add_argument("--spec-dir", default="docs/product", help="default docs/product")
-    ap.add_argument("--out", default="docs/product/traceability", help="default docs/product/traceability")
+    ap.add_argument("--out", default=None, help="output dir (default <spec_dir>/traceability)")
     ap.add_argument("--allow-empty", action="store_true",
                     help="permit a source that previously had nodes to be empty now "
                          "(confirms a real emptying; defeats the fail-closed guard)")
     ap.add_argument("--open", action="store_true", dest="open_after",
                     help="open the rendered map in the default browser")
     args = ap.parse_args()
+    args.out = args.out or os.path.join(args.spec_dir, "traceability")
 
     issues = fetch_issues(args.repo)
     if issues is None:

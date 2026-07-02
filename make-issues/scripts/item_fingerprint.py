@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-requirement fingerprint for the docs/specs feature data files.
+"""Per-requirement fingerprint for the docs/product feature data files.
 
 make-issues stamps each GitHub issue with a hash of the feature REQUIREMENT it
 was generated from. On a later sync, a changed hash means the spec moved and the
@@ -30,11 +30,11 @@ spec features/<slug>.md under the spec dir -- its requirements live in the YAML
 frontmatter (make-spec emits one file per feature; there is no separate data
 file).
 
-  python scripts/item_fingerprint.py docs/specs                 # all requirements
-  python scripts/item_fingerprint.py docs/specs --json          # {req_id: hash}
-  python scripts/item_fingerprint.py docs/specs --id FR-CHK-001 # one requirement
+  python scripts/item_fingerprint.py docs/product                 # all requirements
+  python scripts/item_fingerprint.py docs/product --json          # {req_id: hash}
+  python scripts/item_fingerprint.py docs/product --id FR-CHK-001 # one requirement
 
-The path may be the spec dir (docs/specs), its features/ subdir, or a single
+The path may be the spec dir (docs/product), its features/ subdir, or a single
 feature .md file.
 
 Exit codes: 0 = ok, 1 = --id not found, 2 = file/parse error.
@@ -132,7 +132,7 @@ def compute_item_fingerprint(req):
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-# ── Loading the feature requirements out of docs/specs ───────────────────────
+# ── Loading the feature requirements out of docs/product ───────────────────────
 # Specs are single .md files; the contract (requirements) lives in the YAML
 # frontmatter, parsed deterministically (no separately-derived data file).
 FRONTMATTER_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---[ \t]*(?:\r?\n|\Z)", re.DOTALL)
@@ -155,7 +155,7 @@ def load_spec_doc(path):
 def feature_files(path):
     """Resolve a path to the list of feature spec files it covers.
 
-    Accepts the spec dir (docs/specs -> docs/specs/features/*.md), the features/
+    Accepts the spec dir (docs/product -> docs/product/features/*.md), the features/
     subdir itself, or a single feature .md file.
     """
     if os.path.isfile(path):
@@ -194,7 +194,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("spec_dir",
-                    help="docs/specs (or its features/ dir, or one feature file)")
+                    help="docs/product (or its features/ dir, or one feature file)")
     ap.add_argument("--id", help="print only this requirement's fingerprint")
     ap.add_argument("--json", action="store_true", help="emit a JSON {id: hash} map")
     args = ap.parse_args()

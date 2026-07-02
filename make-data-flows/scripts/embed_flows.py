@@ -28,7 +28,7 @@ Payload (a file path arg, or stdin when the arg is '-'):
     }
   }
 
-  python scripts/embed_flows.py docs/specs payload.json [--now ISO8601]
+  python scripts/embed_flows.py docs/product payload.json [--now ISO8601]
 
 The stamp's feature_version is read from each feature's CURRENT frontmatter (not
 the payload), so it always records the version the flows were embedded against.
@@ -168,7 +168,7 @@ def embed_feature(path, flows, now):
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("spec_dir", help="docs/specs (or its features/ dir, or one feature file)")
+    ap.add_argument("spec_dir", help="docs/product (or its features/ dir, or one feature file)")
     ap.add_argument("payload", help="JSON payload path, or '-' for stdin")
     ap.add_argument("--now", help="ISO-8601 timestamp for generated_at (default: now, UTC)")
     args = ap.parse_args()

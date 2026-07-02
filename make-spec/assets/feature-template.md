@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-FEATURE TEMPLATE -- docs/specs/features/<slug>.md   (make-spec)
+FEATURE TEMPLATE -- docs/product/features/<slug>.md   (make-spec)
 
 ONE FILE, ONE TRUTH. The YAML frontmatter is the machine-readable
 contract -- it is what the validator parses, what the fingerprint

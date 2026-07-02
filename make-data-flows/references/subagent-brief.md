@@ -46,6 +46,6 @@ Collect each worker's JSON array under its slug into the embed payload:
 {"features": {"<slug>": {"flows": [ ...the worker's array... ]}}}
 ```
 
-Then run `python scripts/embed_flows.py docs/specs payload.json` once for the whole
+Then run `python scripts/embed_flows.py docs/product payload.json` once for the whole
 run. Validate, then report. Consolidation and the write stay central and deterministic;
 only the modelling fans out.

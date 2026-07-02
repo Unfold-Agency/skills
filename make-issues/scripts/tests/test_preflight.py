@@ -51,7 +51,7 @@ def _write_md(path, doc):
 
 
 def write_specs(root, overview, features, arch=None):
-    """Lay out a docs/specs tree. Each arg is a (already-stamped) doc. Specs are
+    """Lay out a docs/product tree. Each arg is a (already-stamped) doc. Specs are
     single .md files (contract in frontmatter); arch-data.yaml is plain YAML."""
     os.makedirs(os.path.join(root, "features"), exist_ok=True)
     _write_md(os.path.join(root, "overview.md"), overview)

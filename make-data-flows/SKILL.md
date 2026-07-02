@@ -1,7 +1,7 @@
 ---
 name: make-data-flows
-description: Generate and maintain per-feature data-flow and user-flow diagrams (Mermaid) embedded directly in each docs/specs feature file, so engineers can see how a single feature moves data and walks a user. Use this skill after make-spec and make-arch, whenever the user wants flow diagrams, data-flow or user-flow documentation, "how does this feature actually work", or wants to refresh diagrams after requirements changed. Trigger it for "diagram the data flow", "add user flows", "show how checkout works step by step", or "update the flows for feature X". It runs on demand and targets a specific feature (--feature) to avoid overworking minor edits. It is ADVISORY -- it embeds diagrams in feature bodies (out of the fingerprint) and never gates the build. Do NOT use it to draw the system architecture (that is make-arch) or to author requirements (make-spec).
-argument-hint: "[--feature=<slug>]... [--all] [--check] [--force] [--spec-dir docs/specs]"
+description: Generate and maintain per-feature data-flow and user-flow diagrams (Mermaid) embedded directly in each docs/product feature file, so engineers can see how a single feature moves data and walks a user. Use this skill after make-spec and make-arch, whenever the user wants flow diagrams, data-flow or user-flow documentation, "how does this feature actually work", or wants to refresh diagrams after requirements changed. Trigger it for "diagram the data flow", "add user flows", "show how checkout works step by step", or "update the flows for feature X". It runs on demand and targets a specific feature (--feature) to avoid overworking minor edits. It is ADVISORY -- it embeds diagrams in feature bodies (out of the fingerprint) and never gates the build. Do NOT use it to draw the system architecture (that is make-arch) or to author requirements (make-spec).
+argument-hint: "[--feature=<slug>]... [--all] [--check] [--force] [--spec-dir docs/product]"
 ---
 
 # Make data flows
@@ -12,7 +12,7 @@ spec file. It reads the `make-spec` requirements (and, where present, the `make-
 component names) and writes one managed region into each `features/<slug>.md` **body**.
 
 ```
-docs/specs/features/<slug>.md
+docs/product/features/<slug>.md
   ---
   (frontmatter contract -- NEVER touched by this skill)
   ---
@@ -63,9 +63,9 @@ you refresh when a feature's contract moves. It draws the **feature altitude**; 
 
 ## The plan -> generate -> embed -> validate loop
 
-1. **Preflight.** Confirm a spec set exists under `--spec-dir` (default `docs/specs`,
+1. **Preflight.** Confirm a spec set exists under `--spec-dir` (default `docs/product`,
    with `features/*.md`). None -> stop and point at `/make-spec`.
-2. **Plan (the gate).** `python scripts/flow_status.py docs/specs [--feature <slug>]...`.
+2. **Plan (the gate).** `python scripts/flow_status.py docs/product [--feature <slug>]...`.
    It loads the whole spec set (detection is **global**), prints CREATE / REGENERATE /
    SKIP per feature, and lists what is **actionable** in scope. `--feature` bounds only
    what will be **written**; staleness outside the scope is reported, never acted on.
@@ -85,12 +85,12 @@ you refresh when a feature's contract moves. It draws the **feature altitude**; 
    ]}}}
    ```
 
-4. **Embed (deterministic).** `python scripts/embed_flows.py docs/specs payload.json`.
+4. **Embed (deterministic).** `python scripts/embed_flows.py docs/product payload.json`.
    It rewrites only the managed region, preserves the frontmatter byte-for-byte and the
    human narrative outside the region (defensive asserts abort the edit if a human moved
    the markers), and is **byte-identical on a no-op** (an unchanged re-run reuses the old
    timestamp, so there is no git diff).
-5. **Validate.** `python scripts/validate_flows.py docs/specs [--feature <slug>]...`.
+5. **Validate.** `python scripts/validate_flows.py docs/product [--feature <slug>]...`.
    Fix every FAIL before presenting. Coverage and staleness are warnings (flows are
    advisory); malformed markers, bad Mermaid, a broken stamp, or a disturbed frontmatter
    fingerprint (DF-006) fail.

@@ -81,13 +81,13 @@ Fill the template (`assets/issue-body-template.md`) from the specs:
 | `trace_adr` | the requirement's `governed_by` ADR ids (may be empty) |
 | `feature` | the feature slug the requirement lives in |
 | `source_version` | the feature's `feature_version` from its `meta` block |
-| `fingerprint` | `scripts/item_fingerprint.py docs/specs --id <REQ>` |
+| `fingerprint` | `scripts/item_fingerprint.py docs/product --id <REQ>` |
 | `autonomy` | AFK or HITL, from step 4 |
 | `## Traceability` table | one row per `trace_req` / `trace_adr` ID with its title from the source spec, plus a feature row; close with "Born from feature <slug> v<feature_version>". The human-readable mirror of the trace fields -- it replaces the old per-ID `trace:` labels |
 
 **No item without a trace.** Every issue traces back to the spec set. A **spec** item stamps at least one `trace_req` requirement -- that is its required trace; an empty `trace_req` is not allowed for a spec item. An **amendment** item may have an empty `trace_req` but must name a real `feature` **anchor** (that is its trace). `trace_adr` lists the governing ADRs and may be empty either way. A spec item you cannot trace to a requirement is one the specs do not justify -- cut it, fix the feature spec, or make it an amendment anchored to the right feature.
 
-**Place each item in its phase (when the overview has a plan).** Phasing is OPTIONAL. If `overview.md` declares a `phasing` list, every issue rolls up to the phase its **feature** belongs to -- the grouping `do-work --phase=N` drains. Get the mapping once: `python scripts/phase_milestones.py docs/specs/overview.md --json` returns `feature_to_phase` (slug -> phase number) and `phase_title` (number -> milestone title `Phase <N>: <name>`). An item's phase is the phase of its `feature`. Phase is **sequencing, not contract** -- it is carried by the GitHub **milestone**, never written into the issue body or meta block, so re-phasing later never churns the fingerprint. An overview with no `phasing` plan skips milestones entirely; nothing else about slicing changes.
+**Place each item in its phase (when the overview has a plan).** Phasing is OPTIONAL. If `overview.md` declares a `phasing` list, every issue rolls up to the phase its **feature** belongs to -- the grouping `do-work --phase=N` drains. Get the mapping once: `python scripts/phase_milestones.py docs/product/overview.md --json` returns `feature_to_phase` (slug -> phase number) and `phase_title` (number -> milestone title `Phase <N>: <name>`). An item's phase is the phase of its `feature`. Phase is **sequencing, not contract** -- it is carried by the GitHub **milestone**, never written into the issue body or meta block, so re-phasing later never churns the fingerprint. An overview with no `phasing` plan skips milestones entirely; nothing else about slicing changes.
 
 ## 6. Order the dependencies as a DAG
 
@@ -98,7 +98,7 @@ Express what-blocks-what as native GitHub dependencies (`--blocked-by`), not a p
 Before creating or changing **anything**, run the planner and present the breakdown. Pass the run's `--scope` so writes are bounded to the selected slice (detection stays global):
 
 ```
-python scripts/analyze.py --spec-dir docs/specs --issues <gh-json> --scope <tokens>
+python scripts/analyze.py --spec-dir docs/product --issues <gh-json> --scope <tokens>
 ```
 
 With no existing issues the plan is a clean all-CREATE within scope; on a re-run it must exit 0 (or a human approves its remediation report) before any write -- it is the hard gate. Then show:
@@ -108,4 +108,4 @@ With no existing issues the plan is a clean all-CREATE within scope; on a re-run
 - The **out-of-scope drift** from `plan["out_of_scope"]`: drift the global census found outside the scope, detected but not written. Show it so the operator knows what a wider run would touch.
 - The **reconciliation plan** from analyze: what will be created, updated, flagged, closed, refactored, or promoted within scope (see `reconciliation.md`), plus any milestone re-assignments and the watermark window.
 
-Iterate until the human approves. Then, when the overview has a plan, **ensure the milestones exist first** -- `python scripts/phase_milestones.py docs/specs/overview.md --ensure --repo <owner/name>` creates one milestone per phase (idempotent). Now create issues -- in dependency order, blockers first, so each `--blocked-by` references an issue number that already exists. Stamp every issue per the template, apply its labels (`make-issues` and `afk`/`hitl`, plus `amendment` for an amendment item), and assign its phase milestone: `gh issue create ... --milestone "Phase <N>: <name>"`. Traceability and source version are carried in the body (`## Traceability` table) and the meta block; the phase is carried by the milestone -- neither is a label. After the create run, **write the watermark** (`docs/specs/.make-issues-sync.json`) at each feature's current `feature_version` and commit it (see reconciliation.md §2).
+Iterate until the human approves. Then, when the overview has a plan, **ensure the milestones exist first** -- `python scripts/phase_milestones.py docs/product/overview.md --ensure --repo <owner/name>` creates one milestone per phase (idempotent). Now create issues -- in dependency order, blockers first, so each `--blocked-by` references an issue number that already exists. Stamp every issue per the template, apply its labels (`make-issues` and `afk`/`hitl`, plus `amendment` for an amendment item), and assign its phase milestone: `gh issue create ... --milestone "Phase <N>: <name>"`. Traceability and source version are carried in the body (`## Traceability` table) and the meta block; the phase is carried by the milestone -- neither is a label. After the create run, **write the watermark** (`docs/product/.make-issues-sync.json`) at each feature's current `feature_version` and commit it (see reconciliation.md §2).

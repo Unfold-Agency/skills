@@ -120,7 +120,7 @@ def split_frontmatter(text):
 def feature_files(spec_dir):
     """[(slug, path)] for every features/<slug>.md under a spec dir.
 
-    Accepts the spec dir (docs/specs -> docs/specs/features/*.md), the features/
+    Accepts the spec dir (docs/product -> docs/product/features/*.md), the features/
     subdir itself, or a single feature .md file.
     """
     if os.path.isfile(spec_dir):

@@ -7,10 +7,10 @@ description: Propose and maintain the architecture layer of a project spec -- a 
 
 Produce and maintain the **architecture layer** that sits under a `make-spec` spec
 set: how the system is built, and the decisions behind it. Two artifacts, both in
-`docs/specs/`:
+`docs/product/`:
 
 ```
-docs/specs/
+docs/product/
   architecture.md / arch-data.yaml      # a thin C4/arc42-lite overview: context,
                                           #   components, integrations + MERMAID
   decisions/ADR-NNNN-<slug>.md           # an APPEND-ONLY ADR log, one file per
@@ -76,8 +76,8 @@ genuine HOW decision shows up.
    rules; keep the overview thin -- the durable detail is in the ADRs).
 2. Derive `arch-data.yaml` per the schema (the ADR index, components, integrations,
    diagrams, and each choice's confidence).
-3. `python scripts/stamp_fingerprint.py docs/specs`
-4. `python scripts/validate_arch.py docs/specs` (add `--no-baseline` only on the
+3. `python scripts/stamp_fingerprint.py docs/product`
+4. `python scripts/validate_arch.py docs/product` (add `--no-baseline` only on the
    greenfield first commit, before `main` carries the docs). The validator enforces
    ADR format + supersede discipline, no-orphan (every accepted feature-scoped ADR
    is referenced by a feature), typed confidence, a present mermaid context diagram,

@@ -1,8 +1,8 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-CHANGELOG ENTRY TEMPLATE -- docs/specs/CHANGELOG.md   (make-spec)
+CHANGELOG ENTRY TEMPLATE -- docs/product/CHANGELOG.md   (make-spec)
 
-docs/specs/CHANGELOG.md is a Keep a Changelog ledger of every spec
+docs/product/CHANGELOG.md is a Keep a Changelog ledger of every spec
 change. ONE STRUCTURED ENTRY PER CHANGE. The entry IS the delta: which
 IDs were added, modified, or removed, why, and the cross-feature impact.
 make-issues reads this ledger to drive its reconcile, so the ADDED /

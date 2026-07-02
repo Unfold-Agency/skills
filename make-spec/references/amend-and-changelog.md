@@ -72,13 +72,13 @@ machine-readable delta, not flavor text.
 1. Edit the affected `features/<slug>.md` / `overview.md` in place -- the
    frontmatter contract and, as needed, the body. There is no separate data file
    to re-derive.
-2. `python scripts/stamp_fingerprint.py docs/specs` -- re-stamps changed specs
+2. `python scripts/stamp_fingerprint.py docs/product` -- re-stamps changed specs
    and rewrites their content versions into the overview Feature Index
    (frontmatter only; bodies preserved).
 3. Validate against the baseline (this is **not** optional in amend mode -- it is
    what enforces no-vanishing):
    ```
-   python scripts/validate_spec.py docs/specs            # baseline: origin/main
+   python scripts/validate_spec.py docs/product            # baseline: origin/main
    ```
    If the validator reports a vanished id, you deleted or renamed instead of
    superseding -- fix it. If it reports a shallow clone or an unresolvable

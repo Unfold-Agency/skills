@@ -9,7 +9,7 @@ guarantees that keep a scoped run safe.
 ## The precondition: a spec set must exist
 
 make-issues runs **after** the planning layer. It assumes `/make-spec` (and,
-ideally, `/make-arch`) have already produced `docs/specs/` -- an `overview.md`, at
+ideally, `/make-arch`) have already produced `docs/product/` -- an `overview.md`, at
 least one `features/<slug>.md`, and optionally `arch-data.yaml` + `decisions/`.
 Preflight (`gh_preflight.py`) checks this first (`spec_set`): if the spec set is
 absent it **stops** and sends you upstream. make-issues never invents un-anchored
@@ -131,7 +131,7 @@ name the pairing, so the fuzzy "did this amendment become that requirement" call
 never made silently.
 
 ```
-python scripts/analyze.py --spec-dir docs/specs --issues issues.json \
+python scripts/analyze.py --spec-dir docs/product --issues issues.json \
   --promote <issue-number>=<REQ-ID>
 ```
 
@@ -145,7 +145,7 @@ never lives as both an amendment and a fresh traced issue.
 
 ## The dedicated issues log
 
-Every run appends what it did to `docs/specs/ISSUES-CHANGELOG.md` (see
+Every run appends what it did to `docs/product/ISSUES-CHANGELOG.md` (see
 `references/reconciliation.md` §9 for the entry format). It is a separate ledger
 from the spec `CHANGELOG.md` (which records spec changes, owned by make-spec):
 this one records **issue operations**. It reuses the run receipt, and it is honest

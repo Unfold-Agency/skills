@@ -6,11 +6,11 @@ description: Generate and amend layered project specs for agency work -- a lean 
 # Make a Spec
 
 Build and maintain the layered spec set that is the single source of truth for
-**what** an agency project delivers and **why**. The spec lives in `docs/specs/`
+**what** an agency project delivers and **why**. The spec lives in `docs/product/`
 as a few small documents that read in a sitting, not one monolith:
 
 ```
-docs/specs/
+docs/product/
   overview.md            # the lean PRD: problem, users, goals, scope + no-gos,
                          #   the FEATURE INDEX
   features/<slug>.md     # one lean spec per feature (WHAT-only, user stories +
@@ -52,7 +52,7 @@ namespaced feature file instead of fanning out.
 Decide which one applies before doing anything else:
 
 - **Kickoff** (greenfield) -- no spec exists. Input is a corpus of discovery
-  material; output is the first `docs/specs/` set. Read `references/kickoff.md`.
+  material; output is the first `docs/product/` set. Read `references/kickoff.md`.
 - **Amend** (brownfield) -- a spec exists. Input is a change trigger. Output is an
   in-place edit plus a structured `CHANGELOG.md` entry. **Diff, never rewrite.**
   Read `references/amend-and-changelog.md`.
@@ -97,7 +97,7 @@ And two flags that compose with the modes:
 
 ## Location & filing
 
-The canonical home is **`docs/specs/`**. The live files always keep their names --
+The canonical home is **`docs/product/`**. The live files always keep their names --
 the version lives in the data (the per-feature content version and the overview
 `project_version`), never in the filename. **Git history is the archive**; a PR
 diff is the change proposal. There is no `archive/`/`changes/` folder -- to see a
@@ -132,10 +132,10 @@ prior version, read it from git.
    negative-path entry). When amending a feature that predates verification
    (schema_version "1.0"), bump it to "1.1" and author the verification then --
    the validator warns until you do and fails closed once bumped.
-2. `python scripts/stamp_fingerprint.py docs/specs` -- stamps the fingerprint and
+2. `python scripts/stamp_fingerprint.py docs/product` -- stamps the fingerprint and
    content version into each frontmatter (your body is preserved) and syncs the
    Feature Index.
-3. `python scripts/validate_spec.py docs/specs` (add `--no-baseline` only on the
+3. `python scripts/validate_spec.py docs/product` (add `--no-baseline` only on the
    greenfield first commit). Fix every failure before presenting; if a fix means
    downgrading an unsourced claim to an open question, say so in your report.
 

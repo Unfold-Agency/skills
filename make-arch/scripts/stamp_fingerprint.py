@@ -3,7 +3,7 @@
 using the validator's own normalization so the two never disagree. Run after
 make-arch (re-)derives arch-data.yaml from architecture.md + the ADR files:
 
-  python scripts/stamp_fingerprint.py docs/specs
+  python scripts/stamp_fingerprint.py docs/product
 
 arch_version is the first 12 hex of the content fingerprint -- content-derived,
 no counter to race.
@@ -17,7 +17,7 @@ from validate_arch import compute_fingerprint, load_yaml  # noqa: E402
 
 
 def main():
-    spec_dir = sys.argv[1] if len(sys.argv) > 1 else "docs/specs"
+    spec_dir = sys.argv[1] if len(sys.argv) > 1 else "docs/product"
     path = os.path.join(spec_dir, "arch-data.yaml")
     if not os.path.isfile(path):
         print(f"no arch-data.yaml under {spec_dir}", file=sys.stderr)

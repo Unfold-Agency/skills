@@ -28,7 +28,7 @@ def check(name, cond):
 
 
 def make_specs(feature_versions):
-    """A throwaway docs/specs with an overview feature_index and one data file per
+    """A throwaway docs/product with an overview feature_index and one data file per
     feature. feature_versions is {slug: version}."""
     root = tempfile.mkdtemp(prefix="dowork-specs-")
     os.makedirs(os.path.join(root, "features"))

@@ -15,7 +15,7 @@ staleness detected outside the scope is still reported (`out_of_scope_stale`),
 never acted on. The orchestrator runs a sub-agent only for the actionable
 CREATE/REGENERATE features.
 
-  python scripts/flow_status.py docs/specs [--feature checkout]... [--all] [--force] [--json]
+  python scripts/flow_status.py docs/product [--feature checkout]... [--all] [--force] [--json]
 
 Exit codes: 0 = a clean, safe plan; 1 = blocking (a corrupt existing region, or a
 --feature target that does not exist); 2 = spec dir / parse error. Read-only:
@@ -135,7 +135,7 @@ def print_receipt(plan):
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("spec_dir", nargs="?", default="docs/specs")
+    ap.add_argument("spec_dir", nargs="?", default="docs/product")
     ap.add_argument("--feature", action="append", default=[], help="scope writes to this slug (repeatable)")
     ap.add_argument("--all", action="store_true", help="explicit full scope (the default when no --feature)")
     ap.add_argument("--force", action="store_true", help="regenerate even up-to-date features")

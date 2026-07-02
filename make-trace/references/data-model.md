@@ -8,9 +8,9 @@ nothing by hand and writes nothing back to the specs or GitHub.
 
 | Tier | Source | Node id | Kind field |
 |---|---|---|---|
-| Objectives | `docs/specs/overview.md` `goals` | `G-NNN` | `kind` = business \| user |
-| Requirements | `docs/specs/features/<slug>.md` `requirements` | `FR/IR/NFR/CR-<PREFIX>-NNN` | id prefix |
-| Architecture | `docs/specs/arch-data.yaml` | `C-NNN` (components), `ADR-NNNN` (decisions), `INTG-<norm-name>` (integrations) | `C` / `ADR` / `INTG` |
+| Objectives | `docs/product/overview.md` `goals` | `G-NNN` | `kind` = business \| user |
+| Requirements | `docs/product/features/<slug>.md` `requirements` | `FR/IR/NFR/CR-<PREFIX>-NNN` | id prefix |
+| Architecture | `docs/product/arch-data.yaml` | `C-NNN` (components), `ADR-NNNN` (decisions), `INTG-<norm-name>` (integrations) | `C` / `ADR` / `INTG` |
 | Issues | `gh issue list --state all` | `#N` | `issue` |
 
 Integrations have no id in `arch-data.yaml`, so a stable `INTG-<normalized-name>`
@@ -59,7 +59,7 @@ Dimming (`dim: true`): spec items with `status` in `{superseded, deferred,
 deprecated, rejected, dropped, obsolete}`. Tombstoned nodes render struck through
 with a dashed connector regardless of status.
 
-## The ledger (`docs/traceability/data.json`)
+## The ledger (`docs/product/traceability/data.json`)
 
 `data.json` IS the ledger and the single source of truth; `index.html` is rendered
 from it. Shape:

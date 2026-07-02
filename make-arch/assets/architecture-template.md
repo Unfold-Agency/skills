@@ -1,6 +1,6 @@
 <!--
 ═══════════════════════════════════════════════════════════════════
-ARCHITECTURE TEMPLATE -- docs/specs/architecture.md   (make-arch)
+ARCHITECTURE TEMPLATE -- docs/product/architecture.md   (make-arch)
 
 A thin C4/arc42-lite overview of HOW the system is built: the stack, the
 components, the external integrations, and the diagrams that make it

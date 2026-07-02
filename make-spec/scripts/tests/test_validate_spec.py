@@ -421,7 +421,7 @@ else:
         check("S-005 shallow clone fails closed",
               rc == 1 and "S-005" in codes(out) and "shallow" in out)
 
-    # (E) greenfield: origin/main resolves but has no docs/specs → passes
+    # (E) greenfield: origin/main resolves but has no docs/product → passes
     with tempfile.TemporaryDirectory() as tmp:
         origin = os.path.join(tmp, "origin")
         init_repo(origin, with_specs=False)

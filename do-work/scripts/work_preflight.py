@@ -4,7 +4,7 @@ writes GitHub state or touches code. The skill reads the verdict and acts
 (ensures labels, selects the next issue, or stops).
 
 do-work builds the project from the GitHub issues that make-issues created from
-the docs/specs/ spec set. Its gate is the build-lane facts: the spec set is
+the docs/product/ spec set. Its gate is the build-lane facts: the spec set is
 present, a backlog exists, and you must not build issues make-issues has flagged
 stale. do-work TRUSTS make-issues for drift detection -- it does not recompute
 spec fingerprints (that is make-issues' fail-closed gate); it reads the version
@@ -13,7 +13,7 @@ stamps make-spec already wrote.
 Checks, in order of dependency (a gating failure aborts before the next):
   1. auth     -- `gh auth status` succeeds
   2. gh_version -- gh >= 2.94.0 (native dependency/type flags)
-  3. specs    -- docs/specs/ has an overview.md and >=1 features/*.md
+  3. specs    -- docs/product/ has an overview.md and >=1 features/*.md
                  (else run /make-spec, then /make-issues)
   4. repo     -- inside a git work tree AND a resolvable owner/name remote
   5. backlog  -- make-issues-managed issues exist (else run /make-issues first)
@@ -26,8 +26,8 @@ Then non-gating ADVISORIES (reported, never abort):
   - labels    -- the do-work lifecycle labels (status:doing, escalated,
                  needs-human-review) the skill creates if missing
 
-  python scripts/work_preflight.py --spec-dir docs/specs
-  python scripts/work_preflight.py --spec-dir docs/specs --repo owner/name --json
+  python scripts/work_preflight.py --spec-dir docs/product
+  python scripts/work_preflight.py --spec-dir docs/product --repo owner/name --json
 
 Exit codes: 0 = gate passes, 1 = a gating check failed, 2 = the spec set can't be
 read. Advisories never change the exit code.
@@ -123,15 +123,19 @@ def check_gh_version():
 
 
 def check_specs(spec_dir):
-    """Gating: the docs/specs set must be present -- an overview.md and at least
+    """Gating: the docs/product set must be present -- an overview.md and at least
     one features/*.md. A missing/unreadable overview is fatal (exit 2); no features
     means there is nothing to build issues from. Pure file checks -- do-work does
     NOT recompute fingerprints (it trusts make-issues' gate)."""
     overview = os.path.join(spec_dir, "overview.md")
     if not os.path.isfile(overview):
+        legacy = os.path.join(os.path.dirname(os.path.normpath(spec_dir)), "specs")
+        hint = (f" -- legacy layout detected at {legacy}/: migrate with "
+                f"'git mv {legacy} {os.path.normpath(spec_dir)}' "
+                f"(or pass --spec-dir {legacy})") if os.path.isdir(legacy) else ""
         return {"name": "specs", "ok": False, "fatal": True,
                 "detail": f"no {overview} -- run /make-spec to author the spec set "
-                          "(docs/specs/), then /make-issues"}
+                          f"(docs/product/), then /make-issues{hint}"}
     _, err = _load_yaml(overview)
     if err:
         return {"name": "specs", "ok": False, "fatal": True, "detail": err}
@@ -265,8 +269,8 @@ def _have_labels(repo):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--spec-dir", default="docs/specs",
-                    help="the spec directory (default: docs/specs)")
+    ap.add_argument("--spec-dir", default="docs/product",
+                    help="the spec directory (default: docs/product)")
     ap.add_argument("--repo", help="owner/name; skip gh repo auto-detect")
     ap.add_argument("--json", action="store_true", help="emit the verdict as JSON")
     args = ap.parse_args()

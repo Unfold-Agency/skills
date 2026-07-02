@@ -68,6 +68,8 @@ def schema_at_least(meta, threshold):
     """True when meta.schema_version >= threshold (major, minor). An absent
     version reads as 1.0; an unparseable one enforces (fails closed) rather
     than exempting."""
+    if meta is not None and not isinstance(meta, dict):
+        return True  # a mangled meta block never buys an exemption
     raw = str((meta or {}).get("schema_version") or "1.0")
     parts = []
     for piece in raw.split(".")[:2]:
